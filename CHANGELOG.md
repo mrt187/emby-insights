@@ -8,6 +8,16 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.3.0] - 2026-07-29
+
+### Changed
+
+- Redesigned the personal dashboard with a cinematic, content-first visual
+  direction, a personal media hero, bento-style statistics, and elevated poster
+  rows.
+- Added a persistent design-system reference for the dashboard's visual tokens,
+  responsive behavior, and component rules.
+
 ## [0.2.0] - 2026-07-29
 
 ### Changed
@@ -32,5 +42,6 @@ The project follows [Semantic Versioning](https://semver.org/):
 - Container images are published with the matching release version, the commit
   SHA, and `latest`.
 
+[0.3.0]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.3.0
 [0.2.0]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.2.0
 [0.1.0]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.1.0

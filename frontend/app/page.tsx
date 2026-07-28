@@ -119,7 +119,21 @@ function UserAvatar({ name }: { name: string }) {
 function Today({ onStats, statistics, state }: { onStats: () => void; statistics: PersonalStats | null; state: LoadState }) {
   const detail = state === "error" ? "Noch keine Statistik verfügbar" : statistics ? comparisonText(statistics) : "Wird geladen …";
   return <div className="content today-view">
-    <section className="section-heading"><div><p className="eyebrow">DEINE WOCHE</p><h2>Auf einen Blick</h2></div><button className="text-button" onClick={onStats}>Details ansehen <Icon name="arrow" /></button></section>
+    <section className="today-hero" aria-labelledby="today-hero-title">
+      <div className="hero-copy-block">
+        <p className="eyebrow">DEIN MEDIENMOMENT</p>
+        <h2 id="today-hero-title">Deine Mediathek.<br /><em>Dein Rhythmus.</em></h2>
+        <p>Alles, was diese Woche für dich zählt – auf einen Blick, ohne Ablenkung.</p>
+        <button className="hero-action" onClick={onStats}>Statistik entdecken <Icon name="arrow" /></button>
+      </div>
+      <div className="hero-weekly-total">
+        <span>Diese Woche</span>
+        <strong>{statistics ? formatDuration(statistics.watchSeconds) : "—"}</strong>
+        <small>{state === "error" ? "Später erneut versuchen" : statistics ? "Zeit für deine Favoriten" : "Statistik wird geladen …"}</small>
+      </div>
+      <div className="hero-orbit" aria-hidden="true"><i /><i /><b /></div>
+    </section>
+    <section className="section-heading rhythm-heading"><div><p className="eyebrow">DEINE WOCHE</p><h2>Dein Rhythmus</h2></div><button className="text-button" onClick={onStats}>Details ansehen <Icon name="arrow" /></button></section>
     <section className="week-grid" aria-label="Wöchentliche Kennzahlen">
       <MetricCard icon="clock" tone="blue" value={statistics ? formatDuration(statistics.watchSeconds) : "—"} label="Sehzeit" detail={detail} positive={Boolean(statistics && statistics.previousWatchSeconds > 0)} />
       <MetricCard icon="movie" tone="peach" value={statistics ? statistics.completedMovies : "—"} label="Filme abgeschlossen" detail={statistics ? "Diese Woche" : loadingCopy(state)} />
