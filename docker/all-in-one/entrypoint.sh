@@ -8,10 +8,11 @@ mkdir -p "$PGDATA" "$REDIS_DIR"
 postgres_pid=""
 redis_pid=""
 api_pid=""
+frontend_pid=""
 
 cleanup() {
     trap - EXIT INT TERM
-    for pid in "$api_pid" "$redis_pid" "$postgres_pid"; do
+    for pid in "$frontend_pid" "$api_pid" "$redis_pid" "$postgres_pid"; do
         if [ -n "$pid" ]; then
             kill -TERM "$pid" 2>/dev/null || true
             wait "$pid" 2>/dev/null || true
@@ -33,8 +34,12 @@ redis_pid=$!
 
 export DATABASE_URL="${DATABASE_URL:-postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:5432/${POSTGRES_DB}?sslmode=disable}"
 export REDIS_URL="${REDIS_URL:-redis://127.0.0.1:6379/0}"
+export LISTEN_ADDRESS="${BACKEND_LISTEN_ADDRESS:-127.0.0.1:8082}"
 
 /usr/local/bin/emby-insights &
 api_pid=$!
 
-wait "$api_pid"
+( cd /app/frontend && node node_modules/vinext/dist/cli.js start --port 8080 ) &
+frontend_pid=$!
+
+wait "$frontend_pid"

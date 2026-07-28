@@ -7,12 +7,23 @@ RUN go mod download
 COPY backend/ ./
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o /out/emby-insights ./cmd/server
 
-# PostgreSQL is the persistent store. Redis and the API are supervised by the entrypoint.
+FROM node:22-alpine AS frontend-build
+
+WORKDIR /src/frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
+# PostgreSQL is the persistent store. Redis, the API and the frontend are supervised by the entrypoint.
 FROM postgres:17-alpine
 
-RUN apk add --no-cache redis
+RUN apk add --no-cache redis nodejs
 
 COPY --from=backend-build /out/emby-insights /usr/local/bin/emby-insights
+COPY --from=frontend-build /src/frontend/dist /app/frontend/dist
+COPY --from=frontend-build /src/frontend/node_modules /app/frontend/node_modules
+COPY --from=frontend-build /src/frontend/package.json /app/frontend/package.json
 COPY docker/all-in-one/entrypoint.sh /usr/local/bin/emby-insights-entrypoint
 COPY docker/all-in-one/initdb/001-initial-schema.sql /docker-entrypoint-initdb.d/001-initial-schema.sql
 

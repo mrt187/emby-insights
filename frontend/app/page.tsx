@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { LoginScreen } from "./login-screen";
 
 type Page = "Heute" | "Statistik" | "Anfragen" | "Profil";
 type Period = "Woche" | "Monat" | "Jahr";
@@ -40,6 +41,18 @@ export default function Home() {
   const [page, setPage] = useState<Page>("Heute");
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [unread, setUnread] = useState(2);
+  const [user, setUser] = useState<{ id: string; name: string } | null>(null);
+  const [checkingSession, setCheckingSession] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/me", { credentials: "include" })
+      .then(async (response) => response.ok ? setUser(await response.json()) : null)
+      .catch(() => null)
+      .finally(() => setCheckingSession(false));
+  }, []);
+
+  if (checkingSession) return <main className="login-shell"><p className="loading-copy">Emby Insights wird geladen …</p></main>;
+  if (!user) return <LoginScreen onAuthenticated={setUser} />;
 
   function openNotices() {
     setNoticeOpen((isOpen) => !isOpen);
@@ -56,7 +69,7 @@ export default function Home() {
 
       <section className="screen">
         <header className="topbar">
-          <div><p className="eyebrow">DIENSTAG, 28. JULI</p><h1>{page === "Heute" ? "Guten Abend, Thomas" : page}</h1></div>
+          <div><p className="eyebrow">DEIN PERSÖNLICHER ÜBERBLICK</p><h1>{page === "Heute" ? `Guten Abend, ${user.name}` : page}</h1></div>
           <div className="header-actions">
             <button className="notice-button" aria-label="Benachrichtigungen" onClick={openNotices}>♢{unread > 0 && <b>{unread}</b>}</button>
             <button className="avatar" aria-label="Profil öffnen" onClick={() => setPage("Profil")}>T</button>
