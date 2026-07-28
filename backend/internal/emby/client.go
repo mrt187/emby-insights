@@ -25,12 +25,19 @@ type Authenticator interface {
 }
 
 type Client struct {
-	baseURL, deviceID string
-	httpClient        *http.Client
+	baseURL     string
+	deviceID    string
+	adminAPIKey string
+	httpClient  *http.Client
 }
 
-func NewClient(baseURL, deviceID string) *Client {
-	return &Client{baseURL: strings.TrimRight(baseURL, "/"), deviceID: deviceID, httpClient: &http.Client{Timeout: 10 * time.Second}}
+func NewClient(baseURL, deviceID, adminAPIKey string) *Client {
+	return &Client{
+		baseURL:     strings.TrimRight(baseURL, "/"),
+		deviceID:    deviceID,
+		adminAPIKey: adminAPIKey,
+		httpClient:  &http.Client{Timeout: 10 * time.Second},
+	}
 }
 
 func (client *Client) Authenticate(ctx context.Context, credentials Credentials) (Identity, error) {

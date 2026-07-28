@@ -20,6 +20,18 @@ func (auth fakeAuthenticator) Authenticate(context.Context, emby.Credentials) (e
 	return auth.identity, auth.err
 }
 
+type fakeStatisticsReader struct {
+	statistics emby.PersonalWatchTime
+	userID     string
+	period     string
+}
+
+func (reader *fakeStatisticsReader) PersonalWatchTime(_ context.Context, userID, period string) (emby.PersonalWatchTime, error) {
+	reader.userID = userID
+	reader.period = period
+	return reader.statistics, nil
+}
+
 type memorySessionStore struct {
 	identity emby.Identity
 	deleted  bool
@@ -74,5 +86,25 @@ func TestLoginRejectsInvalidCredentials(t *testing.T) {
 
 	if recorder.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestStatsUsesSessionIdentity(t *testing.T) {
+	store := &memorySessionStore{identity: emby.Identity{UserID: "user-1", DisplayName: "Thomas", AccessToken: "secret-token"}}
+	statistics := &fakeStatisticsReader{statistics: emby.PersonalWatchTime{WatchSeconds: 3600, PreviousWatchSeconds: 1800}}
+	app := &App{sessions: store, statistics: statistics}
+	request := httptest.NewRequest(http.MethodGet, "/api/stats?period=month", nil)
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	if statistics.userID != "user-1" || statistics.period != "month" {
+		t.Fatalf("statistics request = user %q, period %q", statistics.userID, statistics.period)
+	}
+	if strings.Contains(recorder.Body.String(), "secret-token") {
+		t.Fatal("statistics response exposed Emby access token")
 	}
 }

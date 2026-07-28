@@ -20,6 +20,7 @@ type App struct {
 	database      *pgxpool.Pool
 	redis         *redis.Client
 	authenticator emby.Authenticator
+	statistics    emby.PersonalStatisticsReader
 	sessions      session.Store
 	cookieSecure  bool
 }
@@ -35,10 +36,12 @@ func New(cfg config.Config) (*App, error) {
 		return nil, err
 	}
 	cache := redis.NewClient(options)
+	embyClient := emby.NewClient(cfg.EmbyBaseURL, cfg.EmbyDeviceID, cfg.EmbyAdminAPIKey)
 	return &App{
 		database:      database,
 		redis:         cache,
-		authenticator: emby.NewClient(cfg.EmbyBaseURL, cfg.EmbyDeviceID),
+		authenticator: embyClient,
+		statistics:    embyClient,
 		sessions:      session.NewRedisStore(cache),
 		cookieSecure:  cfg.CookieSecure,
 	}, nil
@@ -53,6 +56,7 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("POST /api/auth/emby/login", app.login)
 	mux.HandleFunc("POST /api/auth/logout", app.logout)
 	mux.HandleFunc("GET /api/me", app.me)
+	mux.HandleFunc("GET /api/stats", app.stats)
 	return mux
 }
 
@@ -108,6 +112,27 @@ func (app *App) me(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	respondJSON(writer, http.StatusOK, profile(identity))
+}
+
+func (app *App) stats(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	period := request.URL.Query().Get("period")
+	if period == "" {
+		period = "week"
+	}
+	if period != "week" && period != "month" && period != "year" {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "period must be week, month or year"})
+		return
+	}
+	statistics, err := app.statistics.PersonalWatchTime(request.Context(), identity.UserID, period)
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "personal statistics are unavailable"})
+		return
+	}
+	respondJSON(writer, http.StatusOK, statistics)
 }
 
 func (app *App) logout(writer http.ResponseWriter, request *http.Request) {

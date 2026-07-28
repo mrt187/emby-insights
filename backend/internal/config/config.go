@@ -14,6 +14,7 @@ type Config struct {
 	RedisURL        string
 	EmbyBaseURL     string
 	EmbyDeviceID    string
+	EmbyAdminAPIKey string
 	CookieSecure    bool
 	ShutdownTimeout time.Duration
 }
@@ -39,12 +40,18 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	embyAdminAPIKey, err := required("EMBY_ADMIN_API_KEY")
+	if err != nil {
+		return Config{}, err
+	}
+
 	return Config{
 		ListenAddress:   valueOr("LISTEN_ADDRESS", ":8080"),
 		DatabaseURL:     databaseURL,
 		RedisURL:        redisURL,
 		EmbyBaseURL:     embyBaseURL,
 		EmbyDeviceID:    embyDeviceID,
+		EmbyAdminAPIKey: embyAdminAPIKey,
 		CookieSecure:    valueOr("COOKIE_SECURE", "true") != "false",
 		ShutdownTimeout: 10 * time.Second,
 	}, nil

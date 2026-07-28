@@ -17,6 +17,7 @@ func TestLoadUsesConfiguredValues(t *testing.T) {
 	t.Setenv("LISTEN_ADDRESS", "127.0.0.1:9090")
 	t.Setenv("EMBY_BASE_URL", "http://emby:8096/emby")
 	t.Setenv("EMBY_DEVICE_ID", "test-device")
+	t.Setenv("EMBY_ADMIN_API_KEY", "test-admin-key")
 
 	cfg, err := Load()
 	if err != nil {
