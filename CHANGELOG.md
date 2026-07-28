@@ -8,6 +8,15 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.3.1] - 2026-07-29
+
+### Changed
+
+- Replaced the separate weekly metric cards with one bold, personal profile
+  card featuring the Emby avatar, watch time, and key media insights.
+- Refined dashboard typography and charcoal panel styling to improve hierarchy
+  and match the selected visual reference.
+
 ## [0.3.0] - 2026-07-29
 
 ### Changed
@@ -42,6 +51,7 @@ The project follows [Semantic Versioning](https://semver.org/):
 - Container images are published with the matching release version, the commit
   SHA, and `latest`.
 
+[0.3.1]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.3.1
 [0.3.0]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.3.0
 [0.2.0]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.2.0
 [0.1.0]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.1.0

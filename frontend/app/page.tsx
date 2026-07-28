@@ -85,7 +85,7 @@ export default function Home() {
           {noticeOpen && <section className="notifications" id="notifications" role="dialog" aria-label="Benachrichtigungen"><strong>Benachrichtigungen</strong><p>Deine Anfrage „Severance“ wird bearbeitet.</p><p>Am Freitag erscheint Alien: Earth.</p></section>}
         </div>
       </header>
-      {page === "Heute" && <Today onStats={() => selectPage("Statistik")} statistics={weekStats} state={weekState} />}
+      {page === "Heute" && <Today user={user} onStats={() => selectPage("Statistik")} statistics={weekStats} state={weekState} />}
       {page === "Statistik" && <Stats />}
       {page === "Anfragen" && <Requests />}
       {page === "Profil" && <Profile user={user} />}
@@ -116,7 +116,7 @@ function UserAvatar({ name }: { name: string }) {
   return <span className="user-avatar"><span className="avatar-initial">{initial}</span><img src="/api/me/avatar" alt="" width="44" height="44" onError={(event) => event.currentTarget.remove()} /></span>;
 }
 
-function Today({ onStats, statistics, state }: { onStats: () => void; statistics: PersonalStats | null; state: LoadState }) {
+function Today({ user, onStats, statistics, state }: { user: { name: string }; onStats: () => void; statistics: PersonalStats | null; state: LoadState }) {
   const detail = state === "error" ? "Noch keine Statistik verfügbar" : statistics ? comparisonText(statistics) : "Wird geladen …";
   return <div className="content today-view">
     <section className="today-hero" aria-labelledby="today-hero-title">
@@ -133,17 +133,32 @@ function Today({ onStats, statistics, state }: { onStats: () => void; statistics
       </div>
       <div className="hero-orbit" aria-hidden="true"><i /><i /><b /></div>
     </section>
-    <section className="section-heading rhythm-heading"><div><p className="eyebrow">DEINE WOCHE</p><h2>Dein Rhythmus</h2></div><button className="text-button" onClick={onStats}>Details ansehen <Icon name="arrow" /></button></section>
-    <section className="week-grid" aria-label="Wöchentliche Kennzahlen">
-      <MetricCard icon="clock" tone="blue" value={statistics ? formatDuration(statistics.watchSeconds) : "—"} label="Sehzeit" detail={detail} positive={Boolean(statistics && statistics.previousWatchSeconds > 0)} />
-      <MetricCard icon="movie" tone="peach" value={statistics ? statistics.completedMovies : "—"} label="Filme abgeschlossen" detail={statistics ? "Diese Woche" : loadingCopy(state)} />
-      <MetricCard icon="series" tone="mint" value={statistics ? statistics.completedSeries : "—"} label="Serien abgeschlossen" detail={statistics ? "Diese Woche" : loadingCopy(state)} />
-      <MetricCard icon="genre" tone="lilac" value={statistics?.favouriteGenre || "—"} label="Lieblingsgenre" detail={statistics ? "Nach Sehzeit" : loadingCopy(state)} genre />
-    </section>
+    <section className="section-heading rhythm-heading"><div><p className="eyebrow">DEIN PROFIL</p><h2>Dein Rhythmus</h2></div><button className="text-button" onClick={onStats}>Alle Details <Icon name="arrow" /></button></section>
+    <UserInsightCard user={user} statistics={statistics} state={state} detail={detail} />
     <PosterRow title="Demnächst" eyebrow="COMING SOON · NÄCHSTE 4 WOCHEN" items={upcoming} detail={(item) => item.date} />
     <PosterRow title="Meine Anfragen" eyebrow="SEERR · OFFEN" items={requests} detail={(item) => item.status} />
     <PosterRow title="Neu für dich" eyebrow="IN DEN LETZTEN 14 TAGEN" items={newForYou.map(([title, art]) => ({ title, art }))} detail={() => "Ungesehen"} />
   </div>;
+}
+
+function UserInsightCard({ user, statistics, state, detail }: { user: { name: string }; statistics: PersonalStats | null; state: LoadState; detail: string }) {
+  return <section className="user-insight-card" aria-label={`Wochenübersicht von ${user.name}`}>
+    <div className="user-insight-identity">
+      <div className="profile-avatar"><UserAvatar name={user.name} /></div>
+      <div><p className="eyebrow">DEIN MEDIENPROFIL</p><h3>{user.name}</h3><p>Deine ganz persönliche Woche in Emby.</p></div>
+    </div>
+    <div className="user-insight-feature">
+      <span>Diese Woche</span>
+      <strong>{statistics ? formatDuration(statistics.watchSeconds) : "—"}</strong>
+      <small>{detail}</small>
+    </div>
+    <div className="user-insight-stats">
+      <div><span className="user-stat-icon peach"><Icon name="movie" /></span><strong>{statistics ? statistics.completedMovies : "—"}</strong><small>Filme</small></div>
+      <div><span className="user-stat-icon mint"><Icon name="series" /></span><strong>{statistics ? statistics.completedSeries : "—"}</strong><small>Serien</small></div>
+      <div><span className="user-stat-icon lilac"><Icon name="genre" /></span><strong>{statistics?.favouriteGenre || "—"}</strong><small>Lieblingsgenre</small></div>
+    </div>
+    {state === "loading" && <span className="sr-only" role="status">Deine Wochenstatistik wird geladen …</span>}
+  </section>;
 }
 
 function MetricCard({ icon, tone, value, label, detail, positive, genre = false }: { icon: IconName; tone: string; value: string | number; label: string; detail: string; positive?: boolean; genre?: boolean }) {

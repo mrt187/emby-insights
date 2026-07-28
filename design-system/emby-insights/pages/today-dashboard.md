@@ -43,6 +43,11 @@
   and one clear action. Do not add a generic marketing video or CTA to the app.
 - Use a compact bento metric grid and poster-led content rows. Keep the visual
   emphasis on the user’s media, not on decorative chrome.
+- The weekly summary is one unified profile card, not four separate metric
+  cards: use the real Emby avatar, a bold name, a primary watch-time panel, and
+  three compact supporting statistics. Match the charcoal panel, bright text,
+  rounded geometry, and emerald accent language of the supplied dashboard
+  reference.
 
 ---
 
