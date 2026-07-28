@@ -62,3 +62,5 @@ button { font: inherit; cursor: pointer; }
 .login-brand { display:flex; gap:9px; align-items:center; margin-bottom:48px; font-size:20px; letter-spacing:-.9px; font-weight:700; }
 .login-card h1 { margin:0 0 12px; font-size:31px; letter-spacing:-1.3px; }.login-copy { margin:0 0 28px; color:#9ca7a1; font-size:14px; line-height:1.5; }
 .login-card form { display:grid; gap:17px; }.login-card label { display:grid; gap:8px; color:#c8d0cc; font-size:12px; font-weight:700; }.login-card input { width:100%; border:1px solid #38413d; border-radius:10px; padding:12px 13px; background:#101211; color:#f1f5f2; outline:none; }.login-card input:focus { border-color:#62c991; box-shadow:0 0 0 3px #367d5540; }.login-button { border:0; border-radius:10px; padding:13px; background:#8ce0ad; color:#133222; font-weight:800; }.login-button:disabled { opacity:.65; cursor:wait; }.login-error { margin:0; color:#ffaaa1; font-size:12px; line-height:1.4; }.loading-copy { color:#b9c5be; }
+
+.brand-logo { width: 31px; height: 31px; border-radius: 9px; display: block; }

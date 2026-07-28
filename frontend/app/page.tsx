@@ -72,7 +72,7 @@ export default function Home() {
   return (
     <main className="app-shell">
       <aside className="side-nav" aria-label="Hauptnavigation">
-        <div className="brand"><span className="brand-mark">e</span><span>insights</span></div>
+        <div className="brand"><img className="brand-logo" src="/emby-insights-logo.svg" alt="Emby Insights" /><span>insights</span></div>
         <nav>{nav.map((item) => <button className={page === item.label ? "nav-item active" : "nav-item"} key={item.label} onClick={() => setPage(item.label)}><span>{item.icon}</span>{item.label}</button>)}</nav>
         <div className="server-status"><i /> Verbunden mit Emby</div>
       </aside>
