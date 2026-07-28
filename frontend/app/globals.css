@@ -64,3 +64,8 @@ button { font: inherit; cursor: pointer; }
 .login-card form { display:grid; gap:17px; }.login-card label { display:grid; gap:8px; color:#c8d0cc; font-size:12px; font-weight:700; }.login-card input { width:100%; border:1px solid #38413d; border-radius:10px; padding:12px 13px; background:#101211; color:#f1f5f2; outline:none; }.login-card input:focus { border-color:#62c991; box-shadow:0 0 0 3px #367d5540; }.login-button { border:0; border-radius:10px; padding:13px; background:#8ce0ad; color:#133222; font-weight:800; }.login-button:disabled { opacity:.65; cursor:wait; }.login-error { margin:0; color:#ffaaa1; font-size:12px; line-height:1.4; }.loading-copy { color:#b9c5be; }
 
 .brand-logo { width: 31px; height: 31px; border-radius: 9px; display: block; }
+
+.avatar { position: relative; overflow: hidden; }
+.user-avatar { position: absolute; inset: 0; display: grid; place-items: center; }
+.user-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.avatar-initial { font: inherit; }

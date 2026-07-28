@@ -21,6 +21,7 @@ type App struct {
 	redis         *redis.Client
 	authenticator emby.Authenticator
 	statistics    emby.PersonalStatisticsReader
+	avatars       emby.AvatarReader
 	sessions      session.Store
 	cookieSecure  bool
 }
@@ -42,6 +43,7 @@ func New(cfg config.Config) (*App, error) {
 		redis:         cache,
 		authenticator: embyClient,
 		statistics:    embyClient,
+		avatars:       embyClient,
 		sessions:      session.NewRedisStore(cache),
 		cookieSecure:  cfg.CookieSecure,
 	}, nil
@@ -56,6 +58,7 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("POST /api/auth/emby/login", app.login)
 	mux.HandleFunc("POST /api/auth/logout", app.logout)
 	mux.HandleFunc("GET /api/me", app.me)
+	mux.HandleFunc("GET /api/me/avatar", app.avatar)
 	mux.HandleFunc("GET /api/stats", app.stats)
 	return mux
 }
@@ -165,4 +168,24 @@ func respondJSON(writer http.ResponseWriter, status int, body any) {
 	writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 	writer.WriteHeader(status)
 	_ = json.NewEncoder(writer).Encode(body)
+}
+
+func (app *App) avatar(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	image, err := app.avatars.UserPrimaryImage(request.Context(), identity)
+	if errors.Is(err, emby.ErrPrimaryImageUnavailable) {
+		http.NotFound(writer, request)
+		return
+	}
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "profile image is unavailable"})
+		return
+	}
+	writer.Header().Set("Content-Type", image.ContentType)
+	writer.Header().Set("Cache-Control", "private, max-age=3600")
+	writer.WriteHeader(http.StatusOK)
+	_, _ = writer.Write(image.Data)
 }

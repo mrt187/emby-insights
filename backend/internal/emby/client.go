@@ -24,6 +24,15 @@ type Authenticator interface {
 	Authenticate(context.Context, Credentials) (Identity, error)
 }
 
+type AvatarReader interface {
+	UserPrimaryImage(context.Context, Identity) (UserImage, error)
+}
+
+type UserImage struct {
+	ContentType string
+	Data        []byte
+}
+
 type Client struct {
 	baseURL     string
 	deviceID    string
@@ -78,4 +87,32 @@ func (client *Client) Authenticate(ctx context.Context, credentials Credentials)
 		return Identity{}, fmt.Errorf("Emby login response is incomplete")
 	}
 	return Identity{UserID: result.User.ID, DisplayName: result.User.Name, AccessToken: result.AccessToken, ServerID: result.ServerID}, nil
+}
+
+func (client *Client) UserPrimaryImage(ctx context.Context, identity Identity) (UserImage, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, client.baseURL+"/Users/"+identity.UserID+"/Images/Primary", nil)
+	if err != nil {
+		return UserImage{}, err
+	}
+	request.Header.Set("X-Emby-Token", identity.AccessToken)
+	response, err := client.httpClient.Do(request)
+	if err != nil {
+		return UserImage{}, fmt.Errorf("fetch Emby profile image: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode == http.StatusNotFound {
+		return UserImage{}, ErrPrimaryImageUnavailable
+	}
+	if response.StatusCode != http.StatusOK {
+		return UserImage{}, fmt.Errorf("Emby profile image returned %s", response.Status)
+	}
+	data, err := io.ReadAll(io.LimitReader(response.Body, 5<<20))
+	if err != nil {
+		return UserImage{}, fmt.Errorf("read Emby profile image: %w", err)
+	}
+	contentType := response.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "image/jpeg"
+	}
+	return UserImage{ContentType: contentType, Data: data}, nil
 }

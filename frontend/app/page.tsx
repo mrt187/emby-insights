@@ -82,14 +82,14 @@ export default function Home() {
           <div><p className="eyebrow">DEIN PERSÖNLICHER ÜBERBLICK</p><h1>{page === "Heute" ? `Guten Abend, ${user.name}` : page}</h1></div>
           <div className="header-actions">
             <button className="notice-button" aria-label="Benachrichtigungen" onClick={openNotices}>♢{unread > 0 && <b>{unread}</b>}</button>
-            <button className="avatar" aria-label="Profil öffnen" onClick={() => setPage("Profil")}>T</button>
+            <button className="avatar" aria-label="Profil öffnen" onClick={() => setPage("Profil")}><UserAvatar name={user.name} /></button>
             {noticeOpen && <div className="notifications"><strong>Benachrichtigungen</strong><p>Deine Anfrage „Severance“ wird bearbeitet.</p><p>Am Freitag erscheint Alien: Earth.</p></div>}
           </div>
         </header>
         {page === "Heute" && <Today onStats={() => setPage("Statistik")} statistics={weekStats} />}
         {page === "Statistik" && <Stats />}
         {page === "Anfragen" && <Requests />}
-        {page === "Profil" && <Profile />}
+        {page === "Profil" && <Profile user={user} />}
       </section>
 
       <nav className="bottom-nav" aria-label="Hauptnavigation">
@@ -97,6 +97,11 @@ export default function Home() {
       </nav>
     </main>
   );
+}
+
+function UserAvatar({ name }: { name: string }) {
+  const initial = name.trim().charAt(0).toUpperCase() || "?";
+  return <span className="user-avatar" aria-label={"Profilbild von " + name}><span className="avatar-initial">{initial}</span><img src="/api/me/avatar" alt="" onError={(event) => event.currentTarget.remove()} /></span>;
 }
 
 function Today({ onStats, statistics }: { onStats: () => void; statistics: PersonalStats | null }) {
@@ -119,4 +124,4 @@ function Stats() {
 function formatDuration(seconds: number) { const hours = Math.floor(seconds / 3600); const minutes = Math.floor((seconds % 3600) / 60); return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`; }
 function comparisonText(statistics: PersonalStats) { if (statistics.previousWatchSeconds === 0) return "Keine Vergleichsdaten"; const change = Math.round(((statistics.watchSeconds - statistics.previousWatchSeconds) / statistics.previousWatchSeconds) * 100); return `${change >= 0 ? "↑" : "↓"} ${Math.abs(change)} % gegenüber vorher`; }
 function Requests() { return <div className="content page-view"><section className="section-heading"><div><p className="eyebrow">SEERR · OFFEN</p><h2>Meine Anfragen</h2></div></section><PosterRow title="" eyebrow="" items={requests} detail={(item) => item.status} /></div>; }
-function Profile() { return <div className="content page-view profile"><section className="profile-head"><div className="avatar big">T</div><div><p className="eyebrow">EMBY-PROFIL</p><h2>Thomas</h2></div></section><button className="logout-button">Abmelden</button></div>; }
+function Profile({ user }: { user: { name: string } }) { return <div className="content page-view profile"><section className="profile-head"><div className="avatar big"><UserAvatar name={user.name} /></div><div><p className="eyebrow">EMBY-PROFIL</p><h2>{user.name}</h2></div></section><button className="logout-button">Abmelden</button></div>; }
