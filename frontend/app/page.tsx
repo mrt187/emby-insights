@@ -1,42 +1,36 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { LoginScreen } from "./login-screen";
 
 type Page = "Heute" | "Statistik" | "Anfragen" | "Profil";
 type Period = "Woche" | "Monat" | "Jahr";
 type StatisticsPeriod = "week" | "month" | "year";
 type PersonalStats = { watchSeconds: number; previousWatchSeconds: number; completedMovies: number; completedSeries: number; favouriteGenre: string; periodStartsAt: string; periodEndsAt: string };
+type IconName = "home" | "chart" | "sparkle" | "user" | "bell" | "arrow" | "clock" | "movie" | "series" | "genre";
+type LoadState = "loading" | "ready" | "error";
 
-const nav: { label: Page; icon: string }[] = [
-  { label: "Heute", icon: "⌂" },
-  { label: "Statistik", icon: "◔" },
-  { label: "Anfragen", icon: "✦" },
-  { label: "Profil", icon: "◎" },
+const nav: { label: Page; icon: IconName }[] = [
+  { label: "Heute", icon: "home" }, { label: "Statistik", icon: "chart" },
+  { label: "Anfragen", icon: "sparkle" }, { label: "Profil", icon: "user" },
 ];
+const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
 
 const upcoming = [
-  { date: "01. Aug.", title: "The Last of Us", art: "last" },
-  { date: "04. Aug.", title: "Alien: Earth", art: "alien" },
-  { date: "08. Aug.", title: "Wednesday", art: "wednesday" },
-  { date: "12. Aug.", title: "The Bear", art: "bear" },
-  { date: "15. Aug.", title: "Andor", art: "andor" },
-  { date: "22. Aug.", title: "Foundation", art: "foundation" },
+  { date: "01. Aug.", title: "The Last of Us", art: "last" }, { date: "04. Aug.", title: "Alien: Earth", art: "alien" },
+  { date: "08. Aug.", title: "Wednesday", art: "wednesday" }, { date: "12. Aug.", title: "The Bear", art: "bear" },
+  { date: "15. Aug.", title: "Andor", art: "andor" }, { date: "22. Aug.", title: "Foundation", art: "foundation" },
 ];
 
 const requests = [
-  { title: "Dune: Part Three", status: "Wird gesucht", art: "dune" },
-  { title: "The Bear · Staffel 5", status: "Genehmigt", art: "bear" },
-  { title: "Severance · Staffel 3", status: "In Bearbeitung", art: "severance" },
-  { title: "Mickey 17", status: "Angefragt", art: "mickey" },
+  { title: "Dune: Part Three", status: "Wird gesucht", art: "dune" }, { title: "The Bear · Staffel 5", status: "Genehmigt", art: "bear" },
+  { title: "Severance · Staffel 3", status: "In Bearbeitung", art: "severance" }, { title: "Mickey 17", status: "Angefragt", art: "mickey" },
 ];
 
 const newForYou = [
-  ["Sinners", "sinners"], ["The Studio", "studio"], ["Mickey 17", "mickey"],
-  ["The Gorge", "gorge"], ["The Brutalist", "brutalist"], ["Black Mirror", "mirror"],
-  ["Companion", "companion"], ["Anora", "anora"], ["Flow", "flow"],
-  ["The Monkey", "monkey"], ["Wolfs", "wolfs"], ["Conclave", "conclave"],
-  ["Nosferatu", "nosferatu"], ["Civil War", "civil"], ["The Wild Robot", "robot"],
+  ["Sinners", "sinners"], ["The Studio", "studio"], ["Mickey 17", "mickey"], ["The Gorge", "gorge"], ["The Brutalist", "brutalist"],
+  ["Black Mirror", "mirror"], ["Companion", "companion"], ["Anora", "anora"], ["Flow", "flow"], ["The Monkey", "monkey"],
+  ["Wolfs", "wolfs"], ["Conclave", "conclave"], ["Nosferatu", "nosferatu"], ["Civil War", "civil"], ["The Wild Robot", "robot"],
 ] as const;
 
 export default function Home() {
@@ -46,6 +40,7 @@ export default function Home() {
   const [user, setUser] = useState<{ id: string; name: string } | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
   const [weekStats, setWeekStats] = useState<PersonalStats | null>(null);
+  const [weekState, setWeekState] = useState<LoadState>("loading");
 
   useEffect(() => {
     fetch("/api/me", { credentials: "include" })
@@ -56,72 +51,120 @@ export default function Home() {
 
   useEffect(() => {
     if (!user) return;
+    let active = true;
     fetch("/api/stats?period=week", { credentials: "include" })
-      .then(async (response) => response.ok ? setWeekStats(await response.json()) : null)
-      .catch(() => null);
+      .then(async (response) => {
+        if (!response.ok) throw new Error("statistics unavailable");
+        const data = await response.json();
+        if (active) { setWeekStats(data); setWeekState("ready"); }
+      })
+      .catch(() => active && setWeekState("error"));
+    return () => { active = false; };
   }, [user]);
 
-  if (checkingSession) return <main className="login-shell"><p className="loading-copy">Emby Insights wird geladen …</p></main>;
+  if (checkingSession) return <main className="login-shell"><p className="loading-copy" role="status">Emby Insights wird geladen …</p></main>;
   if (!user) return <LoginScreen onAuthenticated={setUser} />;
 
-  function openNotices() {
-    setNoticeOpen((isOpen) => !isOpen);
-    setUnread(0);
-  }
+  const selectPage = (next: Page) => { setPage(next); setNoticeOpen(false); };
+  const openNotices = () => { setNoticeOpen((open) => !open); setUnread(0); };
 
-  return (
-    <main className="app-shell">
-      <aside className="side-nav" aria-label="Hauptnavigation">
-        <div className="brand"><img className="brand-logo" src="/emby-insights-logo.svg" alt="Emby Insights" /><span>insights</span></div>
-        <nav>{nav.map((item) => <button className={page === item.label ? "nav-item active" : "nav-item"} key={item.label} onClick={() => setPage(item.label)}><span>{item.icon}</span>{item.label}</button>)}</nav>
-        <div className="server-status"><i /> Verbunden mit Emby</div>
-      </aside>
+  return <main className="app-shell">
+    <aside className="side-nav" aria-label="Hauptnavigation">
+      <div className="brand"><img className="brand-logo" src="/emby-insights-logo.svg" alt="Emby Insights" /><span>insights</span></div>
+      <nav>{nav.map((item) => <button className={page === item.label ? "nav-item active" : "nav-item"} key={item.label} onClick={() => selectPage(item.label)} aria-current={page === item.label ? "page" : undefined}><Icon name={item.icon} />{item.label}</button>)}</nav>
+      <div className="server-status"><i /> Verbunden mit Emby</div>
+    </aside>
 
-      <section className="screen">
-        <header className="topbar">
-          <div><p className="eyebrow">DEIN PERSÖNLICHER ÜBERBLICK</p><h1>{page === "Heute" ? `Guten Abend, ${user.name}` : page}</h1></div>
-          <div className="header-actions">
-            <button className="notice-button" aria-label="Benachrichtigungen" onClick={openNotices}>♢{unread > 0 && <b>{unread}</b>}</button>
-            <button className="avatar" aria-label="Profil öffnen" onClick={() => setPage("Profil")}><UserAvatar name={user.name} /></button>
-            {noticeOpen && <div className="notifications"><strong>Benachrichtigungen</strong><p>Deine Anfrage „Severance“ wird bearbeitet.</p><p>Am Freitag erscheint Alien: Earth.</p></div>}
-          </div>
-        </header>
-        {page === "Heute" && <Today onStats={() => setPage("Statistik")} statistics={weekStats} />}
-        {page === "Statistik" && <Stats />}
-        {page === "Anfragen" && <Requests />}
-        {page === "Profil" && <Profile user={user} />}
-      </section>
+    <section className="screen">
+      <header className="topbar">
+        <div><p className="eyebrow">DEIN PERSÖNLICHER ÜBERBLICK</p><h1>{page === "Heute" ? `${greeting()}, ${user.name}` : page}</h1></div>
+        <div className="header-actions">
+          <button className="notice-button" aria-label="Benachrichtigungen" aria-expanded={noticeOpen} aria-controls="notifications" onClick={openNotices}><Icon name="bell" />{unread > 0 && <b><span className="sr-only">{unread} ungelesene Benachrichtigungen</span></b>}</button>
+          <button className="avatar" aria-label="Profil öffnen" onClick={() => selectPage("Profil")}><UserAvatar name={user.name} /></button>
+          {noticeOpen && <div className="notifications" id="notifications" role="status"><strong>Benachrichtigungen</strong><p>Deine Anfrage „Severance“ wird bearbeitet.</p><p>Am Freitag erscheint Alien: Earth.</p></div>}
+        </div>
+      </header>
+      {page === "Heute" && <Today onStats={() => selectPage("Statistik")} statistics={weekStats} state={weekState} />}
+      {page === "Statistik" && <Stats />}
+      {page === "Anfragen" && <Requests />}
+      {page === "Profil" && <Profile user={user} />}
+    </section>
 
-      <nav className="bottom-nav" aria-label="Hauptnavigation">
-        {nav.map((item) => <button key={item.label} className={page === item.label ? "active" : ""} onClick={() => setPage(item.label)}><span>{item.icon}</span>{item.label}</button>)}
-      </nav>
-    </main>
-  );
+    <nav className="bottom-nav" aria-label="Hauptnavigation">{nav.map((item) => <button key={item.label} className={page === item.label ? "active" : ""} onClick={() => selectPage(item.label)} aria-current={page === item.label ? "page" : undefined}><Icon name={item.icon} /><span>{item.label}</span></button>)}</nav>
+  </main>;
+}
+
+function Icon({ name }: { name: IconName }) {
+  const paths: Record<IconName, ReactNode> = {
+    home: <path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1V10Z" />,
+    chart: <><path d="M4 20V10m8 10V4m8 16v-7" /><path d="M2 20h20" /></>,
+    sparkle: <path d="m12 2 1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8L12 2Zm7 13 .8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z" />,
+    user: <><circle cx="12" cy="8" r="3.5" /><path d="M4.5 21c.8-4 3.2-6 7.5-6s6.7 2 7.5 6" /></>,
+    bell: <><path d="M18 10a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M10 22h4" /></>,
+    arrow: <path d="M5 12h14m-6-6 6 6-6 6" />,
+    clock: <><circle cx="12" cy="12" r="8.5" /><path d="M12 7v5l3.5 2" /></>,
+    movie: <><rect x="3" y="5" width="18" height="15" rx="2" /><path d="M7 5v15m10-15v15M3 10h18" /></>,
+    series: <><path d="M5 3h14v18H5z" /><path d="M8 7h8M8 11h8M8 15h5" /></>,
+    genre: <><path d="M4 4h8l8 8-8 8-10-10V4Z" /><circle cx="9" cy="9" r="1" /></>,
+  };
+  return <svg className="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
 function UserAvatar({ name }: { name: string }) {
   const initial = name.trim().charAt(0).toUpperCase() || "?";
-  return <span className="user-avatar" aria-label={"Profilbild von " + name}><span className="avatar-initial">{initial}</span><img src="/api/me/avatar" alt="" onError={(event) => event.currentTarget.remove()} /></span>;
+  return <span className="user-avatar"><span className="avatar-initial">{initial}</span><img src="/api/me/avatar" alt="" onError={(event) => event.currentTarget.remove()} /></span>;
 }
 
-function Today({ onStats, statistics }: { onStats: () => void; statistics: PersonalStats | null }) {
-  const comparison = statistics ? comparisonText(statistics) : "Wird geladen …";
-  return <div className="content today-view"><section className="section-heading"><div><p className="eyebrow">DEIN ÜBERBLICK</p><h2>Meine Woche</h2></div><button className="text-button" onClick={onStats}>Statistik <span>→</span></button></section><section className="week-grid"><article className="metric-card"><span className="metric-icon blue">◔</span><strong>{statistics ? formatDuration(statistics.watchSeconds) : "—"}</strong><p>Sehzeit</p><small className="up">{comparison}</small></article><article className="metric-card"><span className="metric-icon peach">◉</span><strong>{statistics ? statistics.completedMovies : "—"}</strong><p>Filme abgeschlossen</p><small>{statistics ? "Diese Woche" : "Wird geladen …"}</small></article><article className="metric-card"><span className="metric-icon mint">✓</span><strong>{statistics ? statistics.completedSeries : "—"}</strong><p>Serien abgeschlossen</p><small>{statistics ? "Diese Woche" : "Wird geladen …"}</small></article><article className="metric-card genre-card"><span className="metric-icon lilac">✦</span><p>Lieblingsgenre</p><strong>{statistics?.favouriteGenre || "—"}</strong><small>{statistics ? "Nach Sehzeit" : "Wird geladen …"}</small></article></section><PosterRow title="Demnächst" eyebrow="COMING SOON · NÄCHSTE 4 WOCHEN" items={upcoming} detail={(item) => item.date} /><PosterRow title="Meine Anfragen" eyebrow="SEERR · OFFEN" items={requests} detail={(item) => item.status} /><PosterRow title="Neu für dich" eyebrow="IN DEN LETZTEN 14 TAGEN" items={newForYou.map(([title, art]) => ({ title, art }))} detail={() => "Ungesehen"} /></div>;
+function Today({ onStats, statistics, state }: { onStats: () => void; statistics: PersonalStats | null; state: LoadState }) {
+  const detail = state === "error" ? "Noch keine Statistik verfügbar" : statistics ? comparisonText(statistics) : "Wird geladen …";
+  return <div className="content today-view">
+    <section className="section-heading"><div><p className="eyebrow">DEINE WOCHE</p><h2>Auf einen Blick</h2></div><button className="text-button" onClick={onStats}>Details ansehen <Icon name="arrow" /></button></section>
+    <section className="week-grid" aria-label="Wöchentliche Kennzahlen">
+      <MetricCard icon="clock" tone="blue" value={statistics ? formatDuration(statistics.watchSeconds) : "—"} label="Sehzeit" detail={detail} positive={Boolean(statistics && statistics.previousWatchSeconds > 0)} />
+      <MetricCard icon="movie" tone="peach" value={statistics ? statistics.completedMovies : "—"} label="Filme abgeschlossen" detail={statistics ? "Diese Woche" : loadingCopy(state)} />
+      <MetricCard icon="series" tone="mint" value={statistics ? statistics.completedSeries : "—"} label="Serien abgeschlossen" detail={statistics ? "Diese Woche" : loadingCopy(state)} />
+      <MetricCard icon="genre" tone="lilac" value={statistics?.favouriteGenre || "—"} label="Lieblingsgenre" detail={statistics ? "Nach Sehzeit" : loadingCopy(state)} genre />
+    </section>
+    <PosterRow title="Demnächst" eyebrow="COMING SOON · NÄCHSTE 4 WOCHEN" items={upcoming} detail={(item) => item.date} />
+    <PosterRow title="Meine Anfragen" eyebrow="SEERR · OFFEN" items={requests} detail={(item) => item.status} />
+    <PosterRow title="Neu für dich" eyebrow="IN DEN LETZTEN 14 TAGEN" items={newForYou.map(([title, art]) => ({ title, art }))} detail={() => "Ungesehen"} />
+  </div>;
+}
+
+function MetricCard({ icon, tone, value, label, detail, positive, genre = false }: { icon: IconName; tone: string; value: string | number; label: string; detail: string; positive?: boolean; genre?: boolean }) {
+  return <article className={genre ? "metric-card genre-card" : "metric-card"}><span className={`metric-icon ${tone}`}><Icon name={icon} /></span><strong>{value}</strong><p>{label}</p><small className={positive ? "up" : undefined}>{detail}</small></article>;
 }
 
 function PosterRow({ title, eyebrow, items, detail }: { title: string; eyebrow: string; items: readonly { title: string; art: string }[]; detail: (item: { title: string; art: string }) => string }) {
-  return <section className="poster-section">{title && <div className="section-heading"><div><p className="eyebrow">{eyebrow}</p><h2>{title}</h2></div></div>}<div className="poster-scroller">{items.map((item) => <article className="poster-entry" key={item.title}><div className={`poster wide ${item.art}`}><span>{item.title}</span></div><strong>{item.title}</strong><small>{detail(item)}</small></article>)}</div></section>;
+  return <section className="poster-section"><div className="section-heading"><div><p className="eyebrow">{eyebrow}</p><h2>{title}</h2></div></div><div className="poster-scroller">{items.map((item) => <article className="poster-entry" key={item.title}><div className={`poster wide ${item.art}`} aria-label={item.title}><span>{item.title}</span></div><strong>{item.title}</strong><small>{detail(item)}</small></article>)}</div></section>;
 }
 
 function Stats() {
   const [period, setPeriod] = useState<Period>("Woche");
   const [statistics, setStatistics] = useState<PersonalStats | null>(null);
-  const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-  useEffect(() => { setStatistics(null); fetch(`/api/stats?period=${apiPeriod[period]}`, { credentials: "include" }).then(async (response) => response.ok ? setStatistics(await response.json()) : null).catch(() => null); }, [period]);
-  return <div className="content page-view"><section className="period-tabs">{(["Woche", "Monat", "Jahr"] as Period[]).map((item) => <button className={period === item ? "selected" : ""} onClick={() => setPeriod(item)} key={item}>{item}</button>)}</section><section className="summary-banner"><p>DEINE {period.toUpperCase()}</p><h2>{statistics ? formatDuration(statistics.watchSeconds) : "—"}</h2><span>{statistics ? comparisonText(statistics) : "Statistik wird geladen …"}</span></section><section className="week-grid"><article className="metric-card"><strong>{statistics ? formatDuration(statistics.watchSeconds) : "—"}</strong><p>Sehzeit</p></article><article className="metric-card"><strong>{statistics ? statistics.completedMovies : "—"}</strong><p>Filme abgeschlossen</p></article><article className="metric-card"><strong>{statistics ? statistics.completedSeries : "—"}</strong><p>Serien abgeschlossen</p></article><article className="metric-card genre-card"><p>Lieblingsgenre</p><strong>{statistics?.favouriteGenre || "—"}</strong><small>{statistics ? "Nach Sehzeit" : "Wird geladen …"}</small></article></section></div>;
+  const [state, setState] = useState<LoadState>("loading");
+  useEffect(() => {
+    let active = true;
+    fetch(`/api/stats?period=${apiPeriod[period]}`, { credentials: "include" })
+      .then(async (response) => { if (!response.ok) throw new Error("statistics unavailable"); const data = await response.json(); if (active) { setStatistics(data); setState("ready"); } })
+      .catch(() => active && setState("error"));
+    return () => { active = false; };
+  }, [period]);
+  return <div className="content page-view">
+    <section className="period-tabs" aria-label="Zeitraum auswählen">{(["Woche", "Monat", "Jahr"] as Period[]).map((item) => <button className={period === item ? "selected" : ""} onClick={() => { setStatistics(null); setState("loading"); setPeriod(item); }} key={item} aria-pressed={period === item}>{item}</button>)}</section>
+    <section className="summary-banner" aria-live="polite"><p>DEINE {period.toUpperCase()}</p><h2>{statistics ? formatDuration(statistics.watchSeconds) : "—"}</h2><span>{state === "error" ? "Statistik ist gerade nicht verfügbar." : statistics ? comparisonText(statistics) : "Statistik wird geladen …"}</span></section>
+    <section className="week-grid" aria-label={`Kennzahlen für ${period}`}>
+      <MetricCard icon="clock" tone="blue" value={statistics ? formatDuration(statistics.watchSeconds) : "—"} label="Sehzeit" detail={statistics ? period : loadingCopy(state)} />
+      <MetricCard icon="movie" tone="peach" value={statistics ? statistics.completedMovies : "—"} label="Filme abgeschlossen" detail={statistics ? period : loadingCopy(state)} />
+      <MetricCard icon="series" tone="mint" value={statistics ? statistics.completedSeries : "—"} label="Serien abgeschlossen" detail={statistics ? period : loadingCopy(state)} />
+      <MetricCard icon="genre" tone="lilac" value={statistics?.favouriteGenre || "—"} label="Lieblingsgenre" detail={statistics ? "Nach Sehzeit" : loadingCopy(state)} genre />
+    </section>
+  </div>;
 }
 
-function formatDuration(seconds: number) { const hours = Math.floor(seconds / 3600); const minutes = Math.floor((seconds % 3600) / 60); return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`; }
-function comparisonText(statistics: PersonalStats) { if (statistics.previousWatchSeconds === 0) return "Keine Vergleichsdaten"; const change = Math.round(((statistics.watchSeconds - statistics.previousWatchSeconds) / statistics.previousWatchSeconds) * 100); return `${change >= 0 ? "↑" : "↓"} ${Math.abs(change)} % gegenüber vorher`; }
 function Requests() { return <div className="content page-view"><section className="section-heading"><div><p className="eyebrow">SEERR · OFFEN</p><h2>Meine Anfragen</h2></div></section><PosterRow title="" eyebrow="" items={requests} detail={(item) => item.status} /></div>; }
 function Profile({ user }: { user: { name: string } }) { return <div className="content page-view profile"><section className="profile-head"><div className="avatar big"><UserAvatar name={user.name} /></div><div><p className="eyebrow">EMBY-PROFIL</p><h2>{user.name}</h2></div></section><button className="logout-button">Abmelden</button></div>; }
+function greeting() { const hour = new Date().getHours(); return hour < 12 ? "Guten Morgen" : hour < 18 ? "Guten Tag" : "Guten Abend"; }
+function loadingCopy(state: LoadState) { return state === "error" ? "Nicht verfügbar" : "Wird geladen …"; }
+function formatDuration(seconds: number) { const hours = Math.floor(seconds / 3600); const minutes = Math.floor((seconds % 3600) / 60); return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`; }
+function comparisonText(statistics: PersonalStats) { if (statistics.previousWatchSeconds === 0) return "Keine Vergleichsdaten"; const change = Math.round(((statistics.watchSeconds - statistics.previousWatchSeconds) / statistics.previousWatchSeconds) * 100); return `${change >= 0 ? "Mehr" : "Weniger"} als im vorherigen Zeitraum: ${Math.abs(change)} %`; }
