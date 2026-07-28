@@ -1,0 +1,30 @@
+# Build the API as a static Linux binary.
+FROM golang:1.26-alpine AS backend-build
+
+WORKDIR /src/backend
+COPY backend/go.mod backend/go.sum ./
+RUN go mod download
+COPY backend/ ./
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o /out/emby-insights ./cmd/server
+
+# PostgreSQL is the persistent store. Redis and the API are supervised by the entrypoint.
+FROM postgres:17-alpine
+
+RUN apk add --no-cache redis
+
+COPY --from=backend-build /out/emby-insights /usr/local/bin/emby-insights
+COPY docker/all-in-one/entrypoint.sh /usr/local/bin/emby-insights-entrypoint
+COPY docker/all-in-one/initdb/001-initial-schema.sql /docker-entrypoint-initdb.d/001-initial-schema.sql
+
+RUN chmod 755 /usr/local/bin/emby-insights-entrypoint
+
+ENV PGDATA=/config/postgresql \
+    REDIS_DIR=/config/redis \
+    POSTGRES_DB=emby_insights \
+    POSTGRES_USER=emby_insights \
+    LISTEN_ADDRESS=:8080
+
+VOLUME ["/config"]
+EXPOSE 8080
+
+ENTRYPOINT ["/usr/local/bin/emby-insights-entrypoint"]
