@@ -12,6 +12,9 @@ type Config struct {
 	ListenAddress   string
 	DatabaseURL     string
 	RedisURL        string
+	EmbyBaseURL     string
+	EmbyDeviceID    string
+	CookieSecure    bool
 	ShutdownTimeout time.Duration
 }
 
@@ -26,10 +29,23 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	embyBaseURL, err := required("EMBY_BASE_URL")
+	if err != nil {
+		return Config{}, err
+	}
+
+	embyDeviceID, err := required("EMBY_DEVICE_ID")
+	if err != nil {
+		return Config{}, err
+	}
+
 	return Config{
 		ListenAddress:   valueOr("LISTEN_ADDRESS", ":8080"),
 		DatabaseURL:     databaseURL,
 		RedisURL:        redisURL,
+		EmbyBaseURL:     embyBaseURL,
+		EmbyDeviceID:    embyDeviceID,
+		CookieSecure:    valueOr("COOKIE_SECURE", "true") != "false",
 		ShutdownTimeout: 10 * time.Second,
 	}, nil
 }

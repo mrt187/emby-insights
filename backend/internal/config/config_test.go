@@ -15,6 +15,8 @@ func TestLoadUsesConfiguredValues(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:password@localhost:5432/emby_insights")
 	t.Setenv("REDIS_URL", "redis://localhost:6379/0")
 	t.Setenv("LISTEN_ADDRESS", "127.0.0.1:9090")
+	t.Setenv("EMBY_BASE_URL", "http://emby:8096/emby")
+	t.Setenv("EMBY_DEVICE_ID", "test-device")
 
 	cfg, err := Load()
 	if err != nil {
