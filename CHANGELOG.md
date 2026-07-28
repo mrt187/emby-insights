@@ -8,6 +8,14 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.3.2] - 2026-07-29
+
+### Added
+
+- Automatic Unraid release updater: tagged Gitea releases are built into
+  versioned, commit-specific, and `latest` container images, then deployed to
+  the Emby Insights stack.
+
 ## [0.3.1] - 2026-07-29
 
 ### Changed
@@ -51,6 +59,7 @@ The project follows [Semantic Versioning](https://semver.org/):
 - Container images are published with the matching release version, the commit
   SHA, and `latest`.
 
+[0.3.2]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.3.2
 [0.3.1]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.3.1
 [0.3.0]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.3.0
 [0.2.0]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.2.0

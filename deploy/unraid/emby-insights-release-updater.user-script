@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+exec /mnt/cache/appdata/emby-insights/build/deploy/unraid/update-from-gitea.sh
