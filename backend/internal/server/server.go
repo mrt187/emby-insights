@@ -3,17 +3,25 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/mrt187/EmbyInsights/internal/config"
+	"github.com/mrt187/EmbyInsights/internal/emby"
+	"github.com/mrt187/EmbyInsights/internal/session"
 	"github.com/redis/go-redis/v9"
 )
 
+const sessionCookieName = "emby_insights_session"
+
 type App struct {
-	database *pgxpool.Pool
-	redis    *redis.Client
+	database      *pgxpool.Pool
+	redis         *redis.Client
+	authenticator emby.Authenticator
+	sessions      session.Store
+	cookieSecure  bool
 }
 
 func New(cfg config.Config) (*App, error) {
@@ -21,28 +29,30 @@ func New(cfg config.Config) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	options, err := redis.ParseURL(cfg.RedisURL)
 	if err != nil {
 		database.Close()
 		return nil, err
 	}
-
+	cache := redis.NewClient(options)
 	return &App{
-		database: database,
-		redis:    redis.NewClient(options),
+		database:      database,
+		redis:         cache,
+		authenticator: emby.NewClient(cfg.EmbyBaseURL, cfg.EmbyDeviceID),
+		sessions:      session.NewRedisStore(cache),
+		cookieSecure:  cfg.CookieSecure,
 	}, nil
 }
 
-func (app *App) Close() {
-	app.redis.Close()
-	app.database.Close()
-}
+func (app *App) Close() { app.redis.Close(); app.database.Close() }
 
 func (app *App) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", health)
 	mux.HandleFunc("GET /readyz", app.ready)
+	mux.HandleFunc("POST /api/auth/emby/login", app.login)
+	mux.HandleFunc("POST /api/auth/logout", app.logout)
+	mux.HandleFunc("GET /api/me", app.me)
 	return mux
 }
 
@@ -53,18 +63,77 @@ func health(writer http.ResponseWriter, _ *http.Request) {
 func (app *App) ready(writer http.ResponseWriter, request *http.Request) {
 	context, cancel := context.WithTimeout(request.Context(), 2*time.Second)
 	defer cancel()
-
 	if err := app.database.Ping(context); err != nil {
 		respondJSON(writer, http.StatusServiceUnavailable, map[string]string{"status": "database unavailable"})
 		return
 	}
-
 	if err := app.redis.Ping(context).Err(); err != nil {
 		respondJSON(writer, http.StatusServiceUnavailable, map[string]string{"status": "cache unavailable"})
 		return
 	}
-
 	respondJSON(writer, http.StatusOK, map[string]string{"status": "ready"})
+}
+
+func (app *App) login(writer http.ResponseWriter, request *http.Request) {
+	var input struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	request.Body = http.MaxBytesReader(writer, request.Body, 1<<20)
+	if err := json.NewDecoder(request.Body).Decode(&input); err != nil || input.Username == "" || input.Password == "" {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "username and password are required"})
+		return
+	}
+	identity, err := app.authenticator.Authenticate(request.Context(), emby.Credentials{Username: input.Username, Password: input.Password})
+	if errors.Is(err, emby.ErrInvalidCredentials) {
+		respondJSON(writer, http.StatusUnauthorized, map[string]string{"error": "invalid credentials"})
+		return
+	}
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "Emby is unavailable"})
+		return
+	}
+	sessionID, err := app.sessions.Create(request.Context(), identity)
+	if err != nil {
+		respondJSON(writer, http.StatusServiceUnavailable, map[string]string{"error": "session storage is unavailable"})
+		return
+	}
+	http.SetCookie(writer, &http.Cookie{Name: sessionCookieName, Value: sessionID, Path: "/", MaxAge: int(session.Duration.Seconds()), HttpOnly: true, Secure: app.cookieSecure, SameSite: http.SameSiteLaxMode})
+	respondJSON(writer, http.StatusOK, profile(identity))
+}
+
+func (app *App) me(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	respondJSON(writer, http.StatusOK, profile(identity))
+}
+
+func (app *App) logout(writer http.ResponseWriter, request *http.Request) {
+	if cookie, err := request.Cookie(sessionCookieName); err == nil {
+		_ = app.sessions.Delete(request.Context(), cookie.Value)
+	}
+	http.SetCookie(writer, &http.Cookie{Name: sessionCookieName, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: app.cookieSecure, SameSite: http.SameSiteLaxMode})
+	writer.WriteHeader(http.StatusNoContent)
+}
+
+func (app *App) identityFromRequest(writer http.ResponseWriter, request *http.Request) (emby.Identity, bool) {
+	cookie, err := request.Cookie(sessionCookieName)
+	if err != nil {
+		respondJSON(writer, http.StatusUnauthorized, map[string]string{"error": "authentication required"})
+		return emby.Identity{}, false
+	}
+	identity, err := app.sessions.Get(request.Context(), cookie.Value)
+	if err != nil {
+		respondJSON(writer, http.StatusUnauthorized, map[string]string{"error": "authentication required"})
+		return emby.Identity{}, false
+	}
+	return identity, true
+}
+
+func profile(identity emby.Identity) map[string]string {
+	return map[string]string{"id": identity.UserID, "name": identity.DisplayName}
 }
 
 func respondJSON(writer http.ResponseWriter, status int, body any) {

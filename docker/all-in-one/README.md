@@ -17,4 +17,4 @@ The API listens on port `8080` and provides:
 - `GET /healthz` — process is running
 - `GET /readyz` — PostgreSQL and Redis are reachable
 
-External service credentials are intentionally not part of this first container foundation. They are added together with the Emby login and connector integration.
+Set `EMBY_BASE_URL` (including `/emby`) and a unique `EMBY_DEVICE_ID` as well. Emby passwords are never stored; after a successful login only the temporary Emby access token is retained in Redis for the dashboard session.
