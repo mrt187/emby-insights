@@ -8,4 +8,15 @@ Die Produktgrundlage und das MVP stehen in [docs/PRODUCT-BLUEPRINT.md](docs/PROD
 
 ## Status
 
-Planungsphase. Noch keine Implementierung.
+Current release: [v0.1.0](CHANGELOG.md#010---2026-07-29).
+
+The personal dashboard foundation is implemented: Emby login, protected
+sessions, personal watch-time statistics, and the all-in-one Unraid container.
+Home data rows and the remaining statistics metrics are in progress.
+
+## Releases
+
+Releases use [Semantic Versioning](https://semver.org/). Each Gitea release is
+identified by a Git tag in the form `vMAJOR.MINOR.PATCH`. Container images use
+the same version tag, the commit SHA, and `latest`; production deployments
+should use the explicit version tag.
