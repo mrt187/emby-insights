@@ -62,7 +62,7 @@ func (client *Client) Authenticate(ctx context.Context, credentials Credentials)
 		return Identity{}, err
 	}
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("X-Emby-Authorization", fmt.Sprintf("Emby Client=\"Emby Insights\", Device=\"Emby Insights\", DeviceId=\"%s\", Version=\"0.3.2\"", client.deviceID))
+	request.Header.Set("X-Emby-Authorization", fmt.Sprintf("Emby Client=\"Emby Insights\", Device=\"Emby Insights\", DeviceId=\"%s\", Version=\"0.3.3\"", client.deviceID))
 	response, err := client.httpClient.Do(request)
 	if err != nil {
 		return Identity{}, fmt.Errorf("call Emby login: %w", err)

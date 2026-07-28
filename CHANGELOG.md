@@ -8,6 +8,13 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.3.3] - 2026-07-29
+
+### Fixed
+
+- Made the Unraid User Script invoke the release updater through Bash so it
+  works reliably regardless of checkout file permissions.
+
 ## [0.3.2] - 2026-07-29
 
 ### Added
@@ -59,6 +66,7 @@ The project follows [Semantic Versioning](https://semver.org/):
 - Container images are published with the matching release version, the commit
   SHA, and `latest`.
 
+[0.3.3]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.3.3
 [0.3.2]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.3.2
 [0.3.1]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.3.1
 [0.3.0]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.3.0
