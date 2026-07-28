@@ -15,6 +15,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
+const APP_VERSION = "0.3.4";
 
 const upcoming = [
   { date: "01. Aug.", title: "The Last of Us", art: "last" }, { date: "04. Aug.", title: "Alien: Earth", art: "alien" },
@@ -73,7 +74,10 @@ export default function Home() {
     <aside className="side-nav" aria-label="Hauptnavigation">
       <div className="brand"><img className="brand-logo" src="/emby-insights-logo.svg" alt="Emby Insights" width="31" height="31" /><span>insights</span></div>
       <nav>{nav.map((item) => <button className={page === item.label ? "nav-item active" : "nav-item"} key={item.label} onClick={() => selectPage(item.label)} aria-current={page === item.label ? "page" : undefined}><Icon name={item.icon} />{item.label}</button>)}</nav>
-      <div className="server-status"><i aria-hidden="true" /> Verbunden mit Emby</div>
+      <div className="sidebar-meta">
+        <div className="server-status"><i aria-hidden="true" /> Verbunden mit Emby</div>
+        <p className="app-version">Version <strong>v{APP_VERSION}</strong></p>
+      </div>
     </aside>
 
     <section className="screen" id="dashboard-content" tabIndex={-1}>

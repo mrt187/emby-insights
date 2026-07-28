@@ -50,6 +50,15 @@ docker push "$IMAGE:$release_version"
 docker push "$IMAGE:$release_short_commit"
 docker push "$IMAGE:latest"
 
+docker pull "$IMAGE:latest"
+
+# The first deployment may have been started outside of Compose. Remove only
+# this explicitly named, replaceable application container so Compose can take
+# ownership and recreate it with the freshly published `latest` image.
+if docker container inspect emby-insights >/dev/null 2>&1; then
+  docker rm --force emby-insights
+fi
+
 docker compose --file "$COMPOSE_FILE" up --detach --pull always --no-deps emby-insights
 
 printf '%s %s\n' "$release_tag" "$release_commit" > "$STATE_FILE"

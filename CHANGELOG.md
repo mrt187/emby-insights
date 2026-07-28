@@ -8,6 +8,15 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.3.4] - 2026-07-29
+
+### Changed
+
+- Added the current application version to the lower-left dashboard sidebar.
+- Made the Unraid updater explicitly refresh and run the registry's `latest`
+  image, including a safe one-time handover from the previously standalone
+  application container.
+
 ## [0.3.3] - 2026-07-29
 
 ### Fixed
@@ -67,6 +76,7 @@ The project follows [Semantic Versioning](https://semver.org/):
   SHA, and `latest`.
 
 [0.3.3]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.3.3
+[0.3.4]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.3.4
 [0.3.2]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.3.2
 [0.3.1]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.3.1
 [0.3.0]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.3.0

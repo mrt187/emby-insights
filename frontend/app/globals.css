@@ -136,7 +136,10 @@ body { background: var(--ink); color: var(--text-primary); }
 .nav-item:hover { color: #e6f3ed; background: rgb(255 255 255 / 5%); }
 .nav-item.active { color: #f5fffa; background: linear-gradient(110deg, rgb(68 161 111 / 27%), rgb(43 91 73 / 12%)); border-color: rgb(146 240 183 / 16%); box-shadow: inset 0 1px 0 rgb(255 255 255 / 7%); }
 .nav-item.active::before { background: var(--mint-bright); box-shadow: 0 0 15px rgb(140 224 173 / 82%); }
-.server-status { margin: auto 4px 0; padding: 14px 12px; border: 1px solid var(--line); border-radius: 12px; background: rgb(255 255 255 / 3%); color: #9ba9a5; }
+.sidebar-meta { margin: auto 4px 0; }
+.server-status { margin: 0; padding: 14px 12px; border: 1px solid var(--line); border-radius: 12px; background: rgb(255 255 255 / 3%); color: #9ba9a5; }
+.app-version { margin: 12px 12px 0; color: #71817b; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.app-version strong { color: #a8c7b5; font-weight: 800; }
 .screen { max-width: 1450px; margin-left: 264px; padding: 34px clamp(24px, 5vw, 76px) 70px; }
 .topbar { padding: 0 0 36px; }
 .topbar h1 { font-size: clamp(29px, 3vw, 42px); letter-spacing: -1.65px; }
