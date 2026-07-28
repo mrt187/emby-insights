@@ -11,6 +11,9 @@ import (
 type PersonalWatchTime struct {
 	WatchSeconds         int64  `json:"watchSeconds"`
 	PreviousWatchSeconds int64  `json:"previousWatchSeconds"`
+	CompletedMovies      int    `json:"completedMovies"`
+	CompletedSeries      int    `json:"completedSeries"`
+	FavouriteGenre       string `json:"favouriteGenre"`
 	PeriodStartsAt       string `json:"periodStartsAt"`
 	PeriodEndsAt         string `json:"periodEndsAt"`
 }

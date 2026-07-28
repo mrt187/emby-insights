@@ -55,7 +55,7 @@ func TestPersonalWatchTimeUsesAdminAPIKey(t *testing.T) {
 			t.Fatalf("query = %s", request.URL.RawQuery)
 		}
 		writer.Header().Set("Content-Type", "application/json")
-		_, _ = writer.Write([]byte(`{"WatchSeconds":3600,"PreviousWatchSeconds":1800,"PeriodStartsAt":"2026-07-27T00:00:00Z","PeriodEndsAt":"2026-07-28T12:00:00Z"}`))
+		_, _ = writer.Write([]byte(`{"WatchSeconds":3600,"PreviousWatchSeconds":1800,"CompletedMovies":2,"CompletedSeries":1,"FavouriteGenre":"Drama","PeriodStartsAt":"2026-07-27T00:00:00Z","PeriodEndsAt":"2026-07-28T12:00:00Z"}`))
 	}))
 	defer testServer.Close()
 
@@ -64,6 +64,9 @@ func TestPersonalWatchTimeUsesAdminAPIKey(t *testing.T) {
 		t.Fatalf("PersonalWatchTime() error = %v", err)
 	}
 	if statistics.WatchSeconds != 3600 || statistics.PreviousWatchSeconds != 1800 {
+		t.Fatalf("statistics = %#v", statistics)
+	}
+	if statistics.CompletedMovies != 2 || statistics.CompletedSeries != 1 || statistics.FavouriteGenre != "Drama" {
 		t.Fatalf("statistics = %#v", statistics)
 	}
 }
