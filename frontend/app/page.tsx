@@ -68,20 +68,21 @@ export default function Home() {
   const selectPage = (next: Page) => { setPage(next); setNoticeOpen(false); };
   const openNotices = () => { setNoticeOpen((open) => !open); setUnread(0); };
 
-  return <main className="app-shell">
+  return <main className="app-shell" id="main-content">
+    <a className="skip-link" href="#dashboard-content">Zum Inhalt springen</a>
     <aside className="side-nav" aria-label="Hauptnavigation">
-      <div className="brand"><img className="brand-logo" src="/emby-insights-logo.svg" alt="Emby Insights" /><span>insights</span></div>
+      <div className="brand"><img className="brand-logo" src="/emby-insights-logo.svg" alt="Emby Insights" width="31" height="31" /><span>insights</span></div>
       <nav>{nav.map((item) => <button className={page === item.label ? "nav-item active" : "nav-item"} key={item.label} onClick={() => selectPage(item.label)} aria-current={page === item.label ? "page" : undefined}><Icon name={item.icon} />{item.label}</button>)}</nav>
-      <div className="server-status"><i /> Verbunden mit Emby</div>
+      <div className="server-status"><i aria-hidden="true" /> Verbunden mit Emby</div>
     </aside>
 
-    <section className="screen">
+    <section className="screen" id="dashboard-content" tabIndex={-1}>
       <header className="topbar">
         <div><p className="eyebrow">DEIN PERSÖNLICHER ÜBERBLICK</p><h1>{page === "Heute" ? `${greeting()}, ${user.name}` : page}</h1></div>
         <div className="header-actions">
           <button className="notice-button" aria-label="Benachrichtigungen" aria-expanded={noticeOpen} aria-controls="notifications" onClick={openNotices}><Icon name="bell" />{unread > 0 && <b><span className="sr-only">{unread} ungelesene Benachrichtigungen</span></b>}</button>
           <button className="avatar" aria-label="Profil öffnen" onClick={() => selectPage("Profil")}><UserAvatar name={user.name} /></button>
-          {noticeOpen && <div className="notifications" id="notifications" role="status"><strong>Benachrichtigungen</strong><p>Deine Anfrage „Severance“ wird bearbeitet.</p><p>Am Freitag erscheint Alien: Earth.</p></div>}
+          {noticeOpen && <section className="notifications" id="notifications" role="dialog" aria-label="Benachrichtigungen"><strong>Benachrichtigungen</strong><p>Deine Anfrage „Severance“ wird bearbeitet.</p><p>Am Freitag erscheint Alien: Earth.</p></section>}
         </div>
       </header>
       {page === "Heute" && <Today onStats={() => selectPage("Statistik")} statistics={weekStats} state={weekState} />}
@@ -112,7 +113,7 @@ function Icon({ name }: { name: IconName }) {
 
 function UserAvatar({ name }: { name: string }) {
   const initial = name.trim().charAt(0).toUpperCase() || "?";
-  return <span className="user-avatar"><span className="avatar-initial">{initial}</span><img src="/api/me/avatar" alt="" onError={(event) => event.currentTarget.remove()} /></span>;
+  return <span className="user-avatar"><span className="avatar-initial">{initial}</span><img src="/api/me/avatar" alt="" width="44" height="44" onError={(event) => event.currentTarget.remove()} /></span>;
 }
 
 function Today({ onStats, statistics, state }: { onStats: () => void; statistics: PersonalStats | null; state: LoadState }) {
@@ -135,8 +136,8 @@ function MetricCard({ icon, tone, value, label, detail, positive, genre = false 
   return <article className={genre ? "metric-card genre-card" : "metric-card"}><span className={`metric-icon ${tone}`}><Icon name={icon} /></span><strong>{value}</strong><p>{label}</p><small className={positive ? "up" : undefined}>{detail}</small></article>;
 }
 
-function PosterRow({ title, eyebrow, items, detail }: { title: string; eyebrow: string; items: readonly { title: string; art: string }[]; detail: (item: { title: string; art: string }) => string }) {
-  return <section className="poster-section"><div className="section-heading"><div><p className="eyebrow">{eyebrow}</p><h2>{title}</h2></div></div><div className="poster-scroller">{items.map((item) => <article className="poster-entry" key={item.title}><div className={`poster wide ${item.art}`} aria-label={item.title}><span>{item.title}</span></div><strong>{item.title}</strong><small>{detail(item)}</small></article>)}</div></section>;
+function PosterRow({ title, eyebrow, items, detail }: { title?: string; eyebrow?: string; items: readonly { title: string; art: string }[]; detail: (item: { title: string; art: string }) => string }) {
+  return <section className="poster-section">{(title || eyebrow) && <div className="section-heading"><div>{eyebrow && <p className="eyebrow">{eyebrow}</p>}{title && <h2>{title}</h2>}</div></div>}<div className="poster-scroller">{items.map((item) => <article className="poster-entry" key={item.title}><div className={`poster wide ${item.art}`} role="img" aria-label={item.title}><span>{item.title}</span></div><strong>{item.title}</strong><small>{detail(item)}</small></article>)}</div></section>;
 }
 
 function Stats() {
@@ -166,5 +167,5 @@ function Requests() { return <div className="content page-view"><section classNa
 function Profile({ user }: { user: { name: string } }) { return <div className="content page-view profile"><section className="profile-head"><div className="avatar big"><UserAvatar name={user.name} /></div><div><p className="eyebrow">EMBY-PROFIL</p><h2>{user.name}</h2></div></section><button className="logout-button">Abmelden</button></div>; }
 function greeting() { const hour = new Date().getHours(); return hour < 12 ? "Guten Morgen" : hour < 18 ? "Guten Tag" : "Guten Abend"; }
 function loadingCopy(state: LoadState) { return state === "error" ? "Nicht verfügbar" : "Wird geladen …"; }
-function formatDuration(seconds: number) { const hours = Math.floor(seconds / 3600); const minutes = Math.floor((seconds % 3600) / 60); return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`; }
-function comparisonText(statistics: PersonalStats) { if (statistics.previousWatchSeconds === 0) return "Keine Vergleichsdaten"; const change = Math.round(((statistics.watchSeconds - statistics.previousWatchSeconds) / statistics.previousWatchSeconds) * 100); return `${change >= 0 ? "Mehr" : "Weniger"} als im vorherigen Zeitraum: ${Math.abs(change)} %`; }
+function formatDuration(seconds: number) { const hours = Math.floor(seconds / 3600); const minutes = Math.floor((seconds % 3600) / 60); return hours > 0 ? `${hours}\u00a0Std. ${minutes}\u00a0Min.` : `${minutes}\u00a0Min.`; }
+function comparisonText(statistics: PersonalStats) { if (statistics.previousWatchSeconds === 0) return "Keine Vergleichsdaten"; const change = Math.round(((statistics.watchSeconds - statistics.previousWatchSeconds) / statistics.previousWatchSeconds) * 100); return `${change >= 0 ? "Mehr" : "Weniger"} als im vorherigen Zeitraum: ${new Intl.NumberFormat("de-DE").format(Math.abs(change))}\u00a0%`; }

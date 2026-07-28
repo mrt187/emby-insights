@@ -41,8 +41,8 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated: (user: User)
         <h1 id="login-title">Willkommen zurück.</h1>
         <p className="login-copy">Melde dich mit deinem normalen Emby-Konto an.</p>
         <form onSubmit={submit}>
-          <label>Benutzername<input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" required /></label>
-          <label>Passwort<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required /></label>
+          <label>Benutzername<input name="username" value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" spellCheck={false} required /></label>
+          <label>Passwort<input name="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required /></label>
           {error && <p className="login-error" role="alert">{error}</p>}
           <button className="login-button" disabled={submitting}>{submitting ? "Anmeldung läuft …" : "Mit Emby anmelden"}</button>
         </form>
