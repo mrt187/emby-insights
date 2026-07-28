@@ -1,0 +1,19 @@
+# Local SDK and build output
+tools/dotnet/
+**/bin/
+**/obj/
+
+# JavaScript dependencies and build output
+**/node_modules/
+**/.next/
+
+# Local configuration and generated data
+.env
+.env.*
+!.env.example
+*.db
+*.db-shm
+*.db-wal
+
+# OS files
+.DS_Store
