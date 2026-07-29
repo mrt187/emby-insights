@@ -174,6 +174,18 @@ func (reader *fakeRequestsReader) Requests(_ context.Context, embyUserID string)
 	return reader.items, nil
 }
 
+type fakeAvailableRequestsReader struct {
+	items      []seerr.Request
+	embyUserID string
+	since      time.Time
+}
+
+func (reader *fakeAvailableRequestsReader) AvailableRequests(_ context.Context, embyUserID string, since time.Time) ([]seerr.Request, error) {
+	reader.embyUserID = embyUserID
+	reader.since = since
+	return reader.items, nil
+}
+
 type fakeDiscoverReader struct {
 	trending      []seerr.DiscoverItem
 	popularMovies []seerr.DiscoverItem
@@ -590,6 +602,38 @@ func TestMyRequestsUsesSessionIdentity(t *testing.T) {
 	}
 	if !strings.Contains(recorder.Body.String(), "Severance") {
 		t.Fatalf("body = %s", recorder.Body.String())
+	}
+}
+
+func TestAvailableRequestsUsesSessionIdentityAndWindow(t *testing.T) {
+	store := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	reader := &fakeAvailableRequestsReader{items: []seerr.Request{{ID: "1", Title: "Alien: Romulus", Status: "Jetzt verfügbar"}}}
+	app := &App{sessions: store, availableRequests: reader}
+
+	request := httptest.NewRequest(http.MethodGet, "/api/requests/available", nil)
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "Alien: Romulus") {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	if reader.embyUserID != "user-1" {
+		t.Fatalf("embyUserID = %q", reader.embyUserID)
+	}
+	if elapsed := time.Since(reader.since); elapsed < availableRequestWindow || elapsed > availableRequestWindow+time.Minute {
+		t.Fatalf("since = %v, want roughly %v ago", reader.since, availableRequestWindow)
+	}
+}
+
+func TestAvailableRequestsRequiresSession(t *testing.T) {
+	app := &App{sessions: &memorySessionStore{}, availableRequests: &fakeAvailableRequestsReader{}}
+	request := httptest.NewRequest(http.MethodGet, "/api/requests/available", nil)
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
 }
 

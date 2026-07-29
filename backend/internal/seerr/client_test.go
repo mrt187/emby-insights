@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestNewClientReturnsNilWhenUnconfigured(t *testing.T) {
@@ -71,6 +72,53 @@ func TestRequestsReturnsNilWhenSeerrUserUnknown(t *testing.T) {
 	requests, err := NewClient(testServer.URL, "api-key").Requests(context.Background(), "unlinked-user")
 	if err != nil || requests != nil {
 		t.Fatalf("Requests() = %#v, %v, want nil, nil", requests, err)
+	}
+}
+
+func TestAvailableRequestsFiltersByStatusAndWindow(t *testing.T) {
+	recent := time.Now().Add(-2 * 24 * time.Hour).UTC().Format(time.RFC3339)
+	old := time.Now().Add(-30 * 24 * time.Hour).UTC().Format(time.RFC3339)
+
+	testServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch request.URL.Path {
+		case "/api/v1/user/jellyfin/emby-user-1":
+			_, _ = writer.Write([]byte(`{"id":27}`))
+		case "/api/v1/user/27/requests":
+			_, _ = writer.Write([]byte(`{"results":[
+				{"id":1,"status":2,"media":{"mediaType":"movie","tmdbId":100,"status":5,"mediaAddedAt":"` + recent + `"}},
+				{"id":2,"status":2,"media":{"mediaType":"movie","tmdbId":200,"status":5,"mediaAddedAt":"` + old + `"}},
+				{"id":3,"status":1,"media":{"mediaType":"movie","tmdbId":300,"status":3,"mediaAddedAt":"` + recent + `"}},
+				{"id":4,"status":2,"media":{"mediaType":"movie","tmdbId":400,"status":5}}
+			]}`))
+		case "/api/v1/movie/100":
+			_, _ = writer.Write([]byte(`{"title":"Alien: Romulus","posterPath":"/alien.jpg"}`))
+		default:
+			t.Fatalf("unexpected path %q", request.URL.Path)
+		}
+	}))
+	defer testServer.Close()
+
+	since := time.Now().Add(-7 * 24 * time.Hour)
+	requests, err := NewClient(testServer.URL, "api-key").AvailableRequests(context.Background(), "emby-user-1", since)
+	if err != nil {
+		t.Fatalf("AvailableRequests() error = %v", err)
+	}
+	// Only entry 1 qualifies: 2 is outside the window, 3 is not available
+	// yet, and 4 carries no mediaAddedAt at all.
+	if len(requests) != 1 || requests[0].Title != "Alien: Romulus" {
+		t.Fatalf("requests = %#v", requests)
+	}
+	if requests[0].Status != "Jetzt verfügbar" || requests[0].AvailableSince != recent {
+		t.Fatalf("requests[0] = %#v", requests[0])
+	}
+}
+
+func TestAvailableRequestsReturnsNilWhenClientIsNil(t *testing.T) {
+	var client *Client
+	requests, err := client.AvailableRequests(context.Background(), "emby-user-1", time.Now())
+	if err != nil || requests != nil {
+		t.Fatalf("AvailableRequests() = %#v, %v, want nil, nil", requests, err)
 	}
 }
 

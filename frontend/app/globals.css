@@ -207,7 +207,6 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .section-heading { display: flex; justify-content: space-between; align-items: end; gap: 16px; }
 .section-heading > div { min-width: 0; }
 .section-heading h2 { margin: 0; font-size: 25px; font-weight: 800; letter-spacing: -1px; }
-.rhythm-heading { padding-top: 6px; }
 
 .text-button {
   min-height: 44px; display: inline-flex; align-items: center; gap: 8px;
@@ -218,50 +217,51 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .text-button .icon { width: 16px; height: 16px; }
 .poster-view-all { padding-inline: 8px; }
 
-/* ----------------------------------------------------- personal overview */
+/* ------------------------------------------------------- „Jetzt relevant"
 
-.user-insight-card {
-  padding: 18px;
-  border: 1px solid rgb(255 255 255 / 7%); border-radius: 22px; background: #24262d;
-  box-shadow: 0 24px 52px rgb(0 0 0 / 22%), inset 0 1px 0 rgb(255 255 255 / 5%);
+   A compact personal inbox: at most three actionable events as rows in one
+   restrained card. Deliberately no poster surface — the "Demnächst" poster
+   row below is meant to carry the visual weight of the page.               */
+
+.relevant-card {
+  padding: 4px 6px 6px;
+  border: 1px solid var(--line); border-radius: 16px;
+  background: rgb(255 255 255 / 2.5%);
 }
-/* ---------------------------------------------------- weekly value slider
+.relevant-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 12px 4px; }
+.relevant-head .eyebrow { margin: 0; }
+.relevant-empty { padding: 6px 12px 14px; color: var(--muted); font-size: 13px; }
 
-   One panel that rotates through three different tiles: profile/member
-   info, the next upcoming release (with its poster), and open requests +
-   new-for-you side by side. Swiping is native scroll snapping — no gesture
-   handling in JS.                                                          */
+.relevant-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.relevant-list > li + li { border-top: 1px solid var(--line); }
 
-.home-highlights { display: grid; gap: 14px; }
-
-.highlight-hero {
-  position: relative; overflow: hidden; min-height: 168px; border-radius: 16px;
-  display: flex; align-items: flex-end;
-  background-color: #24312c; background-size: cover; background-position: center 22%;
+.relevant-row {
+  width: 100%; min-height: 72px; padding: 12px; border: 0; border-radius: 12px;
+  display: flex; align-items: center; gap: 14px; text-align: left;
+  background: transparent; color: inherit; font: inherit; cursor: pointer;
+  transition: background-color 180ms ease;
 }
-.highlight-hero::before {
-  content: ""; position: absolute; inset: 0;
-  background: linear-gradient(to top, rgb(10 14 18 / 92%) 12%, rgb(10 14 18 / 55%) 55%, rgb(10 14 18 / 10%) 100%);
+.relevant-row:hover { background: rgb(255 255 255 / 4%); }
+.relevant-row:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: -3px; }
+
+.relevant-icon {
+  flex: 0 0 38px; width: 38px; height: 38px; display: grid; place-items: center; border-radius: 11px;
+  color: var(--tone, var(--mint-bright));
+  background: color-mix(in srgb, var(--tone, var(--mint-bright)) 14%, transparent);
 }
-.highlight-hero-overlay { position: relative; z-index: 1; width: 100%; padding: 20px 22px; display: grid; gap: 5px; }
-.highlight-hero-overlay .eyebrow { margin: 0; color: rgb(255 255 255 / 75%); }
-.highlight-hero-overlay strong {
+.relevant-icon .icon { width: 18px; height: 18px; }
+
+.relevant-text { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.relevant-text strong { color: #f1f6f3; font-size: 14px; font-weight: 700; letter-spacing: -.2px; }
+.relevant-text small {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  color: #fff; font-size: clamp(20px, 2.2vw, 28px); font-weight: 800; letter-spacing: -.75px; line-height: 1.2;
+  color: var(--text-secondary); font-size: 12.5px; line-height: 1.35;
 }
-.highlight-hero-overlay small { color: #b7e9cd; font-size: 11px; font-weight: 700; }
+/* Numbers stay quiet — only the figure itself picks up the accent. */
+.relevant-text small b { color: var(--mint-bright); font-weight: 800; }
 
-.highlight-hero-empty {
-  display: grid; align-content: center; justify-items: center; text-align: center; padding: 20px 22px;
-  background: linear-gradient(145deg, #30333d, #292c34);
-}
-.highlight-hero-empty .eyebrow { margin: 0; }
-.highlight-hero-empty strong {
-  margin: 7px 0; color: #f7fbf8; font-size: clamp(28px, 3vw, 40px); font-weight: 800; letter-spacing: -2px; line-height: 1;
-}
-.highlight-hero-empty small { color: #74dca1; font-size: 11px; font-weight: 700; }
-
-.highlight-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.relevant-chevron { flex: 0 0 auto; display: grid; place-items: center; color: var(--muted); }
+.relevant-chevron .icon { width: 16px; height: 16px; }
 
 /* ------------------------------------------------------------ tone icons */
 
@@ -609,9 +609,6 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   .chart-grid { grid-template-columns: 1fr; }
 }
 
-/* The three-column insight card needs 808px of content width. */
-/* Identity + watch time share a row; the three stats get the full width so that
-   long genre names stay readable. */
 @media (max-width: 1050px) {
   .side-nav { width: 230px; }
   .screen { margin-left: 230px; }
@@ -621,9 +618,6 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   .side-nav { display: none; }
   .screen { margin-left: 0; padding: 22px 18px 108px; }
   .topbar { padding-bottom: 27px; }
-
-  .user-insight-card { padding: 13px; border-radius: 19px; }
-  .highlight-hero, .highlight-hero-empty { min-height: 132px; }
 
   .bottom-nav {
     position: fixed; z-index: var(--z-navigation); bottom: 0; left: 0; right: 0;
@@ -655,9 +649,9 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   .poster-entry { flex-basis: 143px; }
   .poster.wide { height: 206px; border-radius: 16px; }
 
-  .highlight-hero, .highlight-hero-empty { min-height: 124px; }
-  .highlight-hero-overlay, .highlight-hero-empty { padding: 15px 18px; }
-  .highlight-stats { gap: 10px; }
+  .relevant-head { padding: 10px 10px 2px; }
+  .relevant-row { gap: 12px; padding: 12px 10px; }
+  .relevant-icon { flex-basis: 34px; width: 34px; height: 34px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

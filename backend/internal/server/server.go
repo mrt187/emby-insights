@@ -36,6 +36,7 @@ type App struct {
 	completed            emby.CompletedReader
 	profile              emby.ProfileReader
 	requests             seerr.RequestsReader
+	availableRequests    seerr.AvailableRequestsReader
 	requestStats         seerr.RequestStatsReader
 	discover             seerr.DiscoverReader
 	embyMediaDetail      emby.MediaDetailReader
@@ -76,6 +77,7 @@ func New(cfg config.Config) (*App, error) {
 		completed:            embyClient,
 		profile:              embyClient,
 		requests:             seerrClient,
+		availableRequests:    seerrClient,
 		requestStats:         seerrClient,
 		discover:             seerrClient,
 		embyMediaDetail:      embyClient,
@@ -105,6 +107,7 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/stats/most-active-day", app.mostActiveDayStats)
 	mux.HandleFunc("GET /api/upcoming", app.upcomingItems)
 	mux.HandleFunc("GET /api/requests", app.myRequests)
+	mux.HandleFunc("GET /api/requests/available", app.availableRequestItems)
 	mux.HandleFunc("GET /api/requests/total", app.requestsTotal)
 	mux.HandleFunc("GET /api/new-for-you", app.newForYouItems)
 	mux.HandleFunc("GET /api/continue-watching", app.continueWatchingItems)
@@ -343,6 +346,23 @@ func (app *App) myRequests(writer http.ResponseWriter, request *http.Request) {
 	items, err := app.requests.Requests(request.Context(), identity.UserID)
 	if err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "requests are unavailable"})
+		return
+	}
+	respondJSON(writer, http.StatusOK, orEmpty(items))
+}
+
+// availableRequestWindow bounds how long a title stays newsworthy on the
+// "Jetzt relevant" tile after Seerr recorded it as added to the library.
+const availableRequestWindow = 7 * 24 * time.Hour
+
+func (app *App) availableRequestItems(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	items, err := app.availableRequests.AvailableRequests(request.Context(), identity.UserID, time.Now().Add(-availableRequestWindow))
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "available requests are unavailable"})
 		return
 	}
 	respondJSON(writer, http.StatusOK, orEmpty(items))

@@ -8,6 +8,27 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.21] - 2026-07-29
+
+### Changed
+
+- Replaced the first Home tile entirely: the "Dein Rhythmus" hero card is now
+  a compact personal inbox titled "Jetzt relevant". Instead of counters it
+  shows at most three concrete, tappable events — a request that just became
+  available, a release due within 48 hours, or the number of unseen titles —
+  each as a row with an icon, a status line and the concrete detail. With
+  more than three events an "Alle ansehen" link opens a full-screen list;
+  with none it shows a single quiet line instead of an empty state.
+  The card carries no poster surface any more, so the "Demnächst" poster row
+  below is once again the visual focus of the page.
+
+### Added
+
+- `GET /api/requests/available` reports requests whose title became available
+  in the library within the last seven days. `/api/requests` deliberately
+  filters exactly these out for its "open requests" row, so the new tile
+  needed its own source.
+
 ## [0.8.20] - 2026-07-29
 
 ### Changed

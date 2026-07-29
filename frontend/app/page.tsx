@@ -43,7 +43,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.20";
+const APP_VERSION = "0.8.21";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -68,6 +68,7 @@ export default function Home() {
   const [requestState, setRequestState] = useState<LoadState>("loading");
   const [newForYouItems, setNewForYouItems] = useState<NewForYouItem[]>([]);
   const [newForYouState, setNewForYouState] = useState<LoadState>("loading");
+  const [availableRequests, setAvailableRequests] = useState<RequestItem[]>([]);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [totalRequests, setTotalRequests] = useState<number | null>(null);
   const [selectedMedia, setSelectedMedia] = useState<MediaSelection | null>(null);
@@ -143,6 +144,15 @@ export default function Home() {
   useEffect(() => {
     if (!user) return;
     let active = true;
+    fetch("/api/requests/available", { credentials: "include" })
+      .then(async (response) => { if (!response.ok) throw new Error("available requests unavailable"); const data = await response.json(); if (active) setAvailableRequests(data); })
+      .catch(() => null);
+    return () => { active = false; };
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
     fetch("/api/new-for-you", { credentials: "include" })
       .then(async (response) => {
         if (!response.ok) throw new Error("new-for-you unavailable");
@@ -193,7 +203,7 @@ export default function Home() {
           {noticeOpen && <div ref={noticeRef} className="notifications" id="notifications" role="dialog" aria-label="Benachrichtigungen"><strong>Benachrichtigungen</strong><p>Deine Anfrage „Severance“ wird bearbeitet.</p><p>Am Freitag erscheint Alien: Earth.</p></div>}
         </div>
       </header>
-      {page === "Heute" && <Today user={user} onStats={() => selectPage("Statistik")} upcoming={upcomingItems} upcomingState={upcomingState} requests={requestItems} requestState={requestState} newForYou={newForYouItems} newForYouState={newForYouState} onSelectMedia={setSelectedMedia} />}
+      {page === "Heute" && <Today upcoming={upcomingItems} upcomingState={upcomingState} requests={requestItems} requestState={requestState} newForYou={newForYouItems} newForYouState={newForYouState} availableRequests={availableRequests} onSelectMedia={setSelectedMedia} />}
       {page === "Statistik" && <Stats onSelectMedia={setSelectedMedia} />}
       {page === "Anfragen" && <Requests onSelectMedia={setSelectedMedia} />}
       {page === "Profil" && <Profile user={user} userProfile={userProfile} totalRequests={totalRequests} />}
@@ -225,55 +235,129 @@ function UserAvatar({ name }: { name: string }) {
   return <span className="user-avatar"><span className="avatar-initial">{initial}</span><img src="/api/me/avatar" alt="" width="44" height="44" onError={(event) => event.currentTarget.remove()} /></span>;
 }
 
-function Today({ user, onStats, upcoming, upcomingState, requests, requestState, newForYou, newForYouState, onSelectMedia }: {
-  user: { name: string }; onStats: () => void;
+function Today({ upcoming, upcomingState, requests, requestState, newForYou, newForYouState, availableRequests, onSelectMedia }: {
   upcoming: UpcomingItem[]; upcomingState: LoadState; requests: RequestItem[]; requestState: LoadState;
-  newForYou: NewForYouItem[]; newForYouState: LoadState;
+  newForYou: NewForYouItem[]; newForYouState: LoadState; availableRequests: RequestItem[];
   onSelectMedia: (selection: MediaSelection) => void;
 }) {
+  const [allEventsOpen, setAllEventsOpen] = useState(false);
+  const [newForYouGridOpen, setNewForYouGridOpen] = useState(false);
+
+  const events = relevantEvents({
+    availableRequests,
+    upcoming: upcomingState === "ready" ? upcoming : [],
+    newForYou: newForYouState === "ready" ? newForYou : [],
+    onSelectMedia,
+    onShowNewForYou: () => setNewForYouGridOpen(true),
+  });
+
   return <div className="content today-view">
-    <section className="section-heading rhythm-heading"><div><p className="eyebrow">DEIN PROFIL</p><h2>Dein Rhythmus</h2></div><button className="text-button" onClick={onStats}>Alle Details <Icon name="arrow" /></button></section>
-    <UserInsightCard user={user} upcoming={upcoming} upcomingState={upcomingState} requests={requests} requestState={requestState} newForYou={newForYou} newForYouState={newForYouState} />
+    <RelevantNow events={events} onShowAll={() => setAllEventsOpen(true)} />
     <PosterRow title="Demnächst" eyebrow="COMING SOON · NÄCHSTE 4 WOCHEN" items={upcoming} state={upcomingState} emptyLabel="Nichts Neues in den nächsten vier Wochen." detail={(item) => formatPremiereDate(item.premiereDate)} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
     <PosterRow title="Meine Anfragen" eyebrow="SEERR · OFFEN" items={requests} state={requestState} emptyLabel="Keine offenen Anfragen." detail={(item) => item.status} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />
     <PosterRow title="Neu für dich" eyebrow="IN DEN LETZTEN 14 TAGEN" items={newForYou} state={newForYouState} emptyLabel="Nichts Neues in den letzten 14 Tagen." detail={() => "Ungesehen"} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
+
+    {allEventsOpen && <RelevantAllScreen events={events} onClose={() => setAllEventsOpen(false)} />}
+    {newForYouGridOpen && <MediaGridScreen title="Neu für dich" items={newForYou} detail={() => "Ungesehen"} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setNewForYouGridOpen(false)} />}
   </div>;
 }
 
-function UserInsightCard({ user, upcoming, upcomingState, requests, requestState, newForYou, newForYouState }: {
-  user: { name: string };
-  upcoming: UpcomingItem[]; upcomingState: LoadState; requests: RequestItem[]; requestState: LoadState;
-  newForYou: NewForYouItem[]; newForYouState: LoadState;
-}) {
-  return <section className="user-insight-card" aria-label={`Kurzüberblick von ${user.name}`}>
-    <HomeHighlights upcoming={upcoming} upcomingState={upcomingState} requests={requests} requestState={requestState} newForYou={newForYou} newForYouState={newForYouState} />
+type RelevantEvent = { key: string; tone: Tone; icon: IconName; status: string; detail: ReactNode; onOpen: () => void };
+
+const RELEASE_WINDOW_HOURS = 48;
+// ComingSoon stores episodes as "Silo - S03E05 - Memory" and films as their
+// plain title, both as Type "Movie" — so the distinction has to come from
+// the name. Anything that does not match is treated as a film title.
+const EPISODE_TITLE = /^(.*?) - S(\d+)E(\d+)(?: - .*)?$/i;
+
+function formatReleaseTitle(title: string) {
+  const match = EPISODE_TITLE.exec(title);
+  return match ? `${match[1]} · Staffel ${Number(match[2])}, Folge ${Number(match[3])}` : title;
+}
+
+function releaseWording(premiereDate: string) {
+  const date = new Date(premiereDate);
+  if (Number.isNaN(date.getTime())) return "Erscheint bald";
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const days = Math.round((new Date(date).setHours(0, 0, 0, 0) - startOfToday.getTime()) / 86_400_000);
+  if (days <= 0) return "Heute erscheint";
+  if (days === 1) return "Morgen erscheint";
+  return "Erscheint bald";
+}
+
+// Builds the prioritised event list: newly available requests first, then
+// releases due within the next two days, then the unseen-titles summary.
+function relevantEvents({ availableRequests, upcoming, newForYou, onSelectMedia, onShowNewForYou }: {
+  availableRequests: RequestItem[]; upcoming: UpcomingItem[]; newForYou: NewForYouItem[];
+  onSelectMedia: (selection: MediaSelection) => void; onShowNewForYou: () => void;
+}): RelevantEvent[] {
+  const events: RelevantEvent[] = [];
+
+  for (const request of availableRequests) {
+    events.push({
+      key: `available-${request.id}`, tone: "mint", icon: "sparkle", status: "Jetzt verfügbar",
+      detail: <>Deine Anfrage „{request.title}“ ist in Emby</>,
+      onOpen: () => onSelectMedia({ source: "seerr", id: request.tmdbId, mediaType: request.mediaType }),
+    });
+  }
+
+  const horizon = Date.now() + RELEASE_WINDOW_HOURS * 60 * 60 * 1000;
+  for (const item of upcoming) {
+    const premiere = new Date(item.premiereDate).getTime();
+    if (Number.isNaN(premiere) || premiere > horizon) continue;
+    events.push({
+      key: `release-${item.id}`, tone: "peach", icon: "clock", status: releaseWording(item.premiereDate),
+      detail: formatReleaseTitle(item.title),
+      onOpen: () => onSelectMedia({ source: "emby", id: item.id }),
+    });
+  }
+
+  if (newForYou.length > 0) {
+    events.push({
+      key: "new-for-you", tone: "blue", icon: "genre", status: "Neu für dich",
+      detail: <><b>{newForYou.length}</b> ungesehene Titel</>,
+      onOpen: onShowNewForYou,
+    });
+  }
+
+  return events;
+}
+
+function RelevantNow({ events, onShowAll }: { events: RelevantEvent[]; onShowAll: () => void }) {
+  return <section className="relevant-card" aria-label="Jetzt relevant">
+    <div className="relevant-head">
+      <p className="eyebrow">JETZT RELEVANT</p>
+      {events.length > 3 && <button type="button" className="text-button" onClick={onShowAll}>Alle ansehen <Icon name="arrow" /></button>}
+    </div>
+    {events.length === 0
+      ? <p className="relevant-empty">Heute nichts Neues für dich.</p>
+      : <ul className="relevant-list">{events.slice(0, 3).map((event) => <RelevantRow key={event.key} event={event} />)}</ul>}
   </section>;
 }
 
-function HomeHighlights({ upcoming, upcomingState, requests, requestState, newForYou, newForYouState }: {
-  upcoming: UpcomingItem[]; upcomingState: LoadState; requests: RequestItem[]; requestState: LoadState;
-  newForYou: NewForYouItem[]; newForYouState: LoadState;
-}) {
-  const nextRelease = upcoming[0];
+function RelevantRow({ event, onOpen }: { event: RelevantEvent; onOpen?: () => void }) {
+  return <li>
+    <button type="button" className={`relevant-row tone-${event.tone}`} onClick={onOpen ?? event.onOpen}>
+      <span className="relevant-icon"><Icon name={event.icon} /></span>
+      <span className="relevant-text"><strong>{event.status}</strong><small>{event.detail}</small></span>
+      <span className="relevant-chevron"><Icon name="arrow" /></span>
+    </button>
+  </li>;
+}
 
-  return <div className="home-highlights">
-    {upcomingState === "ready" && nextRelease
-      ? <div className="highlight-hero" style={nextRelease.posterUrl ? { backgroundImage: `url(${nextRelease.posterUrl})` } : undefined}>
-          <div className="highlight-hero-overlay">
-            <p className="eyebrow">NÄCHSTE VERÖFFENTLICHUNG</p>
-            <strong>{nextRelease.title}</strong>
-            <small>{formatPremiereDate(nextRelease.premiereDate)}</small>
-          </div>
-        </div>
-      : <div className="highlight-hero highlight-hero-empty">
-          <span className="user-stat-icon"><Icon name="clock" /></span>
-          <p className="eyebrow">NÄCHSTE VERÖFFENTLICHUNG</p>
-          <strong>—</strong>
-          <small>{upcomingState === "ready" ? "Nichts geplant" : loadingCopy(upcomingState)}</small>
-        </div>}
-    <div className="highlight-stats">
-      <MetricCard icon="sparkle" tone="peach" value={requestState === "ready" ? requests.length : "—"} label="Offene Anfragen" detail={requestState === "ready" ? "Bei Seerr" : loadingCopy(requestState)} />
-      <MetricCard icon="genre" tone="mint" value={newForYouState === "ready" ? newForYou.length : "—"} label="Neu für dich" detail={newForYouState === "ready" ? "Letzte 14 Tage" : loadingCopy(newForYouState)} />
+function RelevantAllScreen({ events, onClose }: { events: RelevantEvent[]; onClose: () => void }) {
+  useEffect(() => {
+    const onKeyDown = (keyboardEvent: KeyboardEvent) => { if (keyboardEvent.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  return <div className="media-detail-overlay media-grid-overlay" role="dialog" aria-modal="true" aria-label="Jetzt relevant">
+    <div className="media-detail-scroll">
+      <button type="button" className="media-detail-close" onClick={onClose} aria-label="Schließen"><Icon name="close" /></button>
+      <h1 className="media-grid-title">Jetzt relevant</h1>
+      <ul className="relevant-list">{events.map((event) => <RelevantRow key={event.key} event={event} onOpen={() => { onClose(); event.onOpen(); }} />)}</ul>
     </div>
   </div>;
 }

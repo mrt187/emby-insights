@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -23,10 +24,17 @@ type Request struct {
 	Status    string `json:"status"`
 	TmdbID    string `json:"tmdbId"`
 	MediaType string `json:"mediaType"`
+	// AvailableSince is only set by AvailableRequests — the raw ISO
+	// timestamp at which Seerr recorded the title as added to the library.
+	AvailableSince string `json:"availableSince,omitempty"`
 }
 
 type RequestsReader interface {
 	Requests(context.Context, string) ([]Request, error)
+}
+
+type AvailableRequestsReader interface {
+	AvailableRequests(ctx context.Context, embyUserID string, since time.Time) ([]Request, error)
 }
 
 type RequestStats struct {
@@ -92,6 +100,52 @@ func (client *Client) Requests(ctx context.Context, embyUserID string) ([]Reques
 	return requests, nil
 }
 
+// AvailableRequests reports the user's requests whose title has become
+// available in the library since the given time — deliberately separate from
+// Requests, which filters exactly these out because its "open requests" row
+// is about what is still outstanding.
+func (client *Client) AvailableRequests(ctx context.Context, embyUserID string, since time.Time) ([]Request, error) {
+	if client == nil {
+		return nil, nil
+	}
+
+	seerrUserID, ok, err := client.resolveUserID(ctx, embyUserID)
+	if err != nil || !ok {
+		return nil, err
+	}
+
+	entries, err := client.userRequests(ctx, seerrUserID)
+	if err != nil {
+		return nil, err
+	}
+
+	var requests []Request
+	for _, entry := range entries {
+		if entry.Media.Status != mediaStatusAvailable || entry.Media.MediaAddedAt == "" {
+			continue
+		}
+		addedAt, err := time.Parse(time.RFC3339, entry.Media.MediaAddedAt)
+		if err != nil || addedAt.Before(since) {
+			continue
+		}
+		detail, err := client.mediaDetail(ctx, entry.Media.MediaType, entry.Media.TmdbID)
+		if err != nil {
+			return nil, err
+		}
+		requests = append(requests, Request{
+			ID:             strconv.Itoa(entry.ID),
+			Title:          detail.title,
+			PosterURL:      detail.posterURL,
+			Status:         "Jetzt verfügbar",
+			TmdbID:         strconv.Itoa(entry.Media.TmdbID),
+			MediaType:      entry.Media.MediaType,
+			AvailableSince: entry.Media.MediaAddedAt,
+		})
+	}
+	sort.Slice(requests, func(i, j int) bool { return requests[i].AvailableSince > requests[j].AvailableSince })
+	return requests, nil
+}
+
 // RequestStats reads the total number of requests this user has ever made
 // on Seerr — unlike Requests, this is not filtered to open/available ones.
 func (client *Client) RequestStats(ctx context.Context, embyUserID string) (RequestStats, error) {
@@ -136,9 +190,10 @@ type requestEntry struct {
 	ID     int `json:"id"`
 	Status int `json:"status"`
 	Media  struct {
-		MediaType string `json:"mediaType"`
-		TmdbID    int    `json:"tmdbId"`
-		Status    int    `json:"status"`
+		MediaType    string `json:"mediaType"`
+		TmdbID       int    `json:"tmdbId"`
+		Status       int    `json:"status"`
+		MediaAddedAt string `json:"mediaAddedAt"`
 	} `json:"media"`
 }
 
