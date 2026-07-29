@@ -8,6 +8,14 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.6.1] - 2026-07-29
+
+### Changed
+
+- "Neu für dich" is now scoped to the Emby libraries configured via the new
+  `EMBY_NEW_FOR_YOU_LIBRARY_IDS` (comma-separated), instead of reading unseen
+  items across every library. Leaving it empty disables the card.
+
 ## [0.6.0] - 2026-07-29
 
 ### Added

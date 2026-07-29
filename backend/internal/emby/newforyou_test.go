@@ -22,6 +22,9 @@ func TestNewForYouFiltersToLastFourteenDays(t *testing.T) {
 		if request.URL.Query().Get("IsPlayed") != "false" {
 			t.Fatalf("IsPlayed = %q", request.URL.Query().Get("IsPlayed"))
 		}
+		if request.URL.Query().Get("ParentId") != "library-1" {
+			t.Fatalf("ParentId = %q", request.URL.Query().Get("ParentId"))
+		}
 		writer.Header().Set("Content-Type", "application/json")
 		_, _ = writer.Write([]byte(`[
 			{"Id":"1","Name":"Recent","DateCreated":"` + recent + `","ImageTags":{"Primary":"tag-1"}},
@@ -31,7 +34,7 @@ func TestNewForYouFiltersToLastFourteenDays(t *testing.T) {
 	}))
 	defer testServer.Close()
 
-	items, err := NewClient(testServer.URL+"/emby", "dashboard-device", "admin-key").NewForYou(context.Background(), "user-1")
+	items, err := NewClient(testServer.URL+"/emby", "dashboard-device", "admin-key").NewForYou(context.Background(), "user-1", []string{"library-1"})
 	if err != nil {
 		t.Fatalf("NewForYou() error = %v", err)
 	}
@@ -43,22 +46,31 @@ func TestNewForYouFiltersToLastFourteenDays(t *testing.T) {
 	}
 }
 
-func TestNewForYouCapsAtFifteenItems(t *testing.T) {
-	testServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+func TestNewForYouWithoutLibraryIDsSkipsRequest(t *testing.T) {
+	items, err := NewClient("http://unused", "device", "key").NewForYou(context.Background(), "user-1", nil)
+	if err != nil || items != nil {
+		t.Fatalf("NewForYou() = %#v, %v, want nil, nil", items, err)
+	}
+}
+
+func TestNewForYouMergesMultipleLibrariesAndCapsAtFifteen(t *testing.T) {
+	testServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		parentID := request.URL.Query().Get("ParentId")
 		writer.Header().Set("Content-Type", "application/json")
 		writer.Write([]byte("["))
-		for i := 0; i < 20; i++ {
+		for i := 0; i < 10; i++ {
 			if i > 0 {
 				writer.Write([]byte(","))
 			}
 			date := time.Now().UTC().Add(-time.Duration(i) * time.Hour).Format(time.RFC3339)
-			writer.Write([]byte(`{"Id":"` + string(rune('a'+i)) + `","Name":"Item","DateCreated":"` + date + `"}`))
+			id := parentID + "-" + string(rune('a'+i))
+			writer.Write([]byte(`{"Id":"` + id + `","Name":"Item","DateCreated":"` + date + `"}`))
 		}
 		writer.Write([]byte("]"))
 	}))
 	defer testServer.Close()
 
-	items, err := NewClient(testServer.URL+"/emby", "dashboard-device", "admin-key").NewForYou(context.Background(), "user-1")
+	items, err := NewClient(testServer.URL+"/emby", "dashboard-device", "admin-key").NewForYou(context.Background(), "user-1", []string{"3", "5"})
 	if err != nil {
 		t.Fatalf("NewForYou() error = %v", err)
 	}

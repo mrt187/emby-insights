@@ -39,8 +39,8 @@ func TestLoadLeavesSeerrAndComingSoonUnconfiguredByDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.SeerrBaseURL != "" || cfg.SeerrAPIKey != "" || cfg.EmbyComingSoonLibraryIDs != nil {
-		t.Fatalf("cfg = %#v, want Seerr and ComingSoon left unconfigured", cfg)
+	if cfg.SeerrBaseURL != "" || cfg.SeerrAPIKey != "" || cfg.EmbyComingSoonLibraryIDs != nil || cfg.EmbyNewForYouLibraryIDs != nil {
+		t.Fatalf("cfg = %#v, want Seerr, ComingSoon and New for You left unconfigured", cfg)
 	}
 }
 
@@ -59,5 +59,23 @@ func TestLoadParsesComingSoonLibraryIDs(t *testing.T) {
 	want := []string{"library-1", "library-2"}
 	if len(cfg.EmbyComingSoonLibraryIDs) != len(want) || cfg.EmbyComingSoonLibraryIDs[0] != want[0] || cfg.EmbyComingSoonLibraryIDs[1] != want[1] {
 		t.Fatalf("EmbyComingSoonLibraryIDs = %#v, want %#v", cfg.EmbyComingSoonLibraryIDs, want)
+	}
+}
+
+func TestLoadParsesNewForYouLibraryIDs(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://user:password@localhost:5432/emby_insights")
+	t.Setenv("REDIS_URL", "redis://localhost:6379/0")
+	t.Setenv("EMBY_BASE_URL", "http://emby:8096/emby")
+	t.Setenv("EMBY_DEVICE_ID", "test-device")
+	t.Setenv("EMBY_ADMIN_API_KEY", "test-admin-key")
+	t.Setenv("EMBY_NEW_FOR_YOU_LIBRARY_IDS", "3,5,123857")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	want := []string{"3", "5", "123857"}
+	if len(cfg.EmbyNewForYouLibraryIDs) != len(want) || cfg.EmbyNewForYouLibraryIDs[0] != want[0] || cfg.EmbyNewForYouLibraryIDs[2] != want[2] {
+		t.Fatalf("EmbyNewForYouLibraryIDs = %#v, want %#v", cfg.EmbyNewForYouLibraryIDs, want)
 	}
 }

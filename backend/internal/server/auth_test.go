@@ -44,12 +44,14 @@ func (reader *fakeUpcomingReader) Upcoming(_ context.Context, libraryIDs []strin
 }
 
 type fakeNewForYouReader struct {
-	items  []emby.NewForYouItem
-	userID string
+	items      []emby.NewForYouItem
+	userID     string
+	libraryIDs []string
 }
 
-func (reader *fakeNewForYouReader) NewForYou(_ context.Context, userID string) ([]emby.NewForYouItem, error) {
+func (reader *fakeNewForYouReader) NewForYou(_ context.Context, userID string, libraryIDs []string) ([]emby.NewForYouItem, error) {
 	reader.userID = userID
+	reader.libraryIDs = libraryIDs
 	return reader.items, nil
 }
 

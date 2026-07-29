@@ -26,6 +26,7 @@ type App struct {
 	upcoming             emby.UpcomingReader
 	comingSoonLibraryIDs []string
 	newForYou            emby.NewForYouReader
+	newForYouLibraryIDs  []string
 	requests             seerr.RequestsReader
 	sessions             session.Store
 	cookieSecure         bool
@@ -52,6 +53,7 @@ func New(cfg config.Config) (*App, error) {
 		upcoming:             embyClient,
 		comingSoonLibraryIDs: cfg.EmbyComingSoonLibraryIDs,
 		newForYou:            embyClient,
+		newForYouLibraryIDs:  cfg.EmbyNewForYouLibraryIDs,
 		requests:             seerr.NewClient(cfg.SeerrBaseURL, cfg.SeerrAPIKey),
 		sessions:             session.NewRedisStore(cache),
 		cookieSecure:         cfg.CookieSecure,
@@ -180,7 +182,7 @@ func (app *App) newForYouItems(writer http.ResponseWriter, request *http.Request
 	if !ok {
 		return
 	}
-	items, err := app.newForYou.NewForYou(request.Context(), identity.UserID)
+	items, err := app.newForYou.NewForYou(request.Context(), identity.UserID, app.newForYouLibraryIDs)
 	if err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "new items are unavailable"})
 		return
