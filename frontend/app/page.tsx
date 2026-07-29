@@ -10,6 +10,8 @@ type PersonalStats = { watchSeconds: number; previousWatchSeconds: number; compl
 type UpcomingItem = { id: string; title: string; posterUrl: string; premiereDate: string };
 type RequestItem = { id: string; title: string; posterUrl: string; status: string };
 type NewForYouItem = { id: string; title: string; posterUrl: string };
+type ContinueWatchingItem = { id: string; title: string; posterUrl: string; progressPercent: number };
+type WatchedItem = { id: string; title: string; posterUrl: string; genres: string[]; lastPlayedDate: string };
 type IconName = "home" | "chart" | "sparkle" | "user" | "bell" | "arrow" | "clock" | "movie" | "series" | "genre";
 type Tone = "blue" | "peach" | "mint" | "lilac";
 type LoadState = "loading" | "ready" | "error";
@@ -19,7 +21,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.6.1";
+const APP_VERSION = "0.7.0";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -190,18 +192,14 @@ function Today({ user, onStats, statistics, state, upcoming, upcomingState, requ
 
 function UserInsightCard({ user, statistics, state, detail }: { user: { name: string }; statistics: PersonalStats | null; state: LoadState; detail: string }) {
   return <section className="user-insight-card" aria-label={`Wochenübersicht von ${user.name}`}>
-    <div className="user-insight-identity">
-      <div className="profile-avatar"><UserAvatar name={user.name} /></div>
-      <div><p className="eyebrow">DEIN MEDIENPROFIL</p><h3>{user.name}</h3><p>Deine ganz persönliche Woche in Emby.</p></div>
-    </div>
-    <WeeklyCarousel statistics={statistics} state={state} detail={detail} />
+    <WeeklyCarousel user={user} statistics={statistics} state={state} detail={detail} />
     {state === "loading" && <span className="sr-only" role="status">Deine Wochenstatistik wird geladen …</span>}
   </section>;
 }
 
 const SLIDE_INTERVAL = 5000;
 
-function WeeklyCarousel({ statistics, state, detail }: { statistics: PersonalStats | null; state: LoadState; detail: string }) {
+function WeeklyCarousel({ user, statistics, state, detail }: { user: { name: string }; statistics: PersonalStats | null; state: LoadState; detail: string }) {
   const slides: { key: string; icon: IconName; tone: Tone; label: string; value: string; detail: string; text?: boolean }[] = [
     { key: "week", icon: "clock", tone: "blue", label: "Diese Woche", value: statistics ? formatDuration(statistics.watchSeconds) : "—", detail },
     { key: "movies", icon: "movie", tone: "peach", label: "Filme", value: statistics ? String(statistics.completedMovies) : "—", detail: statistics ? "Abgeschlossen" : loadingCopy(state) },
@@ -245,15 +243,21 @@ function WeeklyCarousel({ statistics, state, detail }: { statistics: PersonalSta
     >
       {slides.map((slide, index) => <div
         key={slide.key}
-        className={`weekly-slide tone-${slide.tone}${slide.text ? " weekly-slide-text" : ""}`}
+        className="weekly-slide"
         role="group"
         aria-roledescription="Folie"
         aria-label={`${index + 1} von ${slides.length}: ${slide.label}`}
       >
-        <span className="user-stat-icon"><Icon name={slide.icon} /></span>
-        <span className="weekly-label">{slide.label}</span>
-        <strong>{slide.value}</strong>
-        <small>{slide.detail}</small>
+        <div className="user-insight-identity">
+          <div className="profile-avatar"><UserAvatar name={user.name} /></div>
+          <div><p className="eyebrow">DEIN MEDIENPROFIL</p><h3>{user.name}</h3><p>Deine ganz persönliche Woche in Emby.</p></div>
+        </div>
+        <div className={`weekly-stat tone-${slide.tone}${slide.text ? " weekly-slide-text" : ""}`}>
+          <span className="user-stat-icon"><Icon name={slide.icon} /></span>
+          <span className="weekly-label">{slide.label}</span>
+          <strong>{slide.value}</strong>
+          <small>{slide.detail}</small>
+        </div>
       </div>)}
     </div>
     <div className="weekly-dots">
@@ -272,15 +276,58 @@ function MetricCard({ icon, tone, value, label, detail, positive, genre = false 
   return <article className={`metric-card tone-${tone}${genre ? " genre-card" : ""}`}><span className="metric-icon"><Icon name={icon} /></span><strong>{value}</strong><p>{label}</p><small className={positive ? "up" : undefined}>{detail}</small></article>;
 }
 
-function PosterRow<T extends { id: string; title: string; posterUrl?: string; art?: string }>({ title, eyebrow, items, detail, state, emptyLabel }: {
-  title?: string; eyebrow?: string; items: readonly T[]; detail: (item: T) => string; state?: LoadState; emptyLabel?: string;
+function PosterRow<T extends { id: string; title: string; posterUrl?: string }>({ title, eyebrow, items, detail, state, emptyLabel, progress }: {
+  title?: string; eyebrow?: string; items: readonly T[]; detail: (item: T) => string; state?: LoadState; emptyLabel?: string; progress?: (item: T) => number;
 }) {
   return <section className="poster-section">
     {(title || eyebrow) && <div className="section-heading"><div>{eyebrow && <p className="eyebrow">{eyebrow}</p>}{title && <h2>{title}</h2>}</div></div>}
     {state === "loading" && <p className="poster-status" role="status">Wird geladen …</p>}
     {state === "error" && <p className="poster-status">Nicht verfügbar</p>}
     {state !== "loading" && state !== "error" && items.length === 0 && <p className="poster-status">{emptyLabel ?? "Nichts vorhanden."}</p>}
-    {items.length > 0 && <div className="poster-scroller">{items.map((item) => <article className="poster-entry" key={item.id}><div className={`poster wide${item.art ? ` ${item.art}` : ""}`} role="img" aria-label={item.title}>{item.posterUrl ? <img src={item.posterUrl} alt="" loading="lazy" /> : <span>{item.title}</span>}</div><strong>{item.title}</strong><small>{detail(item)}</small></article>)}</div>}
+    {items.length > 0 && <div className="poster-scroller">{items.map((item) => <article className="poster-entry" key={item.id}>
+      <div className="poster wide" role="img" aria-label={item.title}>
+        {item.posterUrl ? <img src={item.posterUrl} alt="" loading="lazy" /> : <span>{item.title}</span>}
+        {progress && <div className="poster-progress"><div className="poster-progress-fill" style={{ width: `${progress(item)}%` }} /></div>}
+      </div>
+      <strong>{item.title}</strong><small>{detail(item)}</small>
+    </article>)}</div>}
+  </section>;
+}
+
+function topGenres(movies: readonly WatchedItem[], series: readonly WatchedItem[]) {
+  const counts = new Map<string, number>();
+  for (const item of [...movies, ...series]) {
+    for (const genre of item.genres) counts.set(genre, (counts.get(genre) ?? 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([label, value]) => ({ label, value }));
+}
+
+const WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+
+function weekdayActivity(movies: readonly WatchedItem[], series: readonly WatchedItem[]) {
+  const counts = new Array(7).fill(0);
+  for (const item of [...movies, ...series]) {
+    const date = new Date(item.lastPlayedDate);
+    if (Number.isNaN(date.getTime())) continue;
+    counts[(date.getDay() + 6) % 7] += 1;
+  }
+  return WEEKDAYS.map((label, index) => ({ label, value: counts[index] }));
+}
+
+function BarChart({ title, data }: { title: string; data: { label: string; value: number }[] }) {
+  const max = Math.max(1, ...data.map((entry) => entry.value));
+  const hasData = data.some((entry) => entry.value > 0);
+  return <section className="chart-card">
+    <h3>{title}</h3>
+    {hasData
+      ? <div className="bar-chart" role="img" aria-label={title}>
+        {data.map((entry) => <div className="bar-row" key={entry.label}>
+          <span className="bar-label">{entry.label}</span>
+          <div className="bar-track"><div className="bar-fill" style={{ width: `${(entry.value / max) * 100}%` }} /></div>
+          <span className="bar-value">{entry.value}</span>
+        </div>)}
+      </div>
+      : <p className="poster-status">Noch keine Daten für diesen Zeitraum.</p>}
   </section>;
 }
 
@@ -288,6 +335,13 @@ function Stats() {
   const [period, setPeriod] = useState<Period>("Woche");
   const [statistics, setStatistics] = useState<PersonalStats | null>(null);
   const [state, setState] = useState<LoadState>("loading");
+  const [continueWatching, setContinueWatching] = useState<ContinueWatchingItem[]>([]);
+  const [continueWatchingState, setContinueWatchingState] = useState<LoadState>("loading");
+  const [watchedMovies, setWatchedMovies] = useState<WatchedItem[]>([]);
+  const [watchedMoviesState, setWatchedMoviesState] = useState<LoadState>("loading");
+  const [watchedSeries, setWatchedSeries] = useState<WatchedItem[]>([]);
+  const [watchedSeriesState, setWatchedSeriesState] = useState<LoadState>("loading");
+
   useEffect(() => {
     let active = true;
     fetch(`/api/stats?period=${apiPeriod[period]}`, { credentials: "include" })
@@ -295,14 +349,47 @@ function Stats() {
       .catch(() => active && setState("error"));
     return () => { active = false; };
   }, [period]);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/continue-watching", { credentials: "include" })
+      .then(async (response) => { if (!response.ok) throw new Error("continue watching unavailable"); const data = await response.json(); if (active) { setContinueWatching(data); setContinueWatchingState("ready"); } })
+      .catch(() => active && setContinueWatchingState("error"));
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    fetch(`/api/watched-movies?period=${apiPeriod[period]}`, { credentials: "include" })
+      .then(async (response) => { if (!response.ok) throw new Error("watched movies unavailable"); const data = await response.json(); if (active) { setWatchedMovies(data); setWatchedMoviesState("ready"); } })
+      .catch(() => active && setWatchedMoviesState("error"));
+    return () => { active = false; };
+  }, [period]);
+
+  useEffect(() => {
+    let active = true;
+    fetch(`/api/watched-series?period=${apiPeriod[period]}`, { credentials: "include" })
+      .then(async (response) => { if (!response.ok) throw new Error("watched series unavailable"); const data = await response.json(); if (active) { setWatchedSeries(data); setWatchedSeriesState("ready"); } })
+      .catch(() => active && setWatchedSeriesState("error"));
+    return () => { active = false; };
+  }, [period]);
+
   return <div className="content page-view">
-    <section className="period-tabs" aria-label="Zeitraum auswählen">{(["Woche", "Monat", "Jahr"] as Period[]).map((item) => <button className={period === item ? "selected" : ""} onClick={() => { setStatistics(null); setState("loading"); setPeriod(item); }} key={item} aria-pressed={period === item}>{item}</button>)}</section>
+    <section className="period-tabs" aria-label="Zeitraum auswählen">{(["Woche", "Monat", "Jahr"] as Period[]).map((item) => <button className={period === item ? "selected" : ""} onClick={() => { setStatistics(null); setState("loading"); setWatchedMoviesState("loading"); setWatchedSeriesState("loading"); setPeriod(item); }} key={item} aria-pressed={period === item}>{item}</button>)}</section>
     <section className="summary-banner" aria-live="polite"><p>DEINE {period.toUpperCase()}</p><h2>{statistics ? formatDuration(statistics.watchSeconds) : "—"}</h2><span>{state === "error" ? "Statistik ist gerade nicht verfügbar." : statistics ? comparisonText(statistics) : "Statistik wird geladen …"}</span></section>
     <section className="week-grid" aria-label={`Kennzahlen für ${period}`}>
-      <MetricCard icon="clock" tone="blue" value={statistics ? formatDuration(statistics.watchSeconds) : "—"} label="Sehzeit" detail={statistics ? period : loadingCopy(state)} />
       <MetricCard icon="movie" tone="peach" value={statistics ? statistics.completedMovies : "—"} label="Filme abgeschlossen" detail={statistics ? period : loadingCopy(state)} />
       <MetricCard icon="series" tone="mint" value={statistics ? statistics.completedSeries : "—"} label="Serien abgeschlossen" detail={statistics ? period : loadingCopy(state)} />
       <MetricCard icon="genre" tone="lilac" value={statistics?.favouriteGenre || "—"} label="Lieblingsgenre" detail={statistics ? "Nach Sehzeit" : loadingCopy(state)} genre />
+    </section>
+
+    <PosterRow title="Was ich gerade schaue" eyebrow="WEITERSCHAUEN" items={continueWatching} state={continueWatchingState} emptyLabel="Nichts in Bearbeitung." detail={(item) => `${item.progressPercent} % gesehen`} progress={(item) => item.progressPercent} />
+    <PosterRow title="Gesehene Filme" eyebrow={period.toUpperCase()} items={watchedMovies} state={watchedMoviesState} emptyLabel="Noch keine Filme abgeschlossen." detail={(item) => item.genres[0] ?? ""} />
+    <PosterRow title="Gesehene Serien" eyebrow={period.toUpperCase()} items={watchedSeries} state={watchedSeriesState} emptyLabel="Noch keine Serien abgeschlossen." detail={(item) => item.genres[0] ?? ""} />
+
+    <section className="chart-grid">
+      <BarChart title="Meistgesehene Genres" data={topGenres(watchedMovies, watchedSeries)} />
+      <BarChart title="Aktivität nach Wochentag" data={weekdayActivity(watchedMovies, watchedSeries)} />
     </section>
   </div>;
 }

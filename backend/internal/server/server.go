@@ -27,6 +27,8 @@ type App struct {
 	comingSoonLibraryIDs []string
 	newForYou            emby.NewForYouReader
 	newForYouLibraryIDs  []string
+	continueWatching     emby.ContinueWatchingReader
+	watched              emby.WatchedReader
 	requests             seerr.RequestsReader
 	sessions             session.Store
 	cookieSecure         bool
@@ -54,6 +56,8 @@ func New(cfg config.Config) (*App, error) {
 		comingSoonLibraryIDs: cfg.EmbyComingSoonLibraryIDs,
 		newForYou:            embyClient,
 		newForYouLibraryIDs:  cfg.EmbyNewForYouLibraryIDs,
+		continueWatching:     embyClient,
+		watched:              embyClient,
 		requests:             seerr.NewClient(cfg.SeerrBaseURL, cfg.SeerrAPIKey),
 		sessions:             session.NewRedisStore(cache),
 		cookieSecure:         cfg.CookieSecure,
@@ -74,6 +78,9 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/upcoming", app.upcomingItems)
 	mux.HandleFunc("GET /api/requests", app.myRequests)
 	mux.HandleFunc("GET /api/new-for-you", app.newForYouItems)
+	mux.HandleFunc("GET /api/continue-watching", app.continueWatchingItems)
+	mux.HandleFunc("GET /api/watched-movies", app.watchedMovies)
+	mux.HandleFunc("GET /api/watched-series", app.watchedSeries)
 	return mux
 }
 
@@ -136,12 +143,8 @@ func (app *App) stats(writer http.ResponseWriter, request *http.Request) {
 	if !ok {
 		return
 	}
-	period := request.URL.Query().Get("period")
-	if period == "" {
-		period = "week"
-	}
-	if period != "week" && period != "month" && period != "year" {
-		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "period must be week, month or year"})
+	period, ok := parsePeriod(writer, request)
+	if !ok {
 		return
 	}
 	statistics, err := app.statistics.PersonalWatchTime(request.Context(), identity.UserID, period)
@@ -150,6 +153,18 @@ func (app *App) stats(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	respondJSON(writer, http.StatusOK, statistics)
+}
+
+func parsePeriod(writer http.ResponseWriter, request *http.Request) (string, bool) {
+	period := request.URL.Query().Get("period")
+	if period == "" {
+		period = "week"
+	}
+	if period != "week" && period != "month" && period != "year" {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "period must be week, month or year"})
+		return "", false
+	}
+	return period, true
 }
 
 func (app *App) upcomingItems(writer http.ResponseWriter, request *http.Request) {
@@ -185,6 +200,53 @@ func (app *App) newForYouItems(writer http.ResponseWriter, request *http.Request
 	items, err := app.newForYou.NewForYou(request.Context(), identity.UserID, app.newForYouLibraryIDs)
 	if err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "new items are unavailable"})
+		return
+	}
+	respondJSON(writer, http.StatusOK, orEmpty(items))
+}
+
+func (app *App) continueWatchingItems(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	items, err := app.continueWatching.ContinueWatching(request.Context(), identity.UserID)
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "continue watching is unavailable"})
+		return
+	}
+	respondJSON(writer, http.StatusOK, orEmpty(items))
+}
+
+func (app *App) watchedMovies(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	period, ok := parsePeriod(writer, request)
+	if !ok {
+		return
+	}
+	items, err := app.watched.WatchedMovies(request.Context(), identity.UserID, period)
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "watched movies are unavailable"})
+		return
+	}
+	respondJSON(writer, http.StatusOK, orEmpty(items))
+}
+
+func (app *App) watchedSeries(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	period, ok := parsePeriod(writer, request)
+	if !ok {
+		return
+	}
+	items, err := app.watched.WatchedSeries(request.Context(), identity.UserID, period)
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "watched series are unavailable"})
 		return
 	}
 	respondJSON(writer, http.StatusOK, orEmpty(items))

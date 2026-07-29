@@ -212,9 +212,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 /* ----------------------------------------------------- personal overview */
 
 .user-insight-card {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 400px);
-  gap: 16px; align-items: stretch; padding: 18px;
+  padding: 18px;
   border: 1px solid rgb(255 255 255 / 7%); border-radius: 22px; background: #24262d;
   box-shadow: 0 24px 52px rgb(0 0 0 / 22%), inset 0 1px 0 rgb(255 255 255 / 5%);
 }
@@ -253,16 +251,20 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 
 .weekly-slide {
   flex: 0 0 100%; min-width: 0; scroll-snap-align: start;
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 400px);
+  gap: 16px; align-items: stretch;
+}
+.weekly-stat {
   display: grid; align-content: center; justify-items: start;
   min-height: 148px; padding: 20px 22px; border-radius: 16px;
   background: linear-gradient(145deg, #30333d, #292c34);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 5%);
 }
-.weekly-slide .user-stat-icon { margin-bottom: 12px; }
+.weekly-stat .user-stat-icon { margin-bottom: 12px; }
 .weekly-label {
   color: #9ca7a2; font-size: 10px; font-weight: 800; letter-spacing: 1.1px; text-transform: uppercase;
 }
-.weekly-slide strong {
+.weekly-stat strong {
   max-width: 100%; margin: 7px 0; color: #f7fbf8; font-size: clamp(28px, 3vw, 40px);
   font-weight: 800; letter-spacing: -2px; line-height: 1; font-variant-numeric: tabular-nums;
 }
@@ -271,7 +273,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   overflow-wrap: anywhere; font-size: clamp(20px, 2.2vw, 28px);
   letter-spacing: -1px; line-height: 1.15;
 }
-.weekly-slide small { color: #74dca1; font-size: 11px; font-weight: 700; line-height: 1.35; }
+.weekly-stat small { color: #74dca1; font-size: 11px; font-weight: 700; line-height: 1.35; }
 
 .weekly-dots { display: flex; justify-content: center; gap: 2px; }
 .weekly-dot {
@@ -300,7 +302,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 
 /* ---------------------------------------------------------- metric cards */
 
-.week-grid { display: grid; grid-template-columns: 1.45fr repeat(3, 1fr); gap: 14px; }
+.week-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
 
 .metric-card {
   position: relative; overflow: hidden; min-height: 198px; padding: 21px;
@@ -315,12 +317,6 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   background: radial-gradient(circle, color-mix(in srgb, var(--tone, var(--mint-bright)) 18%, transparent), transparent 68%);
 }
 .metric-card:hover { transform: translateY(-3px); border-color: rgb(185 238 208 / 24%); }
-.metric-card:first-child {
-  padding: 26px;
-  background: linear-gradient(145deg,
-    color-mix(in srgb, var(--tone, var(--mint-bright)) 14%, rgb(19 32 49 / 94%)),
-    rgb(19 32 49 / 94%));
-}
 .metric-card strong {
   position: relative; z-index: 1; display: block; line-height: 1;
   font-size: clamp(28px, 3vw, 43px); letter-spacing: -1.7px; font-variant-numeric: tabular-nums;
@@ -365,30 +361,11 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .poster-entry small { margin-top: 4px; color: #98dcb2; font-size: 11px; }
 .poster-status { color: #9db3a7; font-size: 13px; padding: 4px 2px; }
 
-/* Placeholder cover art — replace once real Emby/Seerr artwork is wired up. */
-.last { background: radial-gradient(circle at 20% 20%,#e5e0b7 0,transparent 18%),linear-gradient(135deg,#2b433f,#7e9276 48%,#333b28); }
-.alien { background: radial-gradient(circle at 75% 20%,#f0aa68,transparent 14%),linear-gradient(135deg,#10283b,#883d2e 70%,#19141b); }
-.wednesday { background: radial-gradient(circle at 30% 20%,#a974e0,transparent 16%),linear-gradient(135deg,#16141d,#41314f 60%,#121416); }
-.bear { background: radial-gradient(circle at 70% 20%,#f5ce90,transparent 14%),linear-gradient(135deg,#35362a,#9a6243 57%,#181717); }
-.andor { background: radial-gradient(circle at 30% 20%,#dde2d1,transparent 12%),linear-gradient(135deg,#243534,#8c7861 60%,#1d1b1b); }
-.foundation { background: radial-gradient(circle at 70% 25%,#c3a5ee,transparent 13%),linear-gradient(135deg,#22223d,#695070 60%,#12141c); }
-.dune { background: radial-gradient(circle at 70% 25%,#e8ad60,transparent 13%),linear-gradient(135deg,#55351d,#c27b3d 60%,#201711); }
-.severance { background: radial-gradient(circle at 32% 25%,#cbd8e2,transparent 12%),linear-gradient(135deg,#0f2730,#356676 58%,#111617); }
-.mickey { background: radial-gradient(circle at 68% 22%,#ec394a,transparent 13%),linear-gradient(135deg,#1c2c42,#aa303c 58%,#151719); }
-.sinners { background: radial-gradient(circle at 40% 20%,#d74845,transparent 13%),linear-gradient(135deg,#160f15,#703131 55%,#1a1514); }
-.studio { background: radial-gradient(circle at 30% 20%,#f6c869,transparent 13%),linear-gradient(135deg,#523f27,#947047 55%,#1e1b18); }
-.gorge { background: radial-gradient(circle at 68% 24%,#e6b360,transparent 14%),linear-gradient(135deg,#2a322b,#937353 60%,#1a1c19); }
-.brutalist { background: radial-gradient(circle at 40% 22%,#d9d6c4,transparent 13%),linear-gradient(135deg,#343a3d,#72736d 60%,#17191a); }
-.mirror { background: radial-gradient(circle at 60% 20%,#aa78d6,transparent 13%),linear-gradient(135deg,#201d2d,#493c61 58%,#141318); }
-.companion { background: radial-gradient(circle at 32% 20%,#ff8685,transparent 13%),linear-gradient(135deg,#523a43,#a65c62 58%,#1a161a); }
-.anora { background: radial-gradient(circle at 70% 20%,#f4d06d,transparent 13%),linear-gradient(135deg,#41334b,#986a8c 58%,#17151b); }
-.flow { background: radial-gradient(circle at 32% 22%,#8dd1e4,transparent 13%),linear-gradient(135deg,#173d4d,#447a86 58%,#141a1b); }
-.monkey { background: radial-gradient(circle at 65% 25%,#e8a54d,transparent 13%),linear-gradient(135deg,#3c2b1d,#8d6337 58%,#1a1611); }
-.wolfs { background: radial-gradient(circle at 32% 20%,#bdccd2,transparent 13%),linear-gradient(135deg,#192936,#475e6c 58%,#111517); }
-.conclave { background: radial-gradient(circle at 68% 20%,#eab55f,transparent 13%),linear-gradient(135deg,#502b26,#85594c 58%,#1a1514); }
-.nosferatu { background: radial-gradient(circle at 40% 22%,#beb1b0,transparent 13%),linear-gradient(135deg,#292126,#664951 58%,#161418); }
-.civil { background: radial-gradient(circle at 70% 20%,#e06545,transparent 13%),linear-gradient(135deg,#25252c,#69464a 58%,#151517); }
-.robot { background: radial-gradient(circle at 35% 20%,#edca77,transparent 13%),linear-gradient(135deg,#34515e,#8c7848 58%,#1a1b19); }
+.poster-progress {
+  position: absolute; left: 9px; right: 9px; bottom: 9px; z-index: 1;
+  height: 4px; border-radius: 2px; overflow: hidden; background: rgb(255 255 255 / 22%);
+}
+.poster-progress-fill { height: 100%; border-radius: 2px; background: var(--mint-bright); }
 
 /* ------------------------------------------------------- statistics page */
 
@@ -426,6 +403,26 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   font-variant-numeric: tabular-nums;
 }
 .summary-banner span { color: #a7bdb1; font-size: 13px; }
+
+.chart-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+.chart-card {
+  padding: 22px; border: 1px solid var(--line); border-radius: 20px;
+  background: linear-gradient(150deg, rgb(28 38 47 / 88%), rgb(16 22 30 / 88%));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%);
+}
+.chart-card h3 { margin: 0 0 18px; font-size: 15px; font-weight: 800; letter-spacing: -.3px; }
+.bar-chart { display: grid; gap: 12px; }
+.bar-row { display: grid; grid-template-columns: 84px 1fr 32px; align-items: center; gap: 10px; }
+.bar-label {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--text-secondary); font-size: 12px; font-weight: 600;
+}
+.bar-track { height: 10px; border-radius: 5px; background: rgb(255 255 255 / 6%); overflow: hidden; }
+.bar-fill { height: 100%; min-width: 4px; border-radius: 5px; background: var(--mint-bright); transition: width 260ms var(--ease-out); }
+.bar-value {
+  text-align: right; color: var(--muted); font-size: 12px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
 
 /* ---------------------------------------------------------- profile page */
 
@@ -481,10 +478,13 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
    Breakpoints follow available content width, not raw viewport width:
    content = 100vw − sidebar (264px) − 2 × clamp(24px, 5vw, 76px).       */
 
-/* Four metric cards need ~170px each to stay legible. */
+/* Three metric cards need ~170px each to stay legible. */
 @media (max-width: 1240px) {
   .week-grid { grid-template-columns: repeat(2, 1fr); }
-  .metric-card:first-child { grid-column: span 2; }
+}
+
+@media (max-width: 780px) {
+  .chart-grid { grid-template-columns: 1fr; }
 }
 
 /* The three-column insight card needs 808px of content width. */
@@ -500,9 +500,10 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   .screen { margin-left: 0; padding: 22px 18px 108px; }
   .topbar { padding-bottom: 27px; }
 
-  .user-insight-card { grid-template-columns: 1fr; gap: 12px; padding: 13px; border-radius: 19px; }
+  .user-insight-card { padding: 13px; border-radius: 19px; }
+  .weekly-slide { grid-template-columns: 1fr; gap: 12px; }
   .user-insight-identity { padding: 12px; }
-  .weekly-slide { min-height: 132px; }
+  .weekly-stat { min-height: 132px; }
 
   .bottom-nav {
     position: fixed; z-index: var(--z-navigation); bottom: 0; left: 0; right: 0;
@@ -530,7 +531,6 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 
   .week-grid { gap: 10px; }
   .metric-card { min-height: 170px; padding: 17px; border-radius: 17px; }
-  .metric-card:first-child { padding: 20px; }
   .metric-card strong { font-size: 29px; }
   .metric-card p { font-size: 12px; }
   .genre-card { min-height: 132px; }
@@ -542,7 +542,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   .profile-avatar { flex-basis: 68px; width: 68px; height: 68px; }
   .user-insight-identity { gap: 14px; }
   .user-insight-identity h3 { font-size: 24px; }
-  .weekly-slide { min-height: 124px; padding: 17px 18px; }
+  .weekly-stat { min-height: 124px; padding: 17px 18px; }
 
   .summary-banner { padding: 25px; }
   .summary-banner h2 { font-size: 25px; }

@@ -1,5 +1,7 @@
-# Build the API as a static Linux binary.
-FROM golang:1.26-alpine AS backend-build
+# Build the API as a static Linux binary. Runs on the builder's native
+# platform (no QEMU emulation, which crashes the Go toolchain) and
+# cross-compiles to the target via GOARCH below.
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS backend-build
 
 WORKDIR /src/backend
 COPY backend/go.mod backend/go.sum ./

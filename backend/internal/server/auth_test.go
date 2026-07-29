@@ -55,6 +55,33 @@ func (reader *fakeNewForYouReader) NewForYou(_ context.Context, userID string, l
 	return reader.items, nil
 }
 
+type fakeContinueWatchingReader struct {
+	items  []emby.ContinueWatchingItem
+	userID string
+}
+
+func (reader *fakeContinueWatchingReader) ContinueWatching(_ context.Context, userID string) ([]emby.ContinueWatchingItem, error) {
+	reader.userID = userID
+	return reader.items, nil
+}
+
+type fakeWatchedReader struct {
+	movies       []emby.WatchedItem
+	series       []emby.WatchedItem
+	moviesPeriod string
+	seriesPeriod string
+}
+
+func (reader *fakeWatchedReader) WatchedMovies(_ context.Context, _ string, period string) ([]emby.WatchedItem, error) {
+	reader.moviesPeriod = period
+	return reader.movies, nil
+}
+
+func (reader *fakeWatchedReader) WatchedSeries(_ context.Context, _ string, period string) ([]emby.WatchedItem, error) {
+	reader.seriesPeriod = period
+	return reader.series, nil
+}
+
 type fakeRequestsReader struct {
 	items      []seerr.Request
 	embyUserID string
@@ -190,6 +217,70 @@ func TestNewForYouUsesSessionIdentity(t *testing.T) {
 	}
 	if !strings.Contains(recorder.Body.String(), "Sinners") {
 		t.Fatalf("body = %s", recorder.Body.String())
+	}
+}
+
+func TestContinueWatchingUsesSessionIdentity(t *testing.T) {
+	store := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	reader := &fakeContinueWatchingReader{items: []emby.ContinueWatchingItem{{ID: "1", Title: "The Bear"}}}
+	app := &App{sessions: store, continueWatching: reader}
+	request := httptest.NewRequest(http.MethodGet, "/api/continue-watching", nil)
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	if reader.userID != "user-1" {
+		t.Fatalf("userID = %q", reader.userID)
+	}
+	if !strings.Contains(recorder.Body.String(), "The Bear") {
+		t.Fatalf("body = %s", recorder.Body.String())
+	}
+}
+
+func TestWatchedMoviesAndSeriesUsePeriod(t *testing.T) {
+	store := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	reader := &fakeWatchedReader{
+		movies: []emby.WatchedItem{{ID: "1", Title: "Dune"}},
+		series: []emby.WatchedItem{{ID: "2", Title: "Severance"}},
+	}
+	app := &App{sessions: store, watched: reader}
+
+	moviesRequest := httptest.NewRequest(http.MethodGet, "/api/watched-movies?period=month", nil)
+	moviesRequest.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	moviesRecorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(moviesRecorder, moviesRequest)
+	if moviesRecorder.Code != http.StatusOK || !strings.Contains(moviesRecorder.Body.String(), "Dune") {
+		t.Fatalf("watched-movies status = %d, body = %s", moviesRecorder.Code, moviesRecorder.Body.String())
+	}
+	if reader.moviesPeriod != "month" {
+		t.Fatalf("moviesPeriod = %q", reader.moviesPeriod)
+	}
+
+	seriesRequest := httptest.NewRequest(http.MethodGet, "/api/watched-series?period=year", nil)
+	seriesRequest.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	seriesRecorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(seriesRecorder, seriesRequest)
+	if seriesRecorder.Code != http.StatusOK || !strings.Contains(seriesRecorder.Body.String(), "Severance") {
+		t.Fatalf("watched-series status = %d, body = %s", seriesRecorder.Code, seriesRecorder.Body.String())
+	}
+	if reader.seriesPeriod != "year" {
+		t.Fatalf("seriesPeriod = %q", reader.seriesPeriod)
+	}
+}
+
+func TestWatchedMoviesRejectsInvalidPeriod(t *testing.T) {
+	store := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	app := &App{sessions: store, watched: &fakeWatchedReader{}}
+	request := httptest.NewRequest(http.MethodGet, "/api/watched-movies?period=decade", nil)
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
 }
 

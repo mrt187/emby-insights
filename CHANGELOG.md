@@ -8,6 +8,28 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.7.0] - 2026-07-29
+
+### Added
+
+- The Statistics page now shows "Was ich gerade schaue" (Emby's own resume/
+  continue-watching list with progress bars), "Gesehene Filme" and "Gesehene
+  Serien" (fully watched titles for the selected period), plus two charts:
+  most-watched genres and activity by weekday, both derived from the watched
+  lists.
+- New endpoints: `GET /api/continue-watching`, `GET /api/watched-movies`,
+  `GET /api/watched-series` (the latter two take the same `period` query
+  parameter as `/api/stats`).
+
+### Changed
+
+- The Home "Dein Rhythmus" card is now a single carousel: every slide repeats
+  the profile identity alongside its stat, instead of a static identity panel
+  next to a separately rotating stat panel.
+- The Statistics page's metric row dropped the redundant watch-time tile
+  (already shown in the summary banner above) and now shows three
+  equal-width cards.
+
 ## [0.6.1] - 2026-07-29
 
 ### Changed
