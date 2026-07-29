@@ -8,6 +8,15 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.5.1] - 2026-07-29
+
+### Fixed
+
+- The Seerr requests connector sent an unsupported `filter=all` query
+  parameter, which some Seerr versions reject with `400 Bad Request`,
+  breaking the Requests Home card entirely. The parameter has been removed;
+  filtering to open, non-available requests still happens client-side.
+
 ## [0.5.0] - 2026-07-29
 
 ### Added

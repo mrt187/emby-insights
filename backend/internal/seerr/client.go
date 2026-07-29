@@ -110,7 +110,7 @@ func (client *Client) userRequests(ctx context.Context, seerrUserID int) ([]requ
 	var result struct {
 		Results []requestEntry `json:"results"`
 	}
-	path := fmt.Sprintf("/api/v1/user/%d/requests?take=50&filter=all", seerrUserID)
+	path := fmt.Sprintf("/api/v1/user/%d/requests?take=50", seerrUserID)
 	if _, err := client.get(ctx, path, &result); err != nil {
 		return nil, err
 	}
