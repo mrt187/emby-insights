@@ -35,7 +35,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.8";
+const APP_VERSION = "0.8.9";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -487,7 +487,7 @@ function MediaDetailScreen({ selection, onClose }: { selection: MediaSelection; 
   const [detail, setDetail] = useState<MediaDetail | null>(null);
   const [state, setState] = useState<LoadState>("loading");
   const [selectedSeasons, setSelectedSeasons] = useState<number[]>([]);
-  const [requestState, setRequestState] = useState<"idle" | "submitting" | "done" | "error">("idle");
+  const [requestState, setRequestState] = useState<"idle" | "selecting" | "submitting" | "done" | "error">("idle");
   const mediaType = selection.source === "seerr" ? selection.mediaType : undefined;
 
   useEffect(() => {
@@ -522,6 +522,11 @@ function MediaDetailScreen({ selection, onClose }: { selection: MediaSelection; 
 
   const toggleSeason = (seasonNumber: number) => {
     setSelectedSeasons((current) => current.includes(seasonNumber) ? current.filter((value) => value !== seasonNumber) : [...current, seasonNumber]);
+  };
+
+  const handleRequestClick = () => {
+    if (requestableSeasons.length > 0) { setRequestState("selecting"); return; }
+    submitRequest();
   };
 
   const submitRequest = async () => {
@@ -563,23 +568,38 @@ function MediaDetailScreen({ selection, onClose }: { selection: MediaSelection; 
         </div>
         {detail.overview && <section className="media-detail-overview"><h2>Übersicht</h2><p>{detail.overview}</p></section>}
         {canRequest && <section className="media-detail-request">
-          {requestableSeasons.length > 0 && <div className="season-checklist">
-            {requestableSeasons.map((season) => <label className="season-checkbox" key={season.seasonNumber}>
-              <input type="checkbox" checked={selectedSeasons.includes(season.seasonNumber)} onChange={() => toggleSeason(season.seasonNumber)} />
-              Staffel {season.seasonNumber} <small>({season.episodeCount} Folgen)</small>
-            </label>)}
-          </div>}
           {requestState === "done"
             ? <p className="request-confirmation">Angefragt ✓</p>
-            : <button
-                type="button"
-                className="request-button"
-                disabled={requestState === "submitting" || (requestableSeasons.length > 0 && selectedSeasons.length === 0)}
-                onClick={submitRequest}
-              >
-                {requestState === "submitting" ? "Wird angefragt …" : "Anfragen"}
-              </button>}
-          {requestState === "error" && <p className="request-error">Anfrage fehlgeschlagen. Bitte später erneut versuchen.</p>}
+            : <>
+                {(requestableSeasons.length === 0 || requestState === "idle") && <button
+                  type="button"
+                  className="request-button"
+                  aria-expanded={requestableSeasons.length > 0 ? false : undefined}
+                  disabled={requestState === "submitting"}
+                  onClick={handleRequestClick}
+                >
+                  {requestState === "submitting" ? "Wird angefragt …" : "Anfragen"}
+                </button>}
+                {requestableSeasons.length > 0 && <div className={`season-reveal${requestState !== "idle" ? " open" : ""}`}>
+                  <div className="season-reveal-inner">
+                    <div className="season-checklist">
+                      {requestableSeasons.map((season) => <label className="season-checkbox" key={season.seasonNumber}>
+                        <input type="checkbox" checked={selectedSeasons.includes(season.seasonNumber)} onChange={() => toggleSeason(season.seasonNumber)} />
+                        Staffel {season.seasonNumber} <small>({season.episodeCount} Folgen)</small>
+                      </label>)}
+                    </div>
+                    <button
+                      type="button"
+                      className="request-button"
+                      disabled={requestState === "submitting" || selectedSeasons.length === 0}
+                      onClick={submitRequest}
+                    >
+                      {requestState === "submitting" ? "Wird angefragt …" : "Anfrage senden"}
+                    </button>
+                  </div>
+                </div>}
+              </>}
+          {requestState === "error" && <p className="request-error">Anfrage fehlgeschlagen. Bitte erneut versuchen.</p>}
         </section>}
         {embySeasons.length > 0 && <section className="media-detail-seasons">
           <h2>Staffeln</h2>

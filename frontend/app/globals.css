@@ -463,19 +463,29 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .cast-entry small { color: var(--muted); font-size: 11px; }
 
 .media-detail-request { display: grid; gap: 14px; }
-.season-checklist { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.season-reveal {
+  display: grid; grid-template-rows: 0fr; transition: grid-template-rows 220ms var(--ease-out);
+}
+.season-reveal.open { grid-template-rows: 1fr; }
+.season-reveal-inner { display: grid; gap: 14px; overflow: hidden; min-height: 0; }
+.season-checklist { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 .season-checkbox {
-  display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px;
+  display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px 14px; border-radius: 10px;
   background: var(--ink-raised); font-size: 13px; font-weight: 600; cursor: pointer;
 }
+.season-checkbox input { width: 18px; height: 18px; accent-color: var(--mint-bright); cursor: pointer; }
 .season-checkbox small { color: var(--muted); font-weight: 500; }
 .request-button {
-  justify-self: start; padding: 11px 22px; border: 0; border-radius: 999px; font-size: 14px; font-weight: 800;
+  justify-self: start; min-height: 44px; padding: 11px 24px; border: 0; border-radius: 999px; font-size: 14px; font-weight: 800;
   color: #0e1a13; background: var(--mint-bright); cursor: pointer; transition: opacity 160ms var(--ease-out);
 }
 .request-button:disabled { opacity: .5; cursor: not-allowed; }
 .request-confirmation { color: var(--mint-bright); font-weight: 700; font-size: 14px; }
 .request-error { color: #e88b8b; font-size: 13px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .season-reveal { transition: none; }
+}
 
 @media (max-width: 560px) {
   .media-detail-hero { grid-template-columns: 120px 1fr; gap: 16px; align-items: start; }

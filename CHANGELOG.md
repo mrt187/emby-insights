@@ -8,6 +8,15 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.9] - 2026-07-29
+
+### Changed
+
+- The season checklist for series requests is now hidden until "Anfragen" is
+  clicked, revealed with a short expand animation (`prefers-reduced-motion`
+  respected) instead of always showing under the button. Checkbox touch
+  targets now meet the 44px minimum.
+
 ## [0.8.8] - 2026-07-29
 
 ### Added
