@@ -8,6 +8,21 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.19] - 2026-07-29
+
+### Changed
+
+- Reviewed every screen against the `responsive-design` skill (container
+  queries, fluid typography, mobile-first breakpoints). Most of the app
+  already followed these practices from earlier work (`100dvh`, fluid
+  `clamp()` type scales, 44px touch targets). Replaced the one real gap: the
+  Statistics metric-card and chart grids used manually-computed viewport
+  breakpoints to approximate the sidebar-adjusted content width; `.content`
+  is now an actual CSS container (`container: content / inline-size`), so
+  those grids query their real available width directly instead of
+  hand-calculated viewport math that would drift if the sidebar width ever
+  changes.
+
 ## [0.8.18] - 2026-07-29
 
 ### Added

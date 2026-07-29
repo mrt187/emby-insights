@@ -201,7 +201,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 
 /* --------------------------------------------------------------- content */
 
-.content { display: grid; gap: 34px; }
+.content { container: content / inline-size; display: grid; gap: 34px; }
 .content > * { min-width: 0; }
 
 .section-heading { display: flex; justify-content: space-between; align-items: end; gap: 16px; }
@@ -627,15 +627,17 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .loading-copy { color: #b9c5be; }
 
 /* ============================================================ breakpoints
-   Breakpoints follow available content width, not raw viewport width:
-   content = 100vw − sidebar (264px) − 2 × clamp(24px, 5vw, 76px).       */
+   `.content` is a container (container: content / inline-size), so grids
+   that live inside it query their own available width directly instead of
+   the raw viewport — correct regardless of the sidebar's current width or
+   the screen's fluid side padding.                                        */
 
 /* Four metric cards need room to stay legible. */
-@media (max-width: 1240px) {
+@container content (max-width: 1240px) {
   .week-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
-@media (max-width: 780px) {
+@container content (max-width: 780px) {
   .chart-grid { grid-template-columns: 1fr; }
 }
 
