@@ -8,6 +8,19 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.12] - 2026-07-29
+
+### Added
+
+- The detail screen for not-yet-owned titles (Requests, discover lists) now
+  also shows Status, Erscheinungsdatum and Studios, sourced from Seerr's own
+  TMDB proxy.
+
+### Fixed
+
+- "Meine Anfragen" (both on Home and the Anfragen page) now refreshes right
+  after a request is created, instead of only updating on the next reload.
+
 ## [0.8.11] - 2026-07-29
 
 ### Fixed

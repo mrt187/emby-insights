@@ -29,6 +29,13 @@ type MediaDetail struct {
 	Cast            []Person            `json:"cast"`
 	Crew            []Person            `json:"crew"`
 	Seasons         []RequestableSeason `json:"seasons"`
+	// Status is TMDB's own production status ("Released", "Returning
+	// Series", ...), translated to German — distinct from MediaStatus below.
+	Status string `json:"status"`
+	// ReleaseDate is the raw ISO release/first-air date, so the frontend can
+	// format it however it likes (Year above is only the parsed year).
+	ReleaseDate string   `json:"releaseDate"`
+	Studios     []string `json:"studios"`
 	// MediaStatus is 0 when nobody has requested or added this title yet
 	// (Seerr's own TMDB proxy omits "mediaInfo" entirely in that case) — the
 	// frontend shows a request button only then. Non-zero values mirror
@@ -60,9 +67,13 @@ func (client *Client) MediaDetail(ctx context.Context, mediaType string, tmdbID 
 		ReleaseDate  string  `json:"releaseDate"`  // movies
 		FirstAirDate string  `json:"firstAirDate"` // tv shows
 		Runtime      int     `json:"runtime"`      // movies
+		Status       string  `json:"status"`
 		Genres       []struct {
 			Name string `json:"name"`
 		} `json:"genres"`
+		ProductionCompanies []struct {
+			Name string `json:"name"`
+		} `json:"productionCompanies"`
 		Credits struct {
 			Cast []struct {
 				Name        string `json:"name"`
@@ -109,13 +120,19 @@ func (client *Client) MediaDetail(ctx context.Context, mediaType string, tmdbID 
 		CommunityRating: result.VoteAverage,
 		Year:            year,
 		RuntimeMinutes:  result.Runtime,
+		Status:          tmdbStatusLabel(result.Status),
+		ReleaseDate:     date,
 		Genres:          []string{},
+		Studios:         []string{},
 		Cast:            []Person{},
 		Crew:            []Person{},
 		Seasons:         []RequestableSeason{},
 	}
 	if result.MediaInfo != nil {
 		detail.MediaStatus = result.MediaInfo.Status
+	}
+	for _, company := range result.ProductionCompanies {
+		detail.Studios = append(detail.Studios, company.Name)
 	}
 	for _, season := range result.Seasons {
 		if season.SeasonNumber == 0 { // "Specials" — not a real season to request
@@ -154,4 +171,31 @@ func (client *Client) MediaDetail(ctx context.Context, mediaType string, tmdbID 
 	}
 
 	return detail, nil
+}
+
+// tmdbStatusLabel translates TMDB's own English production-status strings.
+// Unrecognized values (TMDB adds new ones occasionally) pass through as-is.
+func tmdbStatusLabel(status string) string {
+	switch status {
+	case "Released":
+		return "Veröffentlicht"
+	case "Post Production":
+		return "In der Postproduktion"
+	case "In Production":
+		return "In Produktion"
+	case "Planned":
+		return "Geplant"
+	case "Rumored":
+		return "Gerücht"
+	case "Canceled":
+		return "Abgesetzt"
+	case "Ended":
+		return "Beendet"
+	case "Returning Series":
+		return "Laufende Serie"
+	case "Pilot":
+		return "Pilotfolge"
+	default:
+		return status
+	}
 }

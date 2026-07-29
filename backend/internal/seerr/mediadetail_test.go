@@ -16,8 +16,9 @@ func TestMediaDetailParsesMovie(t *testing.T) {
 		_, _ = writer.Write([]byte(`{
 			"title":"The Mandalorian and Grogu","overview":"Bounty hunter saga",
 			"posterPath":"/poster.jpg","backdropPath":"/backdrop.jpg",
-			"voteAverage":7.3,"releaseDate":"2026-05-20","runtime":132,
+			"voteAverage":7.3,"releaseDate":"2026-05-20","runtime":132,"status":"Released",
 			"genres":[{"name":"Action"},{"name":"Adventure"}],
+			"productionCompanies":[{"name":"Lucasfilm"},{"name":"Disney"}],
 			"credits":{
 				"cast":[{"name":"Pedro Pascal","character":"The Mandalorian","profilePath":"/pedro.jpg"}],
 				"crew":[{"name":"Jon Favreau","job":"Director","profilePath":"/jon.jpg"}]
@@ -32,6 +33,12 @@ func TestMediaDetailParsesMovie(t *testing.T) {
 	}
 	if detail.Title != "The Mandalorian and Grogu" || detail.Year != 2026 || detail.RuntimeMinutes != 132 {
 		t.Fatalf("detail = %#v", detail)
+	}
+	if detail.Status != "Veröffentlicht" || detail.ReleaseDate != "2026-05-20" {
+		t.Fatalf("status = %q, releaseDate = %q", detail.Status, detail.ReleaseDate)
+	}
+	if len(detail.Studios) != 2 || detail.Studios[0] != "Lucasfilm" || detail.Studios[1] != "Disney" {
+		t.Fatalf("studios = %#v", detail.Studios)
 	}
 	if len(detail.Genres) != 2 || detail.Genres[0] != "Action" {
 		t.Fatalf("genres = %#v", detail.Genres)

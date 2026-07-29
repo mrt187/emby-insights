@@ -24,6 +24,7 @@ type MediaDetail = {
   isSeries?: boolean; watchedEpisodes?: number; totalEpisodes?: number; played?: boolean;
   seasons?: MediaSeason[] | RequestableSeason[];
   mediaStatus?: number;
+  status?: string; releaseDate?: string; studios?: string[];
 };
 function isRequestableSeason(season: MediaSeason | RequestableSeason): season is RequestableSeason { return !("id" in season); }
 type IconName = "home" | "chart" | "sparkle" | "user" | "bell" | "arrow" | "close" | "clock" | "movie" | "series" | "genre";
@@ -35,12 +36,17 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.11";
+const APP_VERSION = "0.8.12";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "" : dateFormatter.format(date);
+}
+const fullDateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "long", year: "numeric" });
+function formatFullDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : fullDateFormatter.format(date);
 }
 
 export default function Home() {
@@ -78,6 +84,18 @@ export default function Home() {
       .catch(() => active && setUpcomingState("error"));
     return () => { active = false; };
   }, [user]);
+
+  const refetchRequests = () => {
+    if (!user) return;
+    fetch("/api/requests", { credentials: "include" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("requests unavailable");
+        const data = await response.json();
+        setRequestItems(data);
+        setRequestState("ready");
+      })
+      .catch(() => setRequestState("error"));
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -125,7 +143,7 @@ export default function Home() {
   const openNotices = () => { setNoticeOpen((open) => !open); setUnread(0); };
 
   return <main className="app-shell">
-    {selectedMedia && <MediaDetailScreen selection={selectedMedia} onClose={() => setSelectedMedia(null)} />}
+    {selectedMedia && <MediaDetailScreen selection={selectedMedia} onClose={() => setSelectedMedia(null)} onRequestCreated={refetchRequests} />}
     <a className="skip-link" href="#dashboard-content">Zum Inhalt springen</a>
     <aside className="side-nav" aria-label="Hauptnavigation">
       <div className="brand"><img className="brand-logo" src="/emby-insights-logo.svg" alt="Emby Insights" width="31" height="31" /><span>insights</span></div>
@@ -483,7 +501,7 @@ function Requests({ items, state, onSelectMedia }: { items: RequestItem[]; state
     <PosterRow title="Demnächst erscheinende Serien" eyebrow="SEERR · TMDB" items={upcomingSeries} state={upcomingSeriesState} emptyLabel="Keine Daten." detail={() => "Demnächst"} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />
   </div>;
 }
-function MediaDetailScreen({ selection, onClose }: { selection: MediaSelection; onClose: () => void }) {
+function MediaDetailScreen({ selection, onClose, onRequestCreated }: { selection: MediaSelection; onClose: () => void; onRequestCreated: () => void }) {
   const [detail, setDetail] = useState<MediaDetail | null>(null);
   const [state, setState] = useState<LoadState>("loading");
   const [selectedSeasons, setSelectedSeasons] = useState<number[]>([]);
@@ -541,6 +559,7 @@ function MediaDetailScreen({ selection, onClose }: { selection: MediaSelection; 
       if (!response.ok) throw new Error("request failed");
       setRequestState("done");
       setRequestModalOpen(false);
+      onRequestCreated();
     } catch {
       setRequestState("error");
     }
@@ -572,6 +591,13 @@ function MediaDetailScreen({ selection, onClose }: { selection: MediaSelection; 
             : <button type="button" className="request-button" onClick={() => setRequestModalOpen(true)}>Anfragen</button>}
         </div>}
         {detail.overview && <section className="media-detail-overview"><h2>Übersicht</h2><p>{detail.overview}</p></section>}
+        {(detail.status || detail.releaseDate || (detail.studios && detail.studios.length > 0)) && <section className="media-detail-facts">
+          <dl>
+            {detail.status && <div><dt>Status</dt><dd>{detail.status}</dd></div>}
+            {detail.releaseDate && <div><dt>Erscheinungsdatum</dt><dd>{formatFullDate(detail.releaseDate)}</dd></div>}
+            {detail.studios && detail.studios.length > 0 && <div><dt>Studios</dt><dd>{detail.studios.join(", ")}</dd></div>}
+          </dl>
+        </section>}
         {embySeasons.length > 0 && <section className="media-detail-seasons">
           <h2>Staffeln</h2>
           <div className="poster-scroller">{embySeasons.map((season) => {
