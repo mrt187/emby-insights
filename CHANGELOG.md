@@ -8,6 +8,23 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.17] - 2026-07-29
+
+### Changed
+
+- "Meine Anfragen" on the Anfragen tab is now labeled "Bereits angefragt" to
+  distinguish it from search results.
+- Home carousel: the profile tile now shows the avatar and text side by
+  side instead of stacked; the upcoming-release tile fills the whole tile
+  with the title's poster as a background image with the text overlaid; the
+  open-requests/new-for-you tile lost its internal divider line in favor of
+  a mint glow border around the whole tile.
+
+### Fixed
+
+- Search results on the Anfragen tab now hide again as soon as the search
+  field is cleared, instead of staying visible until a new search runs.
+
 ## [0.8.16] - 2026-07-29
 
 ### Changed

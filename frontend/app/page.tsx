@@ -38,7 +38,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.16";
+const APP_VERSION = "0.8.17";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -263,36 +263,35 @@ function HighlightCarousel({ user, upcoming, upcomingState, requests, requestSta
       label: "Mitglied seit",
       content: <div className="weekly-stat tone-lilac weekly-slide-profile">
         <div className="profile-avatar"><UserAvatar name={user.name} /></div>
-        <span className="weekly-label">Mitglied seit</span>
-        <strong>{userProfile ? formatFullDate(userProfile.memberSince) : "—"}</strong>
-        <small>{userProfile && totalRequests !== null ? `Zuletzt aktiv ${formatFullDate(userProfile.lastActiveDate)} · ${totalRequests} Anfragen gesamt` : "Wird geladen …"}</small>
+        <div className="weekly-slide-profile-info">
+          <span className="weekly-label">Mitglied seit</span>
+          <strong>{userProfile ? formatFullDate(userProfile.memberSince) : "—"}</strong>
+          <small>{userProfile && totalRequests !== null ? `Zuletzt aktiv ${formatFullDate(userProfile.lastActiveDate)} · ${totalRequests} Anfragen gesamt` : "Wird geladen …"}</small>
+        </div>
       </div>,
     },
     {
       key: "upcoming",
       label: "Nächste Veröffentlichung",
-      content: <div className="weekly-stat tone-blue weekly-slide-poster">
-        {upcomingState === "ready" && nextRelease
-          ? <>
-              <div className="weekly-slide-poster-image">{nextRelease.posterUrl ? <img src={nextRelease.posterUrl} alt="" /> : <span>{nextRelease.title}</span>}</div>
-              <div className="weekly-slide-poster-info">
-                <span className="weekly-label">Nächste Veröffentlichung</span>
-                <strong>{nextRelease.title}</strong>
-                <small>{formatPremiereDate(nextRelease.premiereDate)}</small>
-              </div>
-            </>
-          : <>
-              <span className="user-stat-icon"><Icon name="clock" /></span>
+      content: upcomingState === "ready" && nextRelease
+        ? <div className="weekly-stat weekly-slide-poster" style={nextRelease.posterUrl ? { backgroundImage: `url(${nextRelease.posterUrl})` } : undefined}>
+            <div className="weekly-slide-poster-overlay">
               <span className="weekly-label">Nächste Veröffentlichung</span>
-              <strong>—</strong>
-              <small>{upcomingState === "ready" ? "Nichts geplant" : loadingCopy(upcomingState)}</small>
-            </>}
-      </div>,
+              <strong>{nextRelease.title}</strong>
+              <small>{formatPremiereDate(nextRelease.premiereDate)}</small>
+            </div>
+          </div>
+        : <div className="weekly-stat tone-blue">
+            <span className="user-stat-icon"><Icon name="clock" /></span>
+            <span className="weekly-label">Nächste Veröffentlichung</span>
+            <strong>—</strong>
+            <small>{upcomingState === "ready" ? "Nichts geplant" : loadingCopy(upcomingState)}</small>
+          </div>,
     },
     {
       key: "activity",
       label: "Offene Anfragen und Neu für dich",
-      content: <div className="weekly-stat tone-peach weekly-slide-combo">
+      content: <div className="weekly-stat weekly-slide-combo">
         <div>
           <span className="user-stat-icon"><Icon name="sparkle" /></span>
           <span className="weekly-label">Offene Anfragen</span>
@@ -591,13 +590,24 @@ function Requests({ items, state, onSelectMedia }: { items: RequestItem[]; state
 
   return <div className="content page-view">
     <form className="search-form" onSubmit={runSearch}>
-      <input type="search" className="search-input" placeholder="Filme oder Serien suchen …" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Bei Seerr suchen" />
+      <input
+        type="search"
+        className="search-input"
+        placeholder="Filme oder Serien suchen …"
+        value={query}
+        onChange={(event) => {
+          const value = event.target.value;
+          setQuery(value);
+          if (value.trim() === "") setSearchState("idle");
+        }}
+        aria-label="Bei Seerr suchen"
+      />
       <button type="submit" className="search-button" disabled={searchState === "loading" || query.trim() === ""}>{searchState === "loading" ? "Wird gesucht …" : "Suchen"}</button>
     </form>
     {searchState !== "idle" && <PosterRow title="Suchergebnisse" eyebrow="SEERR · TMDB" items={searchResults} state={searchState} emptyLabel="Keine Treffer." detail={(item) => item.mediaType === "tv" ? "Serie" : "Film"} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />}
 
-    <section className="section-heading"><div><p className="eyebrow">SEERR · OFFEN</p><h2>Meine Anfragen</h2></div></section>
-    <PosterRow title="" eyebrow="" gridTitle="Meine Anfragen" items={items} state={state} emptyLabel="Keine offenen Anfragen." detail={(item) => item.status} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />
+    <section className="section-heading"><div><p className="eyebrow">SEERR · OFFEN</p><h2>Bereits angefragt</h2></div></section>
+    <PosterRow title="" eyebrow="" gridTitle="Bereits angefragt" items={items} state={state} emptyLabel="Keine offenen Anfragen." detail={(item) => item.status} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />
 
     <PosterRow title="Im Trend" eyebrow="SEERR · TMDB" items={trending} state={trendingState} emptyLabel="Nichts im Trend." detail={(item) => item.mediaType === "tv" ? "Serie" : "Film"} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />
     <PosterRow title="Beliebte Filme" eyebrow="SEERR · TMDB" items={popularMovies} state={popularMoviesState} emptyLabel="Keine Daten." detail={() => "Beliebt"} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />

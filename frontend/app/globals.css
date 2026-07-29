@@ -268,25 +268,34 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 }
 .weekly-stat small { color: #74dca1; font-size: 11px; font-weight: 700; line-height: 1.35; text-align: center; }
 
-.weekly-slide-profile .profile-avatar { margin-bottom: 6px; }
+.weekly-slide-profile { display: flex; align-items: center; gap: 18px; text-align: left; }
+.weekly-slide-profile-info { display: grid; gap: 5px; min-width: 0; text-align: left; }
+.weekly-slide-profile-info small { text-align: left; }
 
-.weekly-slide-poster { display: flex; align-items: center; gap: 18px; text-align: left; }
-.weekly-slide-poster-image {
-  flex: 0 0 76px; width: 76px; aspect-ratio: 2 / 3; overflow: hidden; border-radius: 10px;
-  background: linear-gradient(135deg, #24312c, #384a3f);
-  display: grid; place-items: center; padding: 6px; color: #f7f4ea; font-size: 11px; font-weight: 700; text-align: center;
+.weekly-slide-poster {
+  position: relative; overflow: hidden; padding: 0; display: flex; align-items: flex-end;
+  background-color: #24312c; background-size: cover; background-position: center 22%;
 }
-.weekly-slide-poster-image img { width: 100%; height: 100%; object-fit: cover; }
-.weekly-slide-poster-info { display: grid; gap: 5px; min-width: 0; text-align: left; }
-.weekly-slide-poster-info strong {
+.weekly-slide-poster::before {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(to top, rgb(10 14 18 / 92%) 12%, rgb(10 14 18 / 55%) 55%, rgb(10 14 18 / 10%) 100%);
+}
+.weekly-slide-poster-overlay {
+  position: relative; z-index: 1; width: 100%; padding: 18px 22px; display: grid; gap: 5px; text-align: left;
+}
+.weekly-slide-poster-overlay .weekly-label { color: rgb(255 255 255 / 75%); }
+.weekly-slide-poster-overlay strong {
   margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-size: clamp(18px, 2vw, 24px); letter-spacing: -.5px; line-height: 1.2;
+  color: #fff; font-size: clamp(20px, 2.2vw, 27px); letter-spacing: -.75px; line-height: 1.2;
 }
-.weekly-slide-poster-info small { text-align: left; }
+.weekly-slide-poster-overlay small { text-align: left; color: #b7e9cd; }
 
-.weekly-slide-combo { grid-template-columns: 1fr 1fr; column-gap: 16px; }
+.weekly-slide-combo {
+  grid-template-columns: 1fr 1fr; column-gap: 16px;
+  border: 1px solid rgb(76 215 154 / 35%);
+  box-shadow: 0 0 0 1px rgb(76 215 154 / 12%), 0 0 26px rgb(76 215 154 / 16%);
+}
 .weekly-slide-combo > div { display: grid; justify-items: center; gap: 4px; }
-.weekly-slide-combo > div:first-child { border-right: 1px solid var(--line); }
 
 .weekly-dots { display: flex; justify-content: center; gap: 2px; }
 .weekly-dot {
@@ -690,7 +699,8 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 
   .profile-avatar { width: 68px; height: 68px; }
   .weekly-stat { min-height: 124px; padding: 17px 18px; }
-  .weekly-slide-poster-image { flex-basis: 60px; width: 60px; }
+  .weekly-slide-poster { padding: 0; }
+  .weekly-slide-poster-overlay { padding: 15px 18px; }
   .weekly-slide-combo { column-gap: 10px; }
 }
 
