@@ -8,6 +8,27 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.3.5] - 2026-07-29
+
+### Fixed
+
+- Corrected the dashboard's responsive breakpoints so the personal overview card
+  no longer overflows horizontally between 1051px and 1177px, and removed the
+  `overflow-x: hidden` rule that had been masking it.
+- Stopped the hero headline and long favourite-genre names from being clipped on
+  tablets and phones; the statistics tiles now reflow instead of truncating.
+- Wired up the profile screen's sign-out button, which previously did nothing.
+
+### Changed
+
+- Consolidated three stacked stylesheet layers into one, removing 28 unused rule
+  blocks left over from earlier layouts.
+- Derived metric accent colours from the documented design tokens instead of DOM
+  order, so reordering cards no longer changes their colours.
+- Improved keyboard and screen-reader handling: the notifications popover closes
+  on Escape and outside clicks, the two navigation landmarks have distinct
+  labels, and touch targets meet 44px.
+
 ## [0.3.4] - 2026-07-29
 
 ### Changed
@@ -75,6 +96,7 @@ The project follows [Semantic Versioning](https://semver.org/):
 - Container images are published with the matching release version, the commit
   SHA, and `latest`.
 
+[0.3.5]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.3.5
 [0.3.3]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.3.3
 [0.3.4]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.3.4
 [0.3.2]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.3.2

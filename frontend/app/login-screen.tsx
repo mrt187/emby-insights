@@ -36,7 +36,7 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated: (user: User)
   return (
     <main className="login-shell">
       <section className="login-card" aria-labelledby="login-title">
-        <div className="login-brand"><img className="brand-logo" src="/emby-insights-logo.svg" alt="Emby Insights" /><span>insights</span></div>
+        <div className="login-brand"><img className="brand-logo" src="/emby-insights-logo.svg" alt="Emby Insights" width="31" height="31" /><span>insights</span></div>
         <p className="eyebrow">DEIN PERSÖNLICHES MEDIEN-DASHBOARD</p>
         <h1 id="login-title">Willkommen zurück.</h1>
         <p className="login-copy">Melde dich mit deinem normalen Emby-Konto an.</p>

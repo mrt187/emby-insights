@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { LoginScreen } from "./login-screen";
 
 type Page = "Heute" | "Statistik" | "Anfragen" | "Profil";
@@ -8,6 +8,7 @@ type Period = "Woche" | "Monat" | "Jahr";
 type StatisticsPeriod = "week" | "month" | "year";
 type PersonalStats = { watchSeconds: number; previousWatchSeconds: number; completedMovies: number; completedSeries: number; favouriteGenre: string; periodStartsAt: string; periodEndsAt: string };
 type IconName = "home" | "chart" | "sparkle" | "user" | "bell" | "arrow" | "clock" | "movie" | "series" | "genre";
+type Tone = "blue" | "peach" | "mint" | "lilac";
 type LoadState = "loading" | "ready" | "error";
 
 const nav: { label: Page; icon: IconName }[] = [
@@ -15,7 +16,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.3.4";
+const APP_VERSION = "0.3.5";
 
 const upcoming = [
   { date: "01. Aug.", title: "The Last of Us", art: "last" }, { date: "04. Aug.", title: "Alien: Earth", art: "alien" },
@@ -42,6 +43,8 @@ export default function Home() {
   const [checkingSession, setCheckingSession] = useState(true);
   const [weekStats, setWeekStats] = useState<PersonalStats | null>(null);
   const [weekState, setWeekState] = useState<LoadState>("loading");
+  const noticeRef = useRef<HTMLDivElement>(null);
+  const noticeButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     fetch("/api/me", { credentials: "include" })
@@ -63,13 +66,26 @@ export default function Home() {
     return () => { active = false; };
   }, [user]);
 
+  useEffect(() => {
+    if (!noticeOpen) return;
+    const close = (returnFocus: boolean) => { setNoticeOpen(false); if (returnFocus) noticeButtonRef.current?.focus(); };
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") close(true); };
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!noticeRef.current?.contains(target) && !noticeButtonRef.current?.contains(target)) close(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => { document.removeEventListener("keydown", onKeyDown); document.removeEventListener("pointerdown", onPointerDown); };
+  }, [noticeOpen]);
+
   if (checkingSession) return <main className="login-shell"><p className="loading-copy" role="status">Emby Insights wird geladen …</p></main>;
   if (!user) return <LoginScreen onAuthenticated={setUser} />;
 
   const selectPage = (next: Page) => { setPage(next); setNoticeOpen(false); };
   const openNotices = () => { setNoticeOpen((open) => !open); setUnread(0); };
 
-  return <main className="app-shell" id="main-content">
+  return <main className="app-shell">
     <a className="skip-link" href="#dashboard-content">Zum Inhalt springen</a>
     <aside className="side-nav" aria-label="Hauptnavigation">
       <div className="brand"><img className="brand-logo" src="/emby-insights-logo.svg" alt="Emby Insights" width="31" height="31" /><span>insights</span></div>
@@ -84,9 +100,9 @@ export default function Home() {
       <header className="topbar">
         <div><p className="eyebrow">DEIN PERSÖNLICHER ÜBERBLICK</p><h1>{page === "Heute" ? `${greeting()}, ${user.name}` : page}</h1></div>
         <div className="header-actions">
-          <button className="notice-button" aria-label="Benachrichtigungen" aria-expanded={noticeOpen} aria-controls="notifications" onClick={openNotices}><Icon name="bell" />{unread > 0 && <b><span className="sr-only">{unread} ungelesene Benachrichtigungen</span></b>}</button>
+          <button ref={noticeButtonRef} className="notice-button" aria-label="Benachrichtigungen" aria-expanded={noticeOpen} aria-controls="notifications" onClick={openNotices}><Icon name="bell" />{unread > 0 && <b><span className="sr-only">{unread} ungelesene Benachrichtigungen</span></b>}</button>
           <button className="avatar" aria-label="Profil öffnen" onClick={() => selectPage("Profil")}><UserAvatar name={user.name} /></button>
-          {noticeOpen && <section className="notifications" id="notifications" role="dialog" aria-label="Benachrichtigungen"><strong>Benachrichtigungen</strong><p>Deine Anfrage „Severance“ wird bearbeitet.</p><p>Am Freitag erscheint Alien: Earth.</p></section>}
+          {noticeOpen && <div ref={noticeRef} className="notifications" id="notifications" role="dialog" aria-label="Benachrichtigungen"><strong>Benachrichtigungen</strong><p>Deine Anfrage „Severance“ wird bearbeitet.</p><p>Am Freitag erscheint Alien: Earth.</p></div>}
         </div>
       </header>
       {page === "Heute" && <Today user={user} onStats={() => selectPage("Statistik")} statistics={weekStats} state={weekState} />}
@@ -95,7 +111,7 @@ export default function Home() {
       {page === "Profil" && <Profile user={user} />}
     </section>
 
-    <nav className="bottom-nav" aria-label="Hauptnavigation">{nav.map((item) => <button key={item.label} className={page === item.label ? "active" : ""} onClick={() => selectPage(item.label)} aria-current={page === item.label ? "page" : undefined}><Icon name={item.icon} /><span>{item.label}</span></button>)}</nav>
+    <nav className="bottom-nav" aria-label="Hauptnavigation (mobil)">{nav.map((item) => <button key={item.label} className={page === item.label ? "active" : ""} onClick={() => selectPage(item.label)} aria-current={page === item.label ? "page" : undefined}><Icon name={item.icon} /><span>{item.label}</span></button>)}</nav>
   </main>;
 }
 
@@ -157,16 +173,16 @@ function UserInsightCard({ user, statistics, state, detail }: { user: { name: st
       <small>{detail}</small>
     </div>
     <div className="user-insight-stats">
-      <div><span className="user-stat-icon peach"><Icon name="movie" /></span><strong>{statistics ? statistics.completedMovies : "—"}</strong><small>Filme</small></div>
-      <div><span className="user-stat-icon mint"><Icon name="series" /></span><strong>{statistics ? statistics.completedSeries : "—"}</strong><small>Serien</small></div>
-      <div><span className="user-stat-icon lilac"><Icon name="genre" /></span><strong>{statistics?.favouriteGenre || "—"}</strong><small>Lieblingsgenre</small></div>
+      <div className="tone-peach"><span className="user-stat-icon"><Icon name="movie" /></span><strong>{statistics ? statistics.completedMovies : "—"}</strong><small>Filme</small></div>
+      <div className="tone-mint"><span className="user-stat-icon"><Icon name="series" /></span><strong>{statistics ? statistics.completedSeries : "—"}</strong><small>Serien</small></div>
+      <div className="tone-lilac stat-text"><span className="user-stat-icon"><Icon name="genre" /></span><strong>{statistics?.favouriteGenre || "—"}</strong><small>Lieblingsgenre</small></div>
     </div>
     {state === "loading" && <span className="sr-only" role="status">Deine Wochenstatistik wird geladen …</span>}
   </section>;
 }
 
-function MetricCard({ icon, tone, value, label, detail, positive, genre = false }: { icon: IconName; tone: string; value: string | number; label: string; detail: string; positive?: boolean; genre?: boolean }) {
-  return <article className={genre ? "metric-card genre-card" : "metric-card"}><span className={`metric-icon ${tone}`}><Icon name={icon} /></span><strong>{value}</strong><p>{label}</p><small className={positive ? "up" : undefined}>{detail}</small></article>;
+function MetricCard({ icon, tone, value, label, detail, positive, genre = false }: { icon: IconName; tone: Tone; value: string | number; label: string; detail: string; positive?: boolean; genre?: boolean }) {
+  return <article className={`metric-card tone-${tone}${genre ? " genre-card" : ""}`}><span className="metric-icon"><Icon name={icon} /></span><strong>{value}</strong><p>{label}</p><small className={positive ? "up" : undefined}>{detail}</small></article>;
 }
 
 function PosterRow({ title, eyebrow, items, detail }: { title?: string; eyebrow?: string; items: readonly { title: string; art: string }[]; detail: (item: { title: string; art: string }) => string }) {
@@ -197,7 +213,18 @@ function Stats() {
 }
 
 function Requests() { return <div className="content page-view"><section className="section-heading"><div><p className="eyebrow">SEERR · OFFEN</p><h2>Meine Anfragen</h2></div></section><PosterRow title="" eyebrow="" items={requests} detail={(item) => item.status} /></div>; }
-function Profile({ user }: { user: { name: string } }) { return <div className="content page-view profile"><section className="profile-head"><div className="avatar big"><UserAvatar name={user.name} /></div><div><p className="eyebrow">EMBY-PROFIL</p><h2>{user.name}</h2></div></section><button className="logout-button">Abmelden</button></div>; }
+function Profile({ user }: { user: { name: string } }) {
+  const [signingOut, setSigningOut] = useState(false);
+  const logout = async () => {
+    setSigningOut(true);
+    try { await fetch("/api/auth/logout", { method: "POST", credentials: "include" }); } catch { /* reload clears the client session either way */ }
+    window.location.reload();
+  };
+  return <div className="content page-view profile">
+    <section className="profile-head"><div className="avatar big"><UserAvatar name={user.name} /></div><div><p className="eyebrow">EMBY-PROFIL</p><h2>{user.name}</h2></div></section>
+    <button className="logout-button" onClick={logout} disabled={signingOut}>{signingOut ? "Abmeldung läuft …" : "Abmelden"}</button>
+  </div>;
+}
 function greeting() { const hour = new Date().getHours(); return hour < 12 ? "Guten Morgen" : hour < 18 ? "Guten Tag" : "Guten Abend"; }
 function loadingCopy(state: LoadState) { return state === "error" ? "Nicht verfügbar" : "Wird geladen …"; }
 function formatDuration(seconds: number) { const hours = Math.floor(seconds / 3600); const minutes = Math.floor((seconds % 3600) / 60); return hours > 0 ? `${hours}\u00a0Std. ${minutes}\u00a0Min.` : `${minutes}\u00a0Min.`; }
