@@ -8,6 +8,10 @@ type Period = "Woche" | "Monat" | "Jahr";
 type StatisticsPeriod = "week" | "month" | "year";
 type PersonalStats = { watchSeconds: number; previousWatchSeconds: number; completedMovies: number; completedSeries: number; favouriteGenre: string; periodStartsAt: string; periodEndsAt: string };
 type DeviceWatchTime = { deviceName: string; watchSeconds: number };
+type HourWatchTime = { hour: number; watchSeconds: number };
+type WeekdayWatchTime = { weekday: number; watchSeconds: number };
+type LongestSession = { itemName: string; watchSeconds: number; startedAt: string };
+type MostActiveDay = { date: string; watchSeconds: number };
 type UserProfile = { memberSince: string; lastActiveDate: string; lastLoginDate: string };
 type UpcomingItem = { id: string; title: string; posterUrl: string; premiereDate: string };
 type RequestItem = { id: string; title: string; posterUrl: string; status: string; tmdbId: string; mediaType: string };
@@ -39,7 +43,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.19";
+const APP_VERSION = "0.8.20";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -191,7 +195,7 @@ export default function Home() {
       </header>
       {page === "Heute" && <Today user={user} onStats={() => selectPage("Statistik")} upcoming={upcomingItems} upcomingState={upcomingState} requests={requestItems} requestState={requestState} newForYou={newForYouItems} newForYouState={newForYouState} onSelectMedia={setSelectedMedia} />}
       {page === "Statistik" && <Stats onSelectMedia={setSelectedMedia} />}
-      {page === "Anfragen" && <Requests items={requestItems} state={requestState} onSelectMedia={setSelectedMedia} />}
+      {page === "Anfragen" && <Requests onSelectMedia={setSelectedMedia} />}
       {page === "Profil" && <Profile user={user} userProfile={userProfile} totalRequests={totalRequests} />}
     </section>
 
@@ -242,107 +246,34 @@ function UserInsightCard({ user, upcoming, upcomingState, requests, requestState
   newForYou: NewForYouItem[]; newForYouState: LoadState;
 }) {
   return <section className="user-insight-card" aria-label={`Kurzüberblick von ${user.name}`}>
-    <HighlightCarousel upcoming={upcoming} upcomingState={upcomingState} requests={requests} requestState={requestState} newForYou={newForYou} newForYouState={newForYouState} />
+    <HomeHighlights upcoming={upcoming} upcomingState={upcomingState} requests={requests} requestState={requestState} newForYou={newForYou} newForYouState={newForYouState} />
   </section>;
 }
 
-const SLIDE_INTERVAL = 5000;
-
-function HighlightCarousel({ upcoming, upcomingState, requests, requestState, newForYou, newForYouState }: {
+function HomeHighlights({ upcoming, upcomingState, requests, requestState, newForYou, newForYouState }: {
   upcoming: UpcomingItem[]; upcomingState: LoadState; requests: RequestItem[]; requestState: LoadState;
   newForYou: NewForYouItem[]; newForYouState: LoadState;
 }) {
   const nextRelease = upcoming[0];
 
-  const slides: { key: string; label: string; content: ReactNode }[] = [
-    {
-      key: "upcoming",
-      label: "Nächste Veröffentlichung",
-      content: upcomingState === "ready" && nextRelease
-        ? <div className="weekly-stat weekly-slide-poster" style={nextRelease.posterUrl ? { backgroundImage: `url(${nextRelease.posterUrl})` } : undefined}>
-            <div className="weekly-slide-poster-overlay">
-              <span className="weekly-label">Nächste Veröffentlichung</span>
-              <strong>{nextRelease.title}</strong>
-              <small>{formatPremiereDate(nextRelease.premiereDate)}</small>
-            </div>
+  return <div className="home-highlights">
+    {upcomingState === "ready" && nextRelease
+      ? <div className="highlight-hero" style={nextRelease.posterUrl ? { backgroundImage: `url(${nextRelease.posterUrl})` } : undefined}>
+          <div className="highlight-hero-overlay">
+            <p className="eyebrow">NÄCHSTE VERÖFFENTLICHUNG</p>
+            <strong>{nextRelease.title}</strong>
+            <small>{formatPremiereDate(nextRelease.premiereDate)}</small>
           </div>
-        : <div className="weekly-stat tone-blue">
-            <span className="user-stat-icon"><Icon name="clock" /></span>
-            <span className="weekly-label">Nächste Veröffentlichung</span>
-            <strong>—</strong>
-            <small>{upcomingState === "ready" ? "Nichts geplant" : loadingCopy(upcomingState)}</small>
-          </div>,
-    },
-    {
-      key: "activity",
-      label: "Offene Anfragen und Neu für dich",
-      content: <div className="weekly-stat weekly-slide-combo">
-        <div>
-          <span className="user-stat-icon"><Icon name="sparkle" /></span>
-          <span className="weekly-label">Offene Anfragen</span>
-          <strong>{requestState === "ready" ? String(requests.length) : "—"}</strong>
         </div>
-        <div>
-          <span className="user-stat-icon"><Icon name="genre" /></span>
-          <span className="weekly-label">Neu für dich</span>
-          <strong>{newForYouState === "ready" ? String(newForYou.length) : "—"}</strong>
-        </div>
-      </div>,
-    },
-  ];
-
-  const scroller = useRef<HTMLDivElement>(null);
-  const [active, setActive] = useState(0);
-  const [paused, setPaused] = useState(false);
-
-  const goTo = (index: number) => scroller.current?.scrollTo({ left: scroller.current.clientWidth * index, behavior: "smooth" });
-
-  useEffect(() => {
-    if (paused || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const timer = setInterval(() => {
-      const element = scroller.current;
-      if (!element) return;
-      const next = (Math.round(element.scrollLeft / element.clientWidth) + 1) % slides.length;
-      element.scrollTo({ left: element.clientWidth * next, behavior: "smooth" });
-    }, SLIDE_INTERVAL);
-    return () => clearInterval(timer);
-  }, [paused, slides.length]);
-
-  // Only genuine input pauses the rotation — listening to "scroll" would also
-  // catch our own programmatic advance and stop it immediately.
-  const stop = () => setPaused(true);
-
-  return <div className="weekly-carousel">
-    <div
-      ref={scroller}
-      className="weekly-scroller"
-      role="group"
-      aria-roledescription="Karussell"
-      aria-label="Deine Kurzübersicht"
-      tabIndex={0}
-      onScroll={(event) => setActive(Math.round(event.currentTarget.scrollLeft / event.currentTarget.clientWidth))}
-      onPointerDown={stop}
-      onWheel={stop}
-      onKeyDown={stop}
-    >
-      {slides.map((slide, index) => <div
-        key={slide.key}
-        className="weekly-slide"
-        role="group"
-        aria-roledescription="Folie"
-        aria-label={`${index + 1} von ${slides.length}: ${slide.label}`}
-      >
-        {slide.content}
-      </div>)}
-    </div>
-    <div className="weekly-dots">
-      {slides.map((slide, index) => <button
-        key={slide.key}
-        className={index === active ? "weekly-dot active" : "weekly-dot"}
-        aria-label={`${slide.label} anzeigen`}
-        aria-current={index === active ? "true" : undefined}
-        onClick={() => { stop(); goTo(index); }}
-      ><i /></button>)}
+      : <div className="highlight-hero highlight-hero-empty">
+          <span className="user-stat-icon"><Icon name="clock" /></span>
+          <p className="eyebrow">NÄCHSTE VERÖFFENTLICHUNG</p>
+          <strong>—</strong>
+          <small>{upcomingState === "ready" ? "Nichts geplant" : loadingCopy(upcomingState)}</small>
+        </div>}
+    <div className="highlight-stats">
+      <MetricCard icon="sparkle" tone="peach" value={requestState === "ready" ? requests.length : "—"} label="Offene Anfragen" detail={requestState === "ready" ? "Bei Seerr" : loadingCopy(requestState)} />
+      <MetricCard icon="genre" tone="mint" value={newForYouState === "ready" ? newForYou.length : "—"} label="Neu für dich" detail={newForYouState === "ready" ? "Letzte 14 Tage" : loadingCopy(newForYouState)} />
     </div>
   </div>;
 }
@@ -393,14 +324,23 @@ function topGenres(movies: readonly WatchedItem[], series: readonly WatchedItem[
 
 const WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 
-function weekdayActivity(movies: readonly WatchedItem[], series: readonly WatchedItem[]) {
-  const counts = new Array(7).fill(0);
-  for (const item of [...movies, ...series]) {
-    const date = new Date(item.lastPlayedDate);
-    if (Number.isNaN(date.getTime())) continue;
-    counts[(date.getDay() + 6) % 7] += 1;
-  }
-  return WEEKDAYS.map((label, index) => ({ label, value: counts[index] }));
+function weekdayChartData(weekdays: readonly WeekdayWatchTime[]) {
+  const seconds = new Array(7).fill(0);
+  for (const entry of weekdays) seconds[entry.weekday] = entry.watchSeconds;
+  return WEEKDAYS.map((label, index) => ({ label, value: seconds[index] }));
+}
+
+const DAYPARTS = [
+  { label: "Nacht", hours: [0, 1, 2, 3, 4, 5] },
+  { label: "Morgen", hours: [6, 7, 8, 9, 10, 11] },
+  { label: "Nachmittag", hours: [12, 13, 14, 15, 16, 17] },
+  { label: "Abend", hours: [18, 19, 20, 21, 22, 23] },
+];
+
+function daypartChartData(hours: readonly HourWatchTime[]) {
+  const secondsByHour = new Array(24).fill(0);
+  for (const entry of hours) secondsByHour[entry.hour] = entry.watchSeconds;
+  return DAYPARTS.map((daypart) => ({ label: daypart.label, value: daypart.hours.reduce((sum, hour) => sum + secondsByHour[hour], 0) }));
 }
 
 function BarChart({ title, data, formatValue }: { title: string; data: { label: string; value: number }[]; formatValue?: (value: number) => string }) {
@@ -437,6 +377,14 @@ function Stats({ onSelectMedia }: { onSelectMedia: (selection: MediaSelection) =
   const [completedGridView, setCompletedGridView] = useState<"movies" | "series" | null>(null);
   const [deviceStats, setDeviceStats] = useState<DeviceWatchTime[]>([]);
   const [deviceStatsState, setDeviceStatsState] = useState<LoadState>("loading");
+  const [hourStats, setHourStats] = useState<HourWatchTime[]>([]);
+  const [hourStatsState, setHourStatsState] = useState<LoadState>("loading");
+  const [weekdayStats, setWeekdayStats] = useState<WeekdayWatchTime[]>([]);
+  const [weekdayStatsState, setWeekdayStatsState] = useState<LoadState>("loading");
+  const [longestSession, setLongestSession] = useState<LongestSession | null>(null);
+  const [longestSessionState, setLongestSessionState] = useState<LoadState>("loading");
+  const [mostActiveDay, setMostActiveDay] = useState<MostActiveDay | null>(null);
+  const [mostActiveDayState, setMostActiveDayState] = useState<LoadState>("loading");
 
   useEffect(() => {
     let active = true;
@@ -494,8 +442,40 @@ function Stats({ onSelectMedia }: { onSelectMedia: (selection: MediaSelection) =
     return () => { active = false; };
   }, [period]);
 
+  useEffect(() => {
+    let active = true;
+    fetch(`/api/stats/hours?period=${apiPeriod[period]}`, { credentials: "include" })
+      .then(async (response) => { if (!response.ok) throw new Error("hour statistics unavailable"); const data = await response.json(); if (active) { setHourStats(data); setHourStatsState("ready"); } })
+      .catch(() => active && setHourStatsState("error"));
+    return () => { active = false; };
+  }, [period]);
+
+  useEffect(() => {
+    let active = true;
+    fetch(`/api/stats/weekdays?period=${apiPeriod[period]}`, { credentials: "include" })
+      .then(async (response) => { if (!response.ok) throw new Error("weekday statistics unavailable"); const data = await response.json(); if (active) { setWeekdayStats(data); setWeekdayStatsState("ready"); } })
+      .catch(() => active && setWeekdayStatsState("error"));
+    return () => { active = false; };
+  }, [period]);
+
+  useEffect(() => {
+    let active = true;
+    fetch(`/api/stats/longest-session?period=${apiPeriod[period]}`, { credentials: "include" })
+      .then(async (response) => { if (!response.ok) throw new Error("longest session unavailable"); const data = await response.json(); if (active) { setLongestSession(data); setLongestSessionState("ready"); } })
+      .catch(() => active && setLongestSessionState("error"));
+    return () => { active = false; };
+  }, [period]);
+
+  useEffect(() => {
+    let active = true;
+    fetch(`/api/stats/most-active-day?period=${apiPeriod[period]}`, { credentials: "include" })
+      .then(async (response) => { if (!response.ok) throw new Error("most active day unavailable"); const data = await response.json(); if (active) { setMostActiveDay(data); setMostActiveDayState("ready"); } })
+      .catch(() => active && setMostActiveDayState("error"));
+    return () => { active = false; };
+  }, [period]);
+
   return <div className="content page-view">
-    <section className="period-tabs" aria-label="Zeitraum auswählen">{(["Woche", "Monat", "Jahr"] as Period[]).map((item) => <button className={period === item ? "selected" : ""} onClick={() => { setStatistics(null); setState("loading"); setCompletedMoviesState("loading"); setCompletedSeriesState("loading"); setDeviceStatsState("loading"); setPeriod(item); }} key={item} aria-pressed={period === item}>{item}</button>)}</section>
+    <section className="period-tabs" aria-label="Zeitraum auswählen">{(["Woche", "Monat", "Jahr"] as Period[]).map((item) => <button className={period === item ? "selected" : ""} onClick={() => { setStatistics(null); setState("loading"); setCompletedMoviesState("loading"); setCompletedSeriesState("loading"); setDeviceStatsState("loading"); setHourStatsState("loading"); setWeekdayStatsState("loading"); setLongestSessionState("loading"); setMostActiveDayState("loading"); setPeriod(item); }} key={item} aria-pressed={period === item}>{item}</button>)}</section>
     <section className="week-grid" aria-label={`Kennzahlen für ${period}`}>
       <MetricCard icon="clock" tone="blue" value={statistics ? formatDuration(statistics.watchSeconds) : "—"} label="Sehzeit" detail={statistics ? comparisonText(statistics) : loadingCopy(state)} />
       <MetricCard icon="movie" tone="peach" value={statistics ? statistics.completedMovies : "—"} label="Filme abgeschlossen" detail={statistics ? period : loadingCopy(state)} onClick={statistics && statistics.completedMovies > 0 && completedMoviesState === "ready" ? () => setCompletedGridView("movies") : undefined} />
@@ -509,8 +489,14 @@ function Stats({ onSelectMedia }: { onSelectMedia: (selection: MediaSelection) =
 
     <section className="chart-grid">
       <BarChart title="Meistgesehene Genres" data={topGenres(watchedMovies, watchedSeries)} />
-      <BarChart title="Aktivität nach Wochentag" data={weekdayActivity(watchedMovies, watchedSeries)} />
+      <BarChart title="Aktivität nach Wochentag" data={weekdayStatsState === "ready" ? weekdayChartData(weekdayStats) : []} formatValue={formatDuration} />
+      <BarChart title="Aktivität nach Uhrzeit" data={hourStatsState === "ready" ? daypartChartData(hourStats) : []} formatValue={formatDuration} />
       <BarChart title="Nach Gerät" data={deviceStatsState === "ready" ? deviceStats.slice(0, 6).map((device) => ({ label: device.deviceName, value: device.watchSeconds })) : []} formatValue={formatDuration} />
+    </section>
+
+    <section className="records-grid" aria-label="Rekorde">
+      <MetricCard icon="clock" tone="lilac" value={longestSessionState === "ready" && longestSession ? formatDuration(longestSession.watchSeconds) : "—"} label="Längste Session" detail={longestSessionState === "ready" ? (longestSession?.itemName ?? "Keine Daten für diesen Zeitraum") : loadingCopy(longestSessionState)} />
+      <MetricCard icon="genre" tone="peach" value={mostActiveDayState === "ready" && mostActiveDay ? formatFullDate(mostActiveDay.date) : "—"} label="Aktivster Tag" detail={mostActiveDayState === "ready" ? (mostActiveDay ? formatDuration(mostActiveDay.watchSeconds) : "Keine Daten für diesen Zeitraum") : loadingCopy(mostActiveDayState)} />
     </section>
 
     {completedGridView === "movies" && <MediaGridScreen title={`Filme abgeschlossen · ${period}`} items={completedMovies} detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setCompletedGridView(null)} />}
@@ -562,7 +548,7 @@ function useDiscoverList(path: string) {
   return [items, state] as const;
 }
 
-function Requests({ items, state, onSelectMedia }: { items: RequestItem[]; state: LoadState; onSelectMedia: (selection: MediaSelection) => void }) {
+function Requests({ onSelectMedia }: { onSelectMedia: (selection: MediaSelection) => void }) {
   const [trending, trendingState] = useDiscoverList("/api/discover/trending");
   const [popularMovies, popularMoviesState] = useDiscoverList("/api/discover/movies/popular");
   const [upcomingMovies, upcomingMoviesState] = useDiscoverList("/api/discover/movies/upcoming");
@@ -614,9 +600,6 @@ function Requests({ items, state, onSelectMedia }: { items: RequestItem[]; state
         <button type="submit" className="search-button" disabled={query.trim() === ""}>Suchen</button>
       </form>}
     />}
-
-    <section className="section-heading"><div><p className="eyebrow">SEERR · OFFEN</p><h2>Bereits angefragt</h2></div></section>
-    <PosterRow title="" eyebrow="" gridTitle="Bereits angefragt" items={items} state={state} emptyLabel="Keine offenen Anfragen." detail={(item) => item.status} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />
 
     <PosterRow title="Im Trend" eyebrow="SEERR · TMDB" items={trending} state={trendingState} emptyLabel="Nichts im Trend." detail={(item) => item.mediaType === "tv" ? "Serie" : "Film"} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />
     <PosterRow title="Beliebte Filme" eyebrow="SEERR · TMDB" items={popularMovies} state={popularMoviesState} emptyLabel="Keine Daten." detail={() => "Beliebt"} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />

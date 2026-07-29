@@ -232,69 +232,36 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
    new-for-you side by side. Swiping is native scroll snapping — no gesture
    handling in JS.                                                          */
 
-.weekly-carousel { display: grid; align-content: stretch; gap: 10px; min-width: 0; }
+.home-highlights { display: grid; gap: 14px; }
 
-.weekly-scroller {
-  display: flex; overflow-x: auto; border-radius: 16px;
-  scroll-snap-type: x mandatory; overscroll-behavior-x: contain;
-  scrollbar-width: none;
-}
-.weekly-scroller::-webkit-scrollbar { display: none; }
-.weekly-scroller:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px; }
-
-.weekly-slide { flex: 0 0 100%; min-width: 0; scroll-snap-align: start; display: grid; }
-.weekly-stat {
-  width: 100%; display: grid; align-content: center; justify-items: center; text-align: center;
-  min-height: 148px; padding: 20px 22px; border-radius: 16px;
-  background: linear-gradient(145deg, #30333d, #292c34);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 5%);
-}
-.weekly-stat .user-stat-icon { margin-bottom: 12px; }
-.weekly-label {
-  color: #9ca7a2; font-size: 10px; font-weight: 800; letter-spacing: 1.1px; text-transform: uppercase;
-}
-.weekly-stat strong {
-  max-width: 100%; margin: 7px 0; color: #f7fbf8; font-size: clamp(28px, 3vw, 40px);
-  font-weight: 800; letter-spacing: -2px; line-height: 1; font-variant-numeric: tabular-nums;
-}
-.weekly-stat small { color: #74dca1; font-size: 11px; font-weight: 700; line-height: 1.35; text-align: center; }
-
-.weekly-slide-poster {
-  position: relative; overflow: hidden; padding: 0; display: flex; align-items: flex-end;
+.highlight-hero {
+  position: relative; overflow: hidden; min-height: 168px; border-radius: 16px;
+  display: flex; align-items: flex-end;
   background-color: #24312c; background-size: cover; background-position: center 22%;
 }
-.weekly-slide-poster::before {
+.highlight-hero::before {
   content: ""; position: absolute; inset: 0;
   background: linear-gradient(to top, rgb(10 14 18 / 92%) 12%, rgb(10 14 18 / 55%) 55%, rgb(10 14 18 / 10%) 100%);
 }
-.weekly-slide-poster-overlay {
-  position: relative; z-index: 1; width: 100%; padding: 18px 22px; display: grid; gap: 5px; text-align: left;
+.highlight-hero-overlay { position: relative; z-index: 1; width: 100%; padding: 20px 22px; display: grid; gap: 5px; }
+.highlight-hero-overlay .eyebrow { margin: 0; color: rgb(255 255 255 / 75%); }
+.highlight-hero-overlay strong {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: #fff; font-size: clamp(20px, 2.2vw, 28px); font-weight: 800; letter-spacing: -.75px; line-height: 1.2;
 }
-.weekly-slide-poster-overlay .weekly-label { color: rgb(255 255 255 / 75%); }
-.weekly-slide-poster-overlay strong {
-  margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  color: #fff; font-size: clamp(20px, 2.2vw, 27px); letter-spacing: -.75px; line-height: 1.2;
-}
-.weekly-slide-poster-overlay small { text-align: left; color: #b7e9cd; }
+.highlight-hero-overlay small { color: #b7e9cd; font-size: 11px; font-weight: 700; }
 
-.weekly-slide-combo {
-  grid-template-columns: 1fr 1fr; column-gap: 16px;
-  border: 1px solid rgb(76 215 154 / 35%);
-  box-shadow: 0 0 0 1px rgb(76 215 154 / 12%), 0 0 26px rgb(76 215 154 / 16%);
+.highlight-hero-empty {
+  display: grid; align-content: center; justify-items: center; text-align: center; padding: 20px 22px;
+  background: linear-gradient(145deg, #30333d, #292c34);
 }
-.weekly-slide-combo > div { display: grid; justify-items: center; gap: 4px; }
+.highlight-hero-empty .eyebrow { margin: 0; }
+.highlight-hero-empty strong {
+  margin: 7px 0; color: #f7fbf8; font-size: clamp(28px, 3vw, 40px); font-weight: 800; letter-spacing: -2px; line-height: 1;
+}
+.highlight-hero-empty small { color: #74dca1; font-size: 11px; font-weight: 700; }
 
-.weekly-dots { display: flex; justify-content: center; gap: 2px; }
-.weekly-dot {
-  display: grid; place-items: center; width: 30px; min-height: 30px;
-  border: 0; border-radius: 9px; background: transparent;
-}
-.weekly-dot i {
-  width: 7px; height: 7px; border-radius: 50%; background: #4d545e;
-  transition: background-color 180ms ease, transform 180ms var(--ease-out);
-}
-.weekly-dot:hover i { background: #6d7784; }
-.weekly-dot.active i { background: var(--mint-bright); transform: scale(1.25); }
+.highlight-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 
 /* ------------------------------------------------------------ tone icons */
 
@@ -312,6 +279,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 /* ---------------------------------------------------------- metric cards */
 
 .week-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.records-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
 
 .metric-card {
   position: relative; overflow: hidden; min-height: 108px; padding: 14px 16px;
@@ -655,7 +623,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   .topbar { padding-bottom: 27px; }
 
   .user-insight-card { padding: 13px; border-radius: 19px; }
-  .weekly-stat { min-height: 132px; }
+  .highlight-hero, .highlight-hero-empty { min-height: 132px; }
 
   .bottom-nav {
     position: fixed; z-index: var(--z-navigation); bottom: 0; left: 0; right: 0;
@@ -687,10 +655,9 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   .poster-entry { flex-basis: 143px; }
   .poster.wide { height: 206px; border-radius: 16px; }
 
-  .weekly-stat { min-height: 124px; padding: 17px 18px; }
-  .weekly-slide-poster { padding: 0; }
-  .weekly-slide-poster-overlay { padding: 15px 18px; }
-  .weekly-slide-combo { column-gap: 10px; }
+  .highlight-hero, .highlight-hero-empty { min-height: 124px; }
+  .highlight-hero-overlay, .highlight-hero-empty { padding: 15px 18px; }
+  .highlight-stats { gap: 10px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

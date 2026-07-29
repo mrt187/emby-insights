@@ -8,6 +8,29 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.20] - 2026-07-29
+
+### Changed
+
+- Replaced the rotating Home carousel entirely: a fixed hero tile for the
+  next upcoming release, plus two always-visible tiles for open requests
+  and new-for-you — no more rotation, dots or auto-advance. Three earlier
+  attempts at refining the carousel's visuals never addressed the actual
+  problem: a cinematic poster hero and two abstract counters don't belong
+  in the same rotating tile.
+- Removed the redundant "Bereits angefragt" list from the Anfragen tab —
+  the same open requests already appear on the Home page.
+- "Aktivität nach Wochentag" now reads real Playback Reporting sessions
+  instead of approximating from each fully-watched title's last-played
+  date (which missed partially-watched series entirely).
+
+### Added
+
+- Statistics gained "Aktivität nach Uhrzeit" (by time of day, bucketed into
+  Nacht/Morgen/Nachmittag/Abend) and two record tiles: längste Session and
+  aktivster Tag im gewählten Zeitraum. Requires the updated connector
+  plugin (v0.2.5.0).
+
 ## [0.8.19] - 2026-07-29
 
 ### Changed

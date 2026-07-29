@@ -95,3 +95,111 @@ func TestDeviceWatchTimesUsesAdminAPIKey(t *testing.T) {
 		t.Fatalf("devices = %#v", devices)
 	}
 }
+
+func TestHourWatchTimesUsesAdminAPIKey(t *testing.T) {
+	testServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/emby/EmbyInsights/PersonalStats/Hours" {
+			t.Fatalf("path = %q", request.URL.Path)
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`[{"hour":21,"watchSeconds":7200}]`))
+	}))
+	defer testServer.Close()
+
+	hours, err := NewClient(testServer.URL+"/emby", "dashboard-device", "admin-key").HourWatchTimes(context.Background(), "user-1", "week")
+	if err != nil {
+		t.Fatalf("HourWatchTimes() error = %v", err)
+	}
+	if len(hours) != 1 || hours[0].Hour != 21 || hours[0].WatchSeconds != 7200 {
+		t.Fatalf("hours = %#v", hours)
+	}
+}
+
+func TestWeekdayWatchTimesUsesAdminAPIKey(t *testing.T) {
+	testServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/emby/EmbyInsights/PersonalStats/Weekdays" {
+			t.Fatalf("path = %q", request.URL.Path)
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`[{"weekday":0,"watchSeconds":1800}]`))
+	}))
+	defer testServer.Close()
+
+	weekdays, err := NewClient(testServer.URL+"/emby", "dashboard-device", "admin-key").WeekdayWatchTimes(context.Background(), "user-1", "week")
+	if err != nil {
+		t.Fatalf("WeekdayWatchTimes() error = %v", err)
+	}
+	if len(weekdays) != 1 || weekdays[0].Weekday != 0 || weekdays[0].WatchSeconds != 1800 {
+		t.Fatalf("weekdays = %#v", weekdays)
+	}
+}
+
+func TestLongestSessionReportsNotFoundWhenEmpty(t *testing.T) {
+	testServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/emby/EmbyInsights/PersonalStats/LongestSession" {
+			t.Fatalf("path = %q", request.URL.Path)
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"itemName":"","watchSeconds":0,"startedAt":"0001-01-01T00:00:00+00:00"}`))
+	}))
+	defer testServer.Close()
+
+	session, found, err := NewClient(testServer.URL+"/emby", "dashboard-device", "admin-key").LongestSession(context.Background(), "user-1", "week")
+	if err != nil {
+		t.Fatalf("LongestSession() error = %v", err)
+	}
+	if found {
+		t.Fatalf("found = true, want false for an empty period, session = %#v", session)
+	}
+}
+
+func TestLongestSessionReadsRealSession(t *testing.T) {
+	testServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"itemName":"Shelter","watchSeconds":12531,"startedAt":"2026-03-29T00:49:18Z"}`))
+	}))
+	defer testServer.Close()
+
+	session, found, err := NewClient(testServer.URL+"/emby", "dashboard-device", "admin-key").LongestSession(context.Background(), "user-1", "year")
+	if err != nil {
+		t.Fatalf("LongestSession() error = %v", err)
+	}
+	if !found || session.ItemName != "Shelter" || session.WatchSeconds != 12531 {
+		t.Fatalf("found = %v, session = %#v", found, session)
+	}
+}
+
+func TestMostActiveDayReportsNotFoundWhenEmpty(t *testing.T) {
+	testServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/emby/EmbyInsights/PersonalStats/MostActiveDay" {
+			t.Fatalf("path = %q", request.URL.Path)
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"date":"0001-01-01T00:00:00+00:00","watchSeconds":0}`))
+	}))
+	defer testServer.Close()
+
+	day, found, err := NewClient(testServer.URL+"/emby", "dashboard-device", "admin-key").MostActiveDay(context.Background(), "user-1", "week")
+	if err != nil {
+		t.Fatalf("MostActiveDay() error = %v", err)
+	}
+	if found {
+		t.Fatalf("found = true, want false for an empty period, day = %#v", day)
+	}
+}
+
+func TestMostActiveDayReadsRealDay(t *testing.T) {
+	testServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"date":"2026-02-01T00:00:00Z","watchSeconds":31924}`))
+	}))
+	defer testServer.Close()
+
+	day, found, err := NewClient(testServer.URL+"/emby", "dashboard-device", "admin-key").MostActiveDay(context.Background(), "user-1", "year")
+	if err != nil {
+		t.Fatalf("MostActiveDay() error = %v", err)
+	}
+	if !found || day.WatchSeconds != 31924 {
+		t.Fatalf("found = %v, day = %#v", found, day)
+	}
+}

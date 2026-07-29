@@ -61,6 +61,29 @@ func (reader *fakeDeviceStatisticsReader) DeviceWatchTimes(_ context.Context, us
 	return reader.devices, nil
 }
 
+type fakeSessionStatisticsReader struct {
+	hours            []emby.HourWatchTime
+	weekdays         []emby.WeekdayWatchTime
+	longestSession   emby.LongestSession
+	longestSessionOK bool
+	mostActiveDay    emby.MostActiveDay
+	mostActiveDayOK  bool
+	err              error
+}
+
+func (reader *fakeSessionStatisticsReader) HourWatchTimes(context.Context, string, string) ([]emby.HourWatchTime, error) {
+	return reader.hours, reader.err
+}
+func (reader *fakeSessionStatisticsReader) WeekdayWatchTimes(context.Context, string, string) ([]emby.WeekdayWatchTime, error) {
+	return reader.weekdays, reader.err
+}
+func (reader *fakeSessionStatisticsReader) LongestSession(context.Context, string, string) (emby.LongestSession, bool, error) {
+	return reader.longestSession, reader.longestSessionOK, reader.err
+}
+func (reader *fakeSessionStatisticsReader) MostActiveDay(context.Context, string, string) (emby.MostActiveDay, bool, error) {
+	return reader.mostActiveDay, reader.mostActiveDayOK, reader.err
+}
+
 func (reader *fakeStatisticsReader) PersonalWatchTime(_ context.Context, userID, period string) (emby.PersonalWatchTime, error) {
 	reader.userID = userID
 	reader.period = period
@@ -310,6 +333,86 @@ func TestDeviceStatsUsesSessionIdentity(t *testing.T) {
 	}
 	if reader.userID != "user-1" || reader.period != "year" {
 		t.Fatalf("userID = %q, period = %q", reader.userID, reader.period)
+	}
+}
+
+func TestHourAndWeekdayStatsRequireAuthAndReturnData(t *testing.T) {
+	store := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	reader := &fakeSessionStatisticsReader{
+		hours:    []emby.HourWatchTime{{Hour: 21, WatchSeconds: 7200}},
+		weekdays: []emby.WeekdayWatchTime{{Weekday: 0, WatchSeconds: 1800}},
+	}
+	app := &App{sessions: store, sessionStatistics: reader}
+
+	hoursRequest := httptest.NewRequest(http.MethodGet, "/api/stats/hours", nil)
+	hoursRequest.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	hoursRecorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(hoursRecorder, hoursRequest)
+	if hoursRecorder.Code != http.StatusOK || !strings.Contains(hoursRecorder.Body.String(), "7200") {
+		t.Fatalf("hours status = %d, body = %s", hoursRecorder.Code, hoursRecorder.Body.String())
+	}
+
+	weekdaysRequest := httptest.NewRequest(http.MethodGet, "/api/stats/weekdays", nil)
+	weekdaysRequest.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	weekdaysRecorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(weekdaysRecorder, weekdaysRequest)
+	if weekdaysRecorder.Code != http.StatusOK || !strings.Contains(weekdaysRecorder.Body.String(), "1800") {
+		t.Fatalf("weekdays status = %d, body = %s", weekdaysRecorder.Code, weekdaysRecorder.Body.String())
+	}
+
+	unauth := httptest.NewRequest(http.MethodGet, "/api/stats/hours", nil)
+	unauthRecorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(unauthRecorder, unauth)
+	if unauthRecorder.Code != http.StatusUnauthorized {
+		t.Fatalf("unauth status = %d", unauthRecorder.Code)
+	}
+}
+
+func TestLongestSessionAndMostActiveDayHandleNotFound(t *testing.T) {
+	store := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	app := &App{sessions: store, sessionStatistics: &fakeSessionStatisticsReader{}}
+
+	sessionRequest := httptest.NewRequest(http.MethodGet, "/api/stats/longest-session", nil)
+	sessionRequest.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	sessionRecorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(sessionRecorder, sessionRequest)
+	if sessionRecorder.Code != http.StatusOK || strings.TrimSpace(sessionRecorder.Body.String()) != "null" {
+		t.Fatalf("longest-session status = %d, body = %s", sessionRecorder.Code, sessionRecorder.Body.String())
+	}
+
+	dayRequest := httptest.NewRequest(http.MethodGet, "/api/stats/most-active-day", nil)
+	dayRequest.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	dayRecorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(dayRecorder, dayRequest)
+	if dayRecorder.Code != http.StatusOK || strings.TrimSpace(dayRecorder.Body.String()) != "null" {
+		t.Fatalf("most-active-day status = %d, body = %s", dayRecorder.Code, dayRecorder.Body.String())
+	}
+}
+
+func TestLongestSessionAndMostActiveDayReturnData(t *testing.T) {
+	store := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	reader := &fakeSessionStatisticsReader{
+		longestSession:   emby.LongestSession{ItemName: "Shelter", WatchSeconds: 12531},
+		longestSessionOK: true,
+		mostActiveDay:    emby.MostActiveDay{Date: "2026-02-01", WatchSeconds: 31924},
+		mostActiveDayOK:  true,
+	}
+	app := &App{sessions: store, sessionStatistics: reader}
+
+	sessionRequest := httptest.NewRequest(http.MethodGet, "/api/stats/longest-session", nil)
+	sessionRequest.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	sessionRecorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(sessionRecorder, sessionRequest)
+	if sessionRecorder.Code != http.StatusOK || !strings.Contains(sessionRecorder.Body.String(), "Shelter") {
+		t.Fatalf("longest-session status = %d, body = %s", sessionRecorder.Code, sessionRecorder.Body.String())
+	}
+
+	dayRequest := httptest.NewRequest(http.MethodGet, "/api/stats/most-active-day", nil)
+	dayRequest.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	dayRecorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(dayRecorder, dayRequest)
+	if dayRecorder.Code != http.StatusOK || !strings.Contains(dayRecorder.Body.String(), "31924") {
+		t.Fatalf("most-active-day status = %d, body = %s", dayRecorder.Code, dayRecorder.Body.String())
 	}
 }
 

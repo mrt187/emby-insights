@@ -24,6 +24,7 @@ type App struct {
 	authenticator        emby.Authenticator
 	statistics           emby.PersonalStatisticsReader
 	deviceStatistics     emby.DeviceStatisticsReader
+	sessionStatistics    emby.SessionStatisticsReader
 	avatars              emby.AvatarReader
 	upcoming             emby.UpcomingReader
 	comingSoonLibraryIDs []string
@@ -63,6 +64,7 @@ func New(cfg config.Config) (*App, error) {
 		authenticator:        embyClient,
 		statistics:           embyClient,
 		deviceStatistics:     embyClient,
+		sessionStatistics:    embyClient,
 		avatars:              embyClient,
 		upcoming:             embyClient,
 		comingSoonLibraryIDs: cfg.EmbyComingSoonLibraryIDs,
@@ -97,6 +99,10 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/me/profile", app.meProfile)
 	mux.HandleFunc("GET /api/stats", app.stats)
 	mux.HandleFunc("GET /api/stats/devices", app.deviceStats)
+	mux.HandleFunc("GET /api/stats/hours", app.hourStats)
+	mux.HandleFunc("GET /api/stats/weekdays", app.weekdayStats)
+	mux.HandleFunc("GET /api/stats/longest-session", app.longestSessionStats)
+	mux.HandleFunc("GET /api/stats/most-active-day", app.mostActiveDayStats)
 	mux.HandleFunc("GET /api/upcoming", app.upcomingItems)
 	mux.HandleFunc("GET /api/requests", app.myRequests)
 	mux.HandleFunc("GET /api/requests/total", app.requestsTotal)
@@ -227,6 +233,82 @@ func (app *App) deviceStats(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	respondJSON(writer, http.StatusOK, orEmpty(devices))
+}
+
+func (app *App) hourStats(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	period, ok := parsePeriod(writer, request)
+	if !ok {
+		return
+	}
+	hours, err := app.sessionStatistics.HourWatchTimes(request.Context(), identity.UserID, period)
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "hour statistics are unavailable"})
+		return
+	}
+	respondJSON(writer, http.StatusOK, orEmpty(hours))
+}
+
+func (app *App) weekdayStats(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	period, ok := parsePeriod(writer, request)
+	if !ok {
+		return
+	}
+	weekdays, err := app.sessionStatistics.WeekdayWatchTimes(request.Context(), identity.UserID, period)
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "weekday statistics are unavailable"})
+		return
+	}
+	respondJSON(writer, http.StatusOK, orEmpty(weekdays))
+}
+
+func (app *App) longestSessionStats(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	period, ok := parsePeriod(writer, request)
+	if !ok {
+		return
+	}
+	session, found, err := app.sessionStatistics.LongestSession(request.Context(), identity.UserID, period)
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "longest-session statistics are unavailable"})
+		return
+	}
+	if !found {
+		respondJSON(writer, http.StatusOK, nil)
+		return
+	}
+	respondJSON(writer, http.StatusOK, session)
+}
+
+func (app *App) mostActiveDayStats(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	period, ok := parsePeriod(writer, request)
+	if !ok {
+		return
+	}
+	day, found, err := app.sessionStatistics.MostActiveDay(request.Context(), identity.UserID, period)
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "most-active-day statistics are unavailable"})
+		return
+	}
+	if !found {
+		respondJSON(writer, http.StatusOK, nil)
+		return
+	}
+	respondJSON(writer, http.StatusOK, day)
 }
 
 func parsePeriod(writer http.ResponseWriter, request *http.Request) (string, bool) {

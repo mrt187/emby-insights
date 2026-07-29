@@ -58,6 +58,95 @@ func (client *Client) DeviceWatchTimes(ctx context.Context, userID, period strin
 	return devices, nil
 }
 
+type HourWatchTime struct {
+	Hour         int   `json:"hour"`
+	WatchSeconds int64 `json:"watchSeconds"`
+}
+
+type WeekdayWatchTime struct {
+	// Weekday is 0=Monday..6=Sunday, already remapped by the plugin.
+	Weekday      int   `json:"weekday"`
+	WatchSeconds int64 `json:"watchSeconds"`
+}
+
+type LongestSession struct {
+	ItemName     string `json:"itemName"`
+	WatchSeconds int64  `json:"watchSeconds"`
+	StartedAt    string `json:"startedAt"`
+}
+
+type MostActiveDay struct {
+	Date         string `json:"date"`
+	WatchSeconds int64  `json:"watchSeconds"`
+}
+
+// SessionStatisticsReader groups the personal-statistics endpoints that read
+// directly off Playback Reporting's own session records (as opposed to
+// PersonalWatchTime's coarser per-item completion data).
+type SessionStatisticsReader interface {
+	HourWatchTimes(ctx context.Context, userID, period string) ([]HourWatchTime, error)
+	WeekdayWatchTimes(ctx context.Context, userID, period string) ([]WeekdayWatchTime, error)
+	LongestSession(ctx context.Context, userID, period string) (LongestSession, bool, error)
+	MostActiveDay(ctx context.Context, userID, period string) (MostActiveDay, bool, error)
+}
+
+func (client *Client) HourWatchTimes(ctx context.Context, userID, period string) ([]HourWatchTime, error) {
+	var hours []HourWatchTime
+	if err := client.getPersonalStats(ctx, "/EmbyInsights/PersonalStats/Hours", userID, period, &hours); err != nil {
+		return nil, err
+	}
+	return hours, nil
+}
+
+func (client *Client) WeekdayWatchTimes(ctx context.Context, userID, period string) ([]WeekdayWatchTime, error) {
+	var weekdays []WeekdayWatchTime
+	if err := client.getPersonalStats(ctx, "/EmbyInsights/PersonalStats/Weekdays", userID, period, &weekdays); err != nil {
+		return nil, err
+	}
+	return weekdays, nil
+}
+
+// LongestSession reports false when there were no playback sessions in the
+// period (the plugin represents that as a zero-value DTO rather than an
+// error, since an empty period is an expected outcome, not a failure).
+func (client *Client) LongestSession(ctx context.Context, userID, period string) (LongestSession, bool, error) {
+	var session LongestSession
+	if err := client.getPersonalStats(ctx, "/EmbyInsights/PersonalStats/LongestSession", userID, period, &session); err != nil {
+		return LongestSession{}, false, err
+	}
+	return session, session.ItemName != "", nil
+}
+
+func (client *Client) MostActiveDay(ctx context.Context, userID, period string) (MostActiveDay, bool, error) {
+	var day MostActiveDay
+	if err := client.getPersonalStats(ctx, "/EmbyInsights/PersonalStats/MostActiveDay", userID, period, &day); err != nil {
+		return MostActiveDay{}, false, err
+	}
+	return day, day.WatchSeconds > 0, nil
+}
+
+func (client *Client) getPersonalStats(ctx context.Context, path, userID, period string, target any) error {
+	query := url.Values{"UserId": {userID}, "Period": {period}}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, client.baseURL+path+"?"+query.Encode(), nil)
+	if err != nil {
+		return err
+	}
+	request.Header.Set("X-Emby-Token", client.adminAPIKey)
+
+	response, err := client.httpClient.Do(request)
+	if err != nil {
+		return fmt.Errorf("call Emby Insights %s: %w", path, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return fmt.Errorf("Emby Insights %s returned %s", path, response.Status)
+	}
+	if err := json.NewDecoder(response.Body).Decode(target); err != nil {
+		return fmt.Errorf("decode Emby Insights %s: %w", path, err)
+	}
+	return nil
+}
+
 func (client *Client) PersonalWatchTime(ctx context.Context, userID, period string) (PersonalWatchTime, error) {
 	query := url.Values{"UserId": {userID}, "Period": {period}}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, client.baseURL+"/EmbyInsights/PersonalStats?"+query.Encode(), nil)
