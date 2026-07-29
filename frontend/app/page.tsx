@@ -16,12 +16,16 @@ type DiscoverItem = { id: string; title: string; posterUrl: string; mediaType: s
 type MediaSelection = { source: "emby"; id: string } | { source: "seerr"; id: string; mediaType: string };
 type MediaPerson = { name: string; role: string; imageUrl: string };
 type MediaSeason = { id: string; title: string; posterUrl: string; indexNumber: number; watchedEpisodes: number; totalEpisodes: number; played: boolean };
+type RequestableSeason = { seasonNumber: number; episodeCount: number };
 type MediaDetail = {
   id: string; title: string; overview: string; posterUrl: string; backdropUrl: string;
   genres: string[]; communityRating: number; officialRating?: string; year: number; runtimeMinutes: number;
   cast: MediaPerson[]; crew: MediaPerson[];
-  isSeries?: boolean; watchedEpisodes?: number; totalEpisodes?: number; played?: boolean; seasons?: MediaSeason[];
+  isSeries?: boolean; watchedEpisodes?: number; totalEpisodes?: number; played?: boolean;
+  seasons?: MediaSeason[] | RequestableSeason[];
+  mediaStatus?: number;
 };
+function isRequestableSeason(season: MediaSeason | RequestableSeason): season is RequestableSeason { return !("id" in season); }
 type IconName = "home" | "chart" | "sparkle" | "user" | "bell" | "arrow" | "close" | "clock" | "movie" | "series" | "genre";
 type Tone = "blue" | "peach" | "mint" | "lilac";
 type LoadState = "loading" | "ready" | "error";
@@ -31,7 +35,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.7";
+const APP_VERSION = "0.8.8";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -482,6 +486,8 @@ function Requests({ items, state, onSelectMedia }: { items: RequestItem[]; state
 function MediaDetailScreen({ selection, onClose }: { selection: MediaSelection; onClose: () => void }) {
   const [detail, setDetail] = useState<MediaDetail | null>(null);
   const [state, setState] = useState<LoadState>("loading");
+  const [selectedSeasons, setSelectedSeasons] = useState<number[]>([]);
+  const [requestState, setRequestState] = useState<"idle" | "submitting" | "done" | "error">("idle");
   const mediaType = selection.source === "seerr" ? selection.mediaType : undefined;
 
   useEffect(() => {
@@ -490,7 +496,14 @@ function MediaDetailScreen({ selection, onClose }: { selection: MediaSelection; 
       ? `/api/media/emby?id=${encodeURIComponent(selection.id)}`
       : `/api/media/seerr?mediaType=${encodeURIComponent(mediaType ?? "")}&id=${encodeURIComponent(selection.id)}`;
     fetch(url, { credentials: "include" })
-      .then(async (response) => { if (!response.ok) throw new Error("detail unavailable"); const data = await response.json(); if (active) { setDetail(data); setState("ready"); } })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("detail unavailable");
+        const data: MediaDetail = await response.json();
+        if (!active) return;
+        setDetail(data);
+        setState("ready");
+        if (mediaType === "tv" && data.seasons) setSelectedSeasons(data.seasons.filter(isRequestableSeason).map((season) => season.seasonNumber));
+      })
       .catch(() => active && setState("error"));
     return () => { active = false; };
   }, [selection.source, selection.id, mediaType]);
@@ -503,6 +516,30 @@ function MediaDetailScreen({ selection, onClose }: { selection: MediaSelection; 
 
   const status = detail ? mediaStatus(detail) : null;
   const crewAndCast = detail ? [...(detail.crew ?? []), ...(detail.cast ?? [])] : [];
+  const embySeasons = detail?.seasons?.filter((season): season is MediaSeason => !isRequestableSeason(season)) ?? [];
+  const requestableSeasons = detail?.seasons?.filter(isRequestableSeason) ?? [];
+  const canRequest = selection.source === "seerr" && !detail?.mediaStatus;
+
+  const toggleSeason = (seasonNumber: number) => {
+    setSelectedSeasons((current) => current.includes(seasonNumber) ? current.filter((value) => value !== seasonNumber) : [...current, seasonNumber]);
+  };
+
+  const submitRequest = async () => {
+    if (selection.source !== "seerr") return;
+    setRequestState("submitting");
+    try {
+      const response = await fetch("/api/media/seerr/request", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mediaType: selection.mediaType, tmdbId: Number(selection.id), seasons: selection.mediaType === "tv" ? selectedSeasons : undefined }),
+      });
+      if (!response.ok) throw new Error("request failed");
+      setRequestState("done");
+    } catch {
+      setRequestState("error");
+    }
+  };
 
   return <div className="media-detail-overlay" role="dialog" aria-modal="true" aria-label={detail?.title ?? "Details"}>
     <div className="media-detail-scroll">
@@ -525,9 +562,28 @@ function MediaDetailScreen({ selection, onClose }: { selection: MediaSelection; 
           </div>
         </div>
         {detail.overview && <section className="media-detail-overview"><h2>Übersicht</h2><p>{detail.overview}</p></section>}
-        {detail.seasons && detail.seasons.length > 0 && <section className="media-detail-seasons">
+        {canRequest && <section className="media-detail-request">
+          {requestableSeasons.length > 0 && <div className="season-checklist">
+            {requestableSeasons.map((season) => <label className="season-checkbox" key={season.seasonNumber}>
+              <input type="checkbox" checked={selectedSeasons.includes(season.seasonNumber)} onChange={() => toggleSeason(season.seasonNumber)} />
+              Staffel {season.seasonNumber} <small>({season.episodeCount} Folgen)</small>
+            </label>)}
+          </div>}
+          {requestState === "done"
+            ? <p className="request-confirmation">Angefragt ✓</p>
+            : <button
+                type="button"
+                className="request-button"
+                disabled={requestState === "submitting" || (requestableSeasons.length > 0 && selectedSeasons.length === 0)}
+                onClick={submitRequest}
+              >
+                {requestState === "submitting" ? "Wird angefragt …" : "Anfragen"}
+              </button>}
+          {requestState === "error" && <p className="request-error">Anfrage fehlgeschlagen. Bitte später erneut versuchen.</p>}
+        </section>}
+        {embySeasons.length > 0 && <section className="media-detail-seasons">
           <h2>Staffeln</h2>
-          <div className="poster-scroller">{detail.seasons.map((season) => {
+          <div className="poster-scroller">{embySeasons.map((season) => {
             const progress = season.totalEpisodes > 0 ? Math.round((season.watchedEpisodes / season.totalEpisodes) * 100) : 0;
             return <article className="poster-entry" key={season.id}>
               <div className="poster wide" role="img" aria-label={season.title}>

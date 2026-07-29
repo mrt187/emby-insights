@@ -35,6 +35,7 @@ type App struct {
 	discover             seerr.DiscoverReader
 	embyMediaDetail      emby.MediaDetailReader
 	seerrMediaDetail     seerr.MediaDetailReader
+	seerrRequestCreator  seerr.RequestCreator
 	sessions             session.Store
 	cookieSecure         bool
 }
@@ -69,6 +70,7 @@ func New(cfg config.Config) (*App, error) {
 		discover:             seerrClient,
 		embyMediaDetail:      embyClient,
 		seerrMediaDetail:     seerrClient,
+		seerrRequestCreator:  seerrClient,
 		sessions:             session.NewRedisStore(cache),
 		cookieSecure:         cfg.CookieSecure,
 	}, nil
@@ -108,6 +110,7 @@ func (app *App) Handler() http.Handler {
 	}))
 	mux.HandleFunc("GET /api/media/emby", app.embyMediaDetailHandler)
 	mux.HandleFunc("GET /api/media/seerr", app.seerrMediaDetailHandler)
+	mux.HandleFunc("POST /api/media/seerr/request", app.createSeerrRequestHandler)
 	return mux
 }
 
@@ -270,6 +273,38 @@ func (app *App) seerrMediaDetailHandler(writer http.ResponseWriter, request *htt
 		return
 	}
 	respondJSON(writer, http.StatusOK, detail)
+}
+
+func (app *App) createSeerrRequestHandler(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+
+	var input struct {
+		MediaType string `json:"mediaType"`
+		TmdbID    int    `json:"tmdbId"`
+		Seasons   []int  `json:"seasons"`
+	}
+	request.Body = http.MaxBytesReader(writer, request.Body, 1<<16)
+	if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	if input.MediaType != "movie" && input.MediaType != "tv" {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "mediaType must be movie or tv"})
+		return
+	}
+	if input.TmdbID <= 0 {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "tmdbId is required"})
+		return
+	}
+
+	if err := app.seerrRequestCreator.CreateRequest(request.Context(), identity.UserID, input.MediaType, input.TmdbID, input.Seasons); err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "creating the Seerr request failed"})
+		return
+	}
+	writer.WriteHeader(http.StatusNoContent)
 }
 
 func (app *App) newForYouItems(writer http.ResponseWriter, request *http.Request) {

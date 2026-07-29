@@ -462,6 +462,21 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .cast-entry strong { font-size: 12px; font-weight: 700; }
 .cast-entry small { color: var(--muted); font-size: 11px; }
 
+.media-detail-request { display: grid; gap: 14px; }
+.season-checklist { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.season-checkbox {
+  display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px;
+  background: var(--ink-raised); font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.season-checkbox small { color: var(--muted); font-weight: 500; }
+.request-button {
+  justify-self: start; padding: 11px 22px; border: 0; border-radius: 999px; font-size: 14px; font-weight: 800;
+  color: #0e1a13; background: var(--mint-bright); cursor: pointer; transition: opacity 160ms var(--ease-out);
+}
+.request-button:disabled { opacity: .5; cursor: not-allowed; }
+.request-confirmation { color: var(--mint-bright); font-weight: 700; font-size: 14px; }
+.request-error { color: #e88b8b; font-size: 13px; }
+
 @media (max-width: 560px) {
   .media-detail-hero { grid-template-columns: 120px 1fr; gap: 16px; align-items: start; }
   .media-detail-poster { border-radius: 12px; }

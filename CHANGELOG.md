@@ -8,6 +8,16 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.8] - 2026-07-29
+
+### Added
+
+- Media requests can now be created directly from the app — no more switching
+  to Seerr. The detail screen shows an "Anfragen" button for not-yet-owned
+  titles; series show a season checklist so you can request specific seasons
+  instead of the whole show. Requests always use Seerr's own default
+  Radarr/Sonarr profile; there is no profile picker.
+
 ## [0.8.7] - 2026-07-29
 
 ### Added

@@ -11,18 +11,29 @@ type Person struct {
 	ImageURL string `json:"imageUrl"`
 }
 
+type RequestableSeason struct {
+	SeasonNumber int `json:"seasonNumber"`
+	EpisodeCount int `json:"episodeCount"`
+}
+
 type MediaDetail struct {
-	ID              string   `json:"id"`
-	Title           string   `json:"title"`
-	Overview        string   `json:"overview"`
-	PosterURL       string   `json:"posterUrl"`
-	BackdropURL     string   `json:"backdropUrl"`
-	Genres          []string `json:"genres"`
-	CommunityRating float64  `json:"communityRating"`
-	Year            int      `json:"year"`
-	RuntimeMinutes  int      `json:"runtimeMinutes"`
-	Cast            []Person `json:"cast"`
-	Crew            []Person `json:"crew"`
+	ID              string              `json:"id"`
+	Title           string              `json:"title"`
+	Overview        string              `json:"overview"`
+	PosterURL       string              `json:"posterUrl"`
+	BackdropURL     string              `json:"backdropUrl"`
+	Genres          []string            `json:"genres"`
+	CommunityRating float64             `json:"communityRating"`
+	Year            int                 `json:"year"`
+	RuntimeMinutes  int                 `json:"runtimeMinutes"`
+	Cast            []Person            `json:"cast"`
+	Crew            []Person            `json:"crew"`
+	Seasons         []RequestableSeason `json:"seasons"`
+	// MediaStatus is 0 when nobody has requested or added this title yet
+	// (Seerr's own TMDB proxy omits "mediaInfo" entirely in that case) — the
+	// frontend shows a request button only then. Non-zero values mirror
+	// Seerr's own MediaStatus enum (5 = available).
+	MediaStatus int `json:"mediaStatus"`
 }
 
 type MediaDetailReader interface {
@@ -64,6 +75,13 @@ func (client *Client) MediaDetail(ctx context.Context, mediaType string, tmdbID 
 				ProfilePath string `json:"profilePath"`
 			} `json:"crew"`
 		} `json:"credits"`
+		Seasons []struct {
+			SeasonNumber int `json:"seasonNumber"`
+			EpisodeCount int `json:"episodeCount"`
+		} `json:"seasons"`
+		MediaInfo *struct {
+			Status int `json:"status"`
+		} `json:"mediaInfo"`
 	}
 
 	path := fmt.Sprintf("/api/v1/%s/%d", mediaType, tmdbID)
@@ -94,6 +112,16 @@ func (client *Client) MediaDetail(ctx context.Context, mediaType string, tmdbID 
 		Genres:          []string{},
 		Cast:            []Person{},
 		Crew:            []Person{},
+		Seasons:         []RequestableSeason{},
+	}
+	if result.MediaInfo != nil {
+		detail.MediaStatus = result.MediaInfo.Status
+	}
+	for _, season := range result.Seasons {
+		if season.SeasonNumber == 0 { // "Specials" — not a real season to request
+			continue
+		}
+		detail.Seasons = append(detail.Seasons, RequestableSeason{SeasonNumber: season.SeasonNumber, EpisodeCount: season.EpisodeCount})
 	}
 	if result.PosterPath != "" {
 		detail.PosterURL = posterBaseURL + result.PosterPath

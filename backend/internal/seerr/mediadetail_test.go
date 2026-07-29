@@ -47,13 +47,17 @@ func TestMediaDetailParsesMovie(t *testing.T) {
 	}
 }
 
-func TestMediaDetailParsesTvShow(t *testing.T) {
+func TestMediaDetailParsesTvShowSeasonsAndSkipsSpecials(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != "/api/v1/tv/12345" {
 			t.Fatalf("path = %q", request.URL.Path)
 		}
 		writer.Header().Set("Content-Type", "application/json")
-		_, _ = writer.Write([]byte(`{"name":"Severance","firstAirDate":"2022-02-18"}`))
+		_, _ = writer.Write([]byte(`{"name":"Severance","firstAirDate":"2022-02-18","seasons":[
+			{"seasonNumber":0,"episodeCount":3},
+			{"seasonNumber":1,"episodeCount":9},
+			{"seasonNumber":2,"episodeCount":10}
+		]}`))
 	}))
 	defer testServer.Close()
 
@@ -63,6 +67,28 @@ func TestMediaDetailParsesTvShow(t *testing.T) {
 	}
 	if detail.Title != "Severance" || detail.Year != 2022 {
 		t.Fatalf("detail = %#v", detail)
+	}
+	if len(detail.Seasons) != 2 || detail.Seasons[0].SeasonNumber != 1 || detail.Seasons[1].EpisodeCount != 10 {
+		t.Fatalf("Seasons = %#v, want season 0 (Specials) skipped", detail.Seasons)
+	}
+	if detail.MediaStatus != 0 {
+		t.Fatalf("MediaStatus = %d, want 0 for a title with no mediaInfo", detail.MediaStatus)
+	}
+}
+
+func TestMediaDetailReadsMediaStatusWhenPresent(t *testing.T) {
+	testServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"title":"Dune","mediaInfo":{"status":5}}`))
+	}))
+	defer testServer.Close()
+
+	detail, err := NewClient(testServer.URL, "api-key").MediaDetail(context.Background(), "movie", 1)
+	if err != nil {
+		t.Fatalf("MediaDetail() error = %v", err)
+	}
+	if detail.MediaStatus != 5 {
+		t.Fatalf("MediaStatus = %d, want 5", detail.MediaStatus)
 	}
 }
 

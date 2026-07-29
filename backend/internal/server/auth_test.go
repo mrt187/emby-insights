@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"net/http"
@@ -139,6 +140,22 @@ func (reader *fakeSeerrMediaDetailReader) MediaDetail(_ context.Context, mediaTy
 	reader.mediaType = mediaType
 	reader.tmdbID = tmdbID
 	return reader.detail, nil
+}
+
+type fakeRequestCreator struct {
+	err        error
+	embyUserID string
+	mediaType  string
+	tmdbID     int
+	seasons    []int
+}
+
+func (creator *fakeRequestCreator) CreateRequest(_ context.Context, embyUserID, mediaType string, tmdbID int, seasons []int) error {
+	creator.embyUserID = embyUserID
+	creator.mediaType = mediaType
+	creator.tmdbID = tmdbID
+	creator.seasons = seasons
+	return creator.err
 }
 
 type memorySessionStore struct {
@@ -429,5 +446,80 @@ func TestSeerrMediaDetailValidatesMediaType(t *testing.T) {
 	app.Handler().ServeHTTP(badRecorder, bad)
 	if badRecorder.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, body = %s", badRecorder.Code, badRecorder.Body.String())
+	}
+}
+
+func TestCreateSeerrRequestHandlerSendsSeasons(t *testing.T) {
+	store := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	creator := &fakeRequestCreator{}
+	app := &App{sessions: store, seerrRequestCreator: creator}
+
+	request := httptest.NewRequest(http.MethodPost, "/api/media/seerr/request", bytes.NewReader([]byte(`{"mediaType":"tv","tmdbId":12345,"seasons":[1,2]}`)))
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	if creator.embyUserID != "user-1" || creator.mediaType != "tv" || creator.tmdbID != 12345 {
+		t.Fatalf("embyUserID = %q, mediaType = %q, tmdbID = %d", creator.embyUserID, creator.mediaType, creator.tmdbID)
+	}
+	if len(creator.seasons) != 2 || creator.seasons[0] != 1 || creator.seasons[1] != 2 {
+		t.Fatalf("seasons = %v", creator.seasons)
+	}
+}
+
+func TestCreateSeerrRequestHandlerValidatesMediaType(t *testing.T) {
+	store := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	app := &App{sessions: store, seerrRequestCreator: &fakeRequestCreator{}}
+
+	request := httptest.NewRequest(http.MethodPost, "/api/media/seerr/request", bytes.NewReader([]byte(`{"mediaType":"book","tmdbId":1}`)))
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestCreateSeerrRequestHandlerRequiresTmdbID(t *testing.T) {
+	store := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	app := &App{sessions: store, seerrRequestCreator: &fakeRequestCreator{}}
+
+	request := httptest.NewRequest(http.MethodPost, "/api/media/seerr/request", bytes.NewReader([]byte(`{"mediaType":"movie","tmdbId":0}`)))
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestCreateSeerrRequestHandlerReturnsBadGatewayOnFailure(t *testing.T) {
+	store := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	app := &App{sessions: store, seerrRequestCreator: &fakeRequestCreator{err: errors.New("boom")}}
+
+	request := httptest.NewRequest(http.MethodPost, "/api/media/seerr/request", bytes.NewReader([]byte(`{"mediaType":"movie","tmdbId":1}`)))
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestCreateSeerrRequestHandlerRequiresSession(t *testing.T) {
+	app := &App{sessions: &memorySessionStore{}, seerrRequestCreator: &fakeRequestCreator{}}
+
+	request := httptest.NewRequest(http.MethodPost, "/api/media/seerr/request", bytes.NewReader([]byte(`{"mediaType":"movie","tmdbId":1}`)))
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
 }
