@@ -8,6 +8,24 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.4.0] - 2026-07-29
+
+### Added
+
+- The personal card's weekly figure is now a slider that rotates through watch
+  time, films, series, and favourite genre every five seconds. It can be swiped
+  or jumped to directly via the dots, stops rotating once you interact with it,
+  and stays still when the system asks for reduced motion.
+
+### Removed
+
+- Dropped the large introductory hero tile from the Today screen. Media content
+  is now reachable without scrolling past a full screen of decoration.
+
+### Changed
+
+- Reduced the personal card to avatar, name, and the rotating figure.
+
 ## [0.3.5] - 2026-07-29
 
 ### Fixed
@@ -96,6 +114,7 @@ The project follows [Semantic Versioning](https://semver.org/):
 - Container images are published with the matching release version, the commit
   SHA, and `latest`.
 
+[0.4.0]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.4.0
 [0.3.5]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.3.5
 [0.3.3]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.3.3
 [0.3.4]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.3.4

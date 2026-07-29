@@ -16,7 +16,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.3.5";
+const APP_VERSION = "0.4.0";
 
 const upcoming = [
   { date: "01. Aug.", title: "The Last of Us", art: "last" }, { date: "04. Aug.", title: "Alien: Earth", art: "alien" },
@@ -139,20 +139,6 @@ function UserAvatar({ name }: { name: string }) {
 function Today({ user, onStats, statistics, state }: { user: { name: string }; onStats: () => void; statistics: PersonalStats | null; state: LoadState }) {
   const detail = state === "error" ? "Noch keine Statistik verfügbar" : statistics ? comparisonText(statistics) : "Wird geladen …";
   return <div className="content today-view">
-    <section className="today-hero" aria-labelledby="today-hero-title">
-      <div className="hero-copy-block">
-        <p className="eyebrow">DEIN MEDIENMOMENT</p>
-        <h2 id="today-hero-title">Deine Mediathek.<br /><em>Dein Rhythmus.</em></h2>
-        <p>Alles, was diese Woche für dich zählt – auf einen Blick, ohne Ablenkung.</p>
-        <button className="hero-action" onClick={onStats}>Statistik entdecken <Icon name="arrow" /></button>
-      </div>
-      <div className="hero-weekly-total">
-        <span>Diese Woche</span>
-        <strong>{statistics ? formatDuration(statistics.watchSeconds) : "—"}</strong>
-        <small>{state === "error" ? "Später erneut versuchen" : statistics ? "Zeit für deine Favoriten" : "Statistik wird geladen …"}</small>
-      </div>
-      <div className="hero-orbit" aria-hidden="true"><i /><i /><b /></div>
-    </section>
     <section className="section-heading rhythm-heading"><div><p className="eyebrow">DEIN PROFIL</p><h2>Dein Rhythmus</h2></div><button className="text-button" onClick={onStats}>Alle Details <Icon name="arrow" /></button></section>
     <UserInsightCard user={user} statistics={statistics} state={state} detail={detail} />
     <PosterRow title="Demnächst" eyebrow="COMING SOON · NÄCHSTE 4 WOCHEN" items={upcoming} detail={(item) => item.date} />
@@ -167,18 +153,78 @@ function UserInsightCard({ user, statistics, state, detail }: { user: { name: st
       <div className="profile-avatar"><UserAvatar name={user.name} /></div>
       <div><p className="eyebrow">DEIN MEDIENPROFIL</p><h3>{user.name}</h3><p>Deine ganz persönliche Woche in Emby.</p></div>
     </div>
-    <div className="user-insight-feature">
-      <span>Diese Woche</span>
-      <strong>{statistics ? formatDuration(statistics.watchSeconds) : "—"}</strong>
-      <small>{detail}</small>
-    </div>
-    <div className="user-insight-stats">
-      <div className="tone-peach"><span className="user-stat-icon"><Icon name="movie" /></span><strong>{statistics ? statistics.completedMovies : "—"}</strong><small>Filme</small></div>
-      <div className="tone-mint"><span className="user-stat-icon"><Icon name="series" /></span><strong>{statistics ? statistics.completedSeries : "—"}</strong><small>Serien</small></div>
-      <div className="tone-lilac stat-text"><span className="user-stat-icon"><Icon name="genre" /></span><strong>{statistics?.favouriteGenre || "—"}</strong><small>Lieblingsgenre</small></div>
-    </div>
+    <WeeklyCarousel statistics={statistics} state={state} detail={detail} />
     {state === "loading" && <span className="sr-only" role="status">Deine Wochenstatistik wird geladen …</span>}
   </section>;
+}
+
+const SLIDE_INTERVAL = 5000;
+
+function WeeklyCarousel({ statistics, state, detail }: { statistics: PersonalStats | null; state: LoadState; detail: string }) {
+  const slides: { key: string; icon: IconName; tone: Tone; label: string; value: string; detail: string; text?: boolean }[] = [
+    { key: "week", icon: "clock", tone: "blue", label: "Diese Woche", value: statistics ? formatDuration(statistics.watchSeconds) : "—", detail },
+    { key: "movies", icon: "movie", tone: "peach", label: "Filme", value: statistics ? String(statistics.completedMovies) : "—", detail: statistics ? "Abgeschlossen" : loadingCopy(state) },
+    { key: "series", icon: "series", tone: "mint", label: "Serien", value: statistics ? String(statistics.completedSeries) : "—", detail: statistics ? "Abgeschlossen" : loadingCopy(state) },
+    { key: "genre", icon: "genre", tone: "lilac", label: "Lieblingsgenre", value: statistics?.favouriteGenre || "—", detail: statistics ? "Nach Sehzeit" : loadingCopy(state), text: true },
+  ];
+
+  const scroller = useRef<HTMLDivElement>(null);
+  const [active, setActive] = useState(0);
+  const [paused, setPaused] = useState(false);
+
+  const goTo = (index: number) => scroller.current?.scrollTo({ left: scroller.current.clientWidth * index, behavior: "smooth" });
+
+  useEffect(() => {
+    if (paused || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const timer = setInterval(() => {
+      const element = scroller.current;
+      if (!element) return;
+      const next = (Math.round(element.scrollLeft / element.clientWidth) + 1) % slides.length;
+      element.scrollTo({ left: element.clientWidth * next, behavior: "smooth" });
+    }, SLIDE_INTERVAL);
+    return () => clearInterval(timer);
+  }, [paused, slides.length]);
+
+  // Only genuine input pauses the rotation — listening to "scroll" would also
+  // catch our own programmatic advance and stop it immediately.
+  const stop = () => setPaused(true);
+
+  return <div className="weekly-carousel">
+    <div
+      ref={scroller}
+      className="weekly-scroller"
+      role="group"
+      aria-roledescription="Karussell"
+      aria-label="Deine Wochenwerte"
+      tabIndex={0}
+      onScroll={(event) => setActive(Math.round(event.currentTarget.scrollLeft / event.currentTarget.clientWidth))}
+      onPointerDown={stop}
+      onWheel={stop}
+      onKeyDown={stop}
+    >
+      {slides.map((slide, index) => <div
+        key={slide.key}
+        className={`weekly-slide tone-${slide.tone}${slide.text ? " weekly-slide-text" : ""}`}
+        role="group"
+        aria-roledescription="Folie"
+        aria-label={`${index + 1} von ${slides.length}: ${slide.label}`}
+      >
+        <span className="user-stat-icon"><Icon name={slide.icon} /></span>
+        <span className="weekly-label">{slide.label}</span>
+        <strong>{slide.value}</strong>
+        <small>{slide.detail}</small>
+      </div>)}
+    </div>
+    <div className="weekly-dots">
+      {slides.map((slide, index) => <button
+        key={slide.key}
+        className={index === active ? "weekly-dot active" : "weekly-dot"}
+        aria-label={`${slide.label} anzeigen`}
+        aria-current={index === active ? "true" : undefined}
+        onClick={() => { stop(); goTo(index); }}
+      ><i /></button>)}
+    </div>
+  </div>;
 }
 
 function MetricCard({ icon, tone, value, label, detail, positive, genre = false }: { icon: IconName; tone: Tone; value: string | number; label: string; detail: string; positive?: boolean; genre?: boolean }) {
