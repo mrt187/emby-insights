@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -1057,6 +1058,57 @@ func TestSetFavoriteHandlerRequiresItemID(t *testing.T) {
 
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+// A malformed itemId must never reach the Emby client: the favorite request
+// carries the admin API key, so path traversal in the ID would let any logged
+// in user address arbitrary admin endpoints (e.g. DELETE /Items/<id>).
+func TestSetFavoriteHandlerRejectsMalformedItemID(t *testing.T) {
+	malformed := []string{
+		"../../../Items/1",
+		"..%2F..%2F..%2FItems%2F1",
+		"42?api_key=x",
+		"42/Played",
+		"4 2",
+	}
+	for _, itemID := range malformed {
+		t.Run(itemID, func(t *testing.T) {
+			sessions := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+			favorites := &fakeFavoriteWriter{}
+			app := &App{sessions: sessions, favorites: favorites}
+
+			request := httptest.NewRequest(http.MethodDelete, "/api/media/emby/favorite?itemId="+url.QueryEscape(itemID), nil)
+			request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+			recorder := httptest.NewRecorder()
+			app.Handler().ServeHTTP(recorder, request)
+
+			if recorder.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+			}
+			if favorites.itemID != "" {
+				t.Fatalf("Emby was called with itemID = %q", favorites.itemID)
+			}
+		})
+	}
+}
+
+func TestSetFavoriteHandlerAcceptsGUIDItemID(t *testing.T) {
+	sessions := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	favorites := &fakeFavoriteWriter{}
+	app := &App{sessions: sessions, favorites: favorites}
+
+	const itemID = "f1d2e3c4-5678-49ab-8cde-0123456789ab"
+	request := httptest.NewRequest(http.MethodPost, "/api/media/emby/favorite?itemId="+itemID, nil)
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	if favorites.itemID != itemID {
+		t.Fatalf("itemID = %q, want %q", favorites.itemID, itemID)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -609,6 +610,12 @@ func (app *App) trackingRatings(writer http.ResponseWriter, request *http.Reques
 	respondJSON(writer, http.StatusOK, orEmpty(items))
 }
 
+// validEmbyItemID matches the shapes Emby actually uses for item IDs — hex
+// GUIDs (with or without dashes) and numeric IDs. Anything else is rejected
+// before it can reach SetFavorite, which interpolates the ID into a URL sent
+// with the admin API key.
+var validEmbyItemID = regexp.MustCompile(`^[A-Za-z0-9-]{1,64}$`)
+
 // setFavoriteHandler returns a handler for both the POST and DELETE Emby
 // favorite routes, since they differ only in which way the toggle goes.
 func (app *App) setFavoriteHandler(favorite bool) http.HandlerFunc {
@@ -620,6 +627,10 @@ func (app *App) setFavoriteHandler(favorite bool) http.HandlerFunc {
 		itemID := request.URL.Query().Get("itemId")
 		if itemID == "" {
 			respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "itemId is required"})
+			return
+		}
+		if !validEmbyItemID.MatchString(itemID) {
+			respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "itemId is malformed"})
 			return
 		}
 		if err := app.favorites.SetFavorite(request.Context(), identity.UserID, itemID, favorite); err != nil {

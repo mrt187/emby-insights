@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -36,13 +37,17 @@ type FavoriteWriter interface {
 // first write operation against Emby other than Authenticate. Favorites are
 // deliberately kept native rather than duplicated into our own database, so
 // they stay in sync with every other Emby client.
+//
+// Both IDs are path-escaped: this request carries the admin API key, so an
+// unescaped ID could be used to reach any other Emby endpoint with admin
+// rights. Callers validate the ID format on top of this.
 func (client *Client) SetFavorite(ctx context.Context, userID, itemID string, favorite bool) error {
 	method := http.MethodPost
 	if !favorite {
 		method = http.MethodDelete
 	}
-	url := client.baseURL + "/Users/" + userID + "/FavoriteItems/" + itemID
-	request, err := http.NewRequestWithContext(ctx, method, url, nil)
+	endpoint := client.baseURL + "/Users/" + url.PathEscape(userID) + "/FavoriteItems/" + url.PathEscape(itemID)
+	request, err := http.NewRequestWithContext(ctx, method, endpoint, nil)
 	if err != nil {
 		return err
 	}

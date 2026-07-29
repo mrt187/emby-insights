@@ -8,6 +8,17 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.24] - 2026-07-30
+
+### Fixed
+
+- The Emby favorite endpoint (`POST`/`DELETE /api/media/emby/favorite`) now
+  rejects any `itemId` that is not a plain Emby item ID. The ID was
+  interpolated into the upstream URL unescaped, and that request carries the
+  Emby **admin** API key — so a crafted ID could reach arbitrary Emby admin
+  endpoints, including item deletion. The ID is validated in the handler and
+  additionally path-escaped in the Emby client.
+
 ## [0.8.23] - 2026-07-30
 
 ### Added
