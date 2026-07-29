@@ -35,7 +35,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.10";
+const APP_VERSION = "0.8.11";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -503,7 +503,6 @@ function MediaDetailScreen({ selection, onClose }: { selection: MediaSelection; 
         if (!active) return;
         setDetail(data);
         setState("ready");
-        if (mediaType === "tv" && data.seasons) setSelectedSeasons(data.seasons.filter(isRequestableSeason).map((season) => season.seasonNumber));
       })
       .catch(() => active && setState("error"));
     return () => { active = false; };

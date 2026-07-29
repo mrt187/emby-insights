@@ -8,6 +8,21 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.11] - 2026-07-29
+
+### Fixed
+
+- The detail screen's close button reserved space in the normal document
+  flow (sticky, with a margin), which pushed the backdrop image down and
+  left a solid black gap above it. The button is now `position: fixed`
+  (floating, no longer in flow) and uses the app's mint accent color
+  instead of a dark circle.
+
+### Changed
+
+- Season toggles in the request popup now start off by default (none
+  requested until explicitly switched on), not all-on.
+
 ## [0.8.10] - 2026-07-29
 
 ### Changed
