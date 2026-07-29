@@ -89,6 +89,9 @@ func (client *Client) EmbyMediaDetail(ctx context.Context, userID, itemID string
 	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
 		return MediaDetail{}, fmt.Errorf("decode Emby item detail: %w", err)
 	}
+	if result.Genres == nil {
+		result.Genres = []string{}
+	}
 
 	detail := MediaDetail{
 		ID:              result.Id,
@@ -101,6 +104,8 @@ func (client *Client) EmbyMediaDetail(ctx context.Context, userID, itemID string
 		RuntimeMinutes:  int(result.RunTimeTicks / 10_000_000 / 60),
 		IsSeries:        result.Type == "Series",
 		Played:          result.UserData.Played,
+		Cast:            []Person{},
+		Crew:            []Person{},
 	}
 	if result.ImageTags.Primary != "" {
 		detail.PosterURL = fmt.Sprintf("%s/Items/%s/Images/Primary?tag=%s&maxWidth=600", client.baseURL, result.Id, result.ImageTags.Primary)

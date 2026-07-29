@@ -69,4 +69,10 @@ func TestEmbyMediaDetailComputesSeriesProgress(t *testing.T) {
 	if !detail.IsSeries || detail.TotalEpisodes != 18 || detail.WatchedEpisodes != 15 {
 		t.Fatalf("detail = %#v", detail)
 	}
+	// Regression: a series with no crew entries (common — Emby often lists
+	// only actors for TV shows) must serialize Crew as `[]`, not `null`, or
+	// the frontend's array spread crashes.
+	if detail.Crew == nil || detail.Cast == nil || detail.Genres == nil {
+		t.Fatalf("Crew/Cast/Genres must be non-nil empty slices, got %#v", detail)
+	}
 }

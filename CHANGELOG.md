@@ -8,6 +8,21 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.6] - 2026-07-29
+
+### Fixed
+
+- The media detail screen failed to open for series without crew entries in
+  Emby (common — many shows only list actors): `crew` serialized as `null`
+  instead of `[]`, and the frontend's array spread crashed on it. Cast,
+  crew and genres are now always non-nil arrays.
+
+### Added
+
+- "Gesehene Filme" and "Gesehene Serien" gained a small arrow next to the
+  heading that opens a full poster-grid overview of every item in that
+  list; clicking a poster there opens the same media detail screen.
+
 ## [0.8.5] - 2026-07-29
 
 ### Added

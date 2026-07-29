@@ -91,6 +91,9 @@ func (client *Client) MediaDetail(ctx context.Context, mediaType string, tmdbID 
 		CommunityRating: result.VoteAverage,
 		Year:            year,
 		RuntimeMinutes:  result.Runtime,
+		Genres:          []string{},
+		Cast:            []Person{},
+		Crew:            []Person{},
 	}
 	if result.PosterPath != "" {
 		detail.PosterURL = posterBaseURL + result.PosterPath

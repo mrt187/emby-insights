@@ -208,6 +208,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 }
 .text-button:hover { color: #ddf8e7; }
 .text-button .icon { width: 16px; height: 16px; }
+.poster-view-all { padding-inline: 8px; }
 
 /* ----------------------------------------------------- personal overview */
 
@@ -464,6 +465,22 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 @media (max-width: 560px) {
   .media-detail-hero { grid-template-columns: 120px 1fr; gap: 16px; align-items: start; }
   .media-detail-poster { border-radius: 12px; }
+}
+
+.media-grid-overlay { z-index: 90; }
+.media-grid-title { margin: 0 0 20px; font-size: 25px; font-weight: 800; letter-spacing: -1px; }
+.media-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 18px 16px;
+}
+.media-grid-entry {
+  display: block; width: 100%; padding: 0; border: 0; margin: 0; background: transparent;
+  color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.media-grid-entry:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px; border-radius: 10px; }
+.media-grid-entry .poster.wide { height: 214px; margin-bottom: 10px; }
+.media-grid-entry strong {
+  display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: #f1f6f3; font-size: 13px;
 }
 
 /* ---------------------------------------------------------- profile page */

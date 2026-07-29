@@ -30,7 +30,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.5";
+const APP_VERSION = "0.8.6";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -293,11 +293,14 @@ function MetricCard({ icon, tone, value, label, detail, positive, genre = false 
   return <article className={`metric-card tone-${tone}${genre ? " genre-card" : ""}`}><span className="metric-icon"><Icon name={icon} /></span><strong>{value}</strong><p>{label}</p><small className={positive ? "up" : undefined}>{detail}</small></article>;
 }
 
-function PosterRow<T extends { id: string; title: string; posterUrl?: string }>({ title, eyebrow, items, detail, state, emptyLabel, progress, onSelect }: {
-  title?: string; eyebrow?: string; items: readonly T[]; detail: (item: T) => string; state?: LoadState; emptyLabel?: string; progress?: (item: T) => number; onSelect?: (item: T) => void;
+function PosterRow<T extends { id: string; title: string; posterUrl?: string }>({ title, eyebrow, items, detail, state, emptyLabel, progress, onSelect, onViewAll }: {
+  title?: string; eyebrow?: string; items: readonly T[]; detail: (item: T) => string; state?: LoadState; emptyLabel?: string; progress?: (item: T) => number; onSelect?: (item: T) => void; onViewAll?: () => void;
 }) {
   return <section className="poster-section">
-    {(title || eyebrow) && <div className="section-heading"><div>{eyebrow && <p className="eyebrow">{eyebrow}</p>}{title && <h2>{title}</h2>}</div></div>}
+    {(title || eyebrow) && <div className="section-heading">
+      <div>{eyebrow && <p className="eyebrow">{eyebrow}</p>}{title && <h2>{title}</h2>}</div>
+      {onViewAll && <button type="button" className="text-button poster-view-all" onClick={onViewAll} aria-label={`Alle ${title ?? "Titel"} anzeigen`}><Icon name="arrow" /></button>}
+    </div>}
     {state === "loading" && <p className="poster-status" role="status">Wird geladen …</p>}
     {state === "error" && <p className="poster-status">Nicht verfügbar</p>}
     {state !== "loading" && state !== "error" && items.length === 0 && <p className="poster-status">{emptyLabel ?? "Nichts vorhanden."}</p>}
@@ -363,6 +366,7 @@ function Stats({ onSelectMedia }: { onSelectMedia: (selection: MediaSelection) =
   const [watchedMoviesState, setWatchedMoviesState] = useState<LoadState>("loading");
   const [watchedSeries, setWatchedSeries] = useState<WatchedItem[]>([]);
   const [watchedSeriesState, setWatchedSeriesState] = useState<LoadState>("loading");
+  const [gridView, setGridView] = useState<{ title: string; items: WatchedItem[] } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -406,13 +410,40 @@ function Stats({ onSelectMedia }: { onSelectMedia: (selection: MediaSelection) =
     </section>
 
     <PosterRow title="Was ich gerade schaue" eyebrow="WEITERSCHAUEN" items={continueWatching} state={continueWatchingState} emptyLabel="Nichts in Bearbeitung." detail={(item) => `${item.progressPercent} % gesehen`} progress={(item) => item.progressPercent} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
-    <PosterRow title="Gesehene Filme" eyebrow="ALLE" items={watchedMovies} state={watchedMoviesState} emptyLabel="Noch keine Filme abgeschlossen." detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
-    <PosterRow title="Gesehene Serien" eyebrow="ALLE" items={watchedSeries} state={watchedSeriesState} emptyLabel="Noch keine Serien abgeschlossen." detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
+    <PosterRow title="Gesehene Filme" eyebrow="ALLE" items={watchedMovies} state={watchedMoviesState} emptyLabel="Noch keine Filme abgeschlossen." detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onViewAll={() => setGridView({ title: "Gesehene Filme", items: watchedMovies })} />
+    <PosterRow title="Gesehene Serien" eyebrow="ALLE" items={watchedSeries} state={watchedSeriesState} emptyLabel="Noch keine Serien abgeschlossen." detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onViewAll={() => setGridView({ title: "Gesehene Serien", items: watchedSeries })} />
 
     <section className="chart-grid">
       <BarChart title="Meistgesehene Genres" data={topGenres(watchedMovies, watchedSeries)} />
       <BarChart title="Aktivität nach Wochentag" data={weekdayActivity(watchedMovies, watchedSeries)} />
     </section>
+
+    {gridView && <MediaGridScreen title={gridView.title} items={gridView.items} onClose={() => setGridView(null)} onSelectMedia={onSelectMedia} />}
+  </div>;
+}
+
+function MediaGridScreen({ title, items, onClose, onSelectMedia }: {
+  title: string; items: readonly WatchedItem[]; onClose: () => void; onSelectMedia: (selection: MediaSelection) => void;
+}) {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  return <div className="media-detail-overlay media-grid-overlay" role="dialog" aria-modal="true" aria-label={title}>
+    <div className="media-detail-scroll">
+      <button type="button" className="media-detail-close" onClick={onClose} aria-label="Schließen"><Icon name="close" /></button>
+      <h1 className="media-grid-title">{title}</h1>
+      {items.length === 0
+        ? <p className="poster-status">Nichts vorhanden.</p>
+        : <div className="media-grid">{items.map((item) => <button type="button" className="media-grid-entry" key={item.id} onClick={() => onSelectMedia({ source: "emby", id: item.id })}>
+          <div className="poster wide" role="img" aria-label={item.title}>
+            {item.posterUrl ? <img src={item.posterUrl} alt="" loading="lazy" /> : <span>{item.title}</span>}
+          </div>
+          <strong>{item.title}</strong>
+        </button>)}</div>}
+    </div>
   </div>;
 }
 
@@ -470,7 +501,7 @@ function MediaDetailScreen({ selection, onClose }: { selection: MediaSelection; 
   }, [onClose]);
 
   const status = detail ? mediaStatus(detail) : null;
-  const crewAndCast = detail ? [...detail.crew, ...detail.cast] : [];
+  const crewAndCast = detail ? [...(detail.crew ?? []), ...(detail.cast ?? [])] : [];
 
   return <div className="media-detail-overlay" role="dialog" aria-modal="true" aria-label={detail?.title ?? "Details"}>
     <div className="media-detail-scroll">
@@ -487,7 +518,7 @@ function MediaDetailScreen({ selection, onClose }: { selection: MediaSelection; 
             <p className="media-detail-meta">
               {detail.officialRating && <span>{detail.officialRating}</span>}
               {detail.runtimeMinutes > 0 && <span>{detail.runtimeMinutes} Minuten</span>}
-              {detail.genres.length > 0 && <span>{detail.genres.join(", ")}</span>}
+              {detail.genres?.length > 0 && <span>{detail.genres.join(", ")}</span>}
             </p>
             {detail.communityRating > 0 && <p className="media-detail-rating">★ {detail.communityRating.toFixed(1)}</p>}
           </div>
