@@ -8,11 +8,9 @@ import (
 	"time"
 )
 
-func TestWatchedMoviesFiltersToCurrentWeek(t *testing.T) {
-	now := time.Now().UTC()
-	thisWeek := now.Add(-6 * time.Hour).Format(time.RFC3339)
-	lastMonth := now.AddDate(0, -1, 0).Format(time.RFC3339)
-	lastPlayedByID := map[string]string{"1": thisWeek, "2": lastMonth}
+func TestWatchedMoviesReturnsAllPlayedMovies(t *testing.T) {
+	recent := time.Now().UTC().Add(-2 * 24 * time.Hour).Format(time.RFC3339)
+	old := time.Now().UTC().AddDate(-1, 0, 0).Format(time.RFC3339)
 
 	testServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
@@ -26,29 +24,30 @@ func TestWatchedMoviesFiltersToCurrentWeek(t *testing.T) {
 			}
 			_, _ = writer.Write([]byte(`{"Items":[
 				{"Id":"1","Name":"Dune","Genres":["Science Fiction"],"ImageTags":{"Primary":"tag-1"}},
-				{"Id":"2","Name":"Old Movie","Genres":["Drama"]},
-				{"Id":"3","Name":"NeverPlayed"}
+				{"Id":"2","Name":"Old Movie","Genres":["Drama"]}
 			]}`))
 		case request.URL.Path == "/emby/Users/user-1/Items/1":
-			_, _ = writer.Write([]byte(`{"UserData":{"LastPlayedDate":"` + lastPlayedByID["1"] + `"}}`))
+			_, _ = writer.Write([]byte(`{"UserData":{"LastPlayedDate":"` + recent + `"}}`))
 		case request.URL.Path == "/emby/Users/user-1/Items/2":
-			// Older than the current week: ends the scan (list is sorted descending).
-			_, _ = writer.Write([]byte(`{"UserData":{"LastPlayedDate":"` + lastPlayedByID["2"] + `"}}`))
+			_, _ = writer.Write([]byte(`{"UserData":{"LastPlayedDate":"` + old + `"}}`))
 		default:
 			t.Fatalf("unexpected path %q", request.URL.Path)
 		}
 	}))
 	defer testServer.Close()
 
-	items, err := NewClient(testServer.URL+"/emby", "dashboard-device", "admin-key").WatchedMovies(context.Background(), "user-1", "week")
+	items, err := NewClient(testServer.URL+"/emby", "dashboard-device", "admin-key").WatchedMovies(context.Background(), "user-1")
 	if err != nil {
 		t.Fatalf("WatchedMovies() error = %v", err)
 	}
-	if len(items) != 1 || items[0].Title != "Dune" {
-		t.Fatalf("items = %#v", items)
+	if len(items) != 2 {
+		t.Fatalf("items = %#v, want both movies regardless of age", items)
 	}
-	if len(items[0].Genres) != 1 || items[0].Genres[0] != "Science Fiction" {
-		t.Fatalf("genres = %#v", items[0].Genres)
+	if items[0].Title != "Dune" || len(items[0].Genres) != 1 || items[0].Genres[0] != "Science Fiction" {
+		t.Fatalf("items[0] = %#v", items[0])
+	}
+	if items[1].Title != "Old Movie" {
+		t.Fatalf("items[1] = %#v", items[1])
 	}
 }
 
@@ -70,26 +69,11 @@ func TestWatchedSeriesUsesSeriesItemType(t *testing.T) {
 	}))
 	defer testServer.Close()
 
-	items, err := NewClient(testServer.URL+"/emby", "dashboard-device", "admin-key").WatchedSeries(context.Background(), "user-1", "week")
+	items, err := NewClient(testServer.URL+"/emby", "dashboard-device", "admin-key").WatchedSeries(context.Background(), "user-1")
 	if err != nil {
 		t.Fatalf("WatchedSeries() error = %v", err)
 	}
 	if len(items) != 1 || items[0].Title != "Severance" {
 		t.Fatalf("items = %#v", items)
-	}
-}
-
-func TestPeriodRangeMirrorsPlugin(t *testing.T) {
-	monday := time.Date(2026, 7, 29, 15, 0, 0, 0, time.UTC) // a Wednesday
-	from, to, err := periodRange("week", monday)
-	if err != nil {
-		t.Fatalf("periodRange() error = %v", err)
-	}
-	wantFrom := time.Date(2026, 7, 27, 0, 0, 0, 0, time.UTC) // preceding Monday
-	if !from.Equal(wantFrom) {
-		t.Fatalf("from = %v, want %v", from, wantFrom)
-	}
-	if !to.Equal(monday) {
-		t.Fatalf("to = %v, want %v", to, monday)
 	}
 }

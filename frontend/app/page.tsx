@@ -22,7 +22,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.1";
+const APP_VERSION = "0.8.2";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -361,32 +361,32 @@ function Stats() {
 
   useEffect(() => {
     let active = true;
-    fetch(`/api/watched-movies?period=${apiPeriod[period]}`, { credentials: "include" })
+    fetch("/api/watched-movies", { credentials: "include" })
       .then(async (response) => { if (!response.ok) throw new Error("watched movies unavailable"); const data = await response.json(); if (active) { setWatchedMovies(data); setWatchedMoviesState("ready"); } })
       .catch(() => active && setWatchedMoviesState("error"));
     return () => { active = false; };
-  }, [period]);
+  }, []);
 
   useEffect(() => {
     let active = true;
-    fetch(`/api/watched-series?period=${apiPeriod[period]}`, { credentials: "include" })
+    fetch("/api/watched-series", { credentials: "include" })
       .then(async (response) => { if (!response.ok) throw new Error("watched series unavailable"); const data = await response.json(); if (active) { setWatchedSeries(data); setWatchedSeriesState("ready"); } })
       .catch(() => active && setWatchedSeriesState("error"));
     return () => { active = false; };
-  }, [period]);
+  }, []);
 
   return <div className="content page-view">
-    <section className="period-tabs" aria-label="Zeitraum auswählen">{(["Woche", "Monat", "Jahr"] as Period[]).map((item) => <button className={period === item ? "selected" : ""} onClick={() => { setStatistics(null); setState("loading"); setWatchedMoviesState("loading"); setWatchedSeriesState("loading"); setPeriod(item); }} key={item} aria-pressed={period === item}>{item}</button>)}</section>
-    <section className="summary-banner" aria-live="polite"><p>DEINE {period.toUpperCase()}</p><h2>{statistics ? formatDuration(statistics.watchSeconds) : "—"}</h2><span>{state === "error" ? "Statistik ist gerade nicht verfügbar." : statistics ? comparisonText(statistics) : "Statistik wird geladen …"}</span></section>
+    <section className="period-tabs" aria-label="Zeitraum auswählen">{(["Woche", "Monat", "Jahr"] as Period[]).map((item) => <button className={period === item ? "selected" : ""} onClick={() => { setStatistics(null); setState("loading"); setPeriod(item); }} key={item} aria-pressed={period === item}>{item}</button>)}</section>
     <section className="week-grid" aria-label={`Kennzahlen für ${period}`}>
-      <MetricCard icon="movie" tone="peach" value={statistics ? statistics.completedMovies : "—"} label="Filme abgeschlossen" detail={statistics ? period : loadingCopy(state)} />
-      <MetricCard icon="series" tone="mint" value={statistics ? statistics.completedSeries : "—"} label="Serien abgeschlossen" detail={statistics ? period : loadingCopy(state)} />
+      <MetricCard icon="clock" tone="blue" value={statistics ? formatDuration(statistics.watchSeconds) : "—"} label="Sehzeit" detail={statistics ? period : loadingCopy(state)} />
+      <MetricCard icon="movie" tone="peach" value={watchedMoviesState === "ready" ? watchedMovies.length : "—"} label="Filme abgeschlossen" detail={watchedMoviesState === "ready" ? "Insgesamt" : loadingCopy(watchedMoviesState)} />
+      <MetricCard icon="series" tone="mint" value={watchedSeriesState === "ready" ? watchedSeries.length : "—"} label="Serien abgeschlossen" detail={watchedSeriesState === "ready" ? "Insgesamt" : loadingCopy(watchedSeriesState)} />
       <MetricCard icon="genre" tone="lilac" value={statistics?.favouriteGenre || "—"} label="Lieblingsgenre" detail={statistics ? "Nach Sehzeit" : loadingCopy(state)} genre />
     </section>
 
     <PosterRow title="Was ich gerade schaue" eyebrow="WEITERSCHAUEN" items={continueWatching} state={continueWatchingState} emptyLabel="Nichts in Bearbeitung." detail={(item) => `${item.progressPercent} % gesehen`} progress={(item) => item.progressPercent} />
-    <PosterRow title="Gesehene Filme" eyebrow={period.toUpperCase()} items={watchedMovies} state={watchedMoviesState} emptyLabel="Noch keine Filme abgeschlossen." detail={(item) => item.genres[0] ?? ""} />
-    <PosterRow title="Gesehene Serien" eyebrow={period.toUpperCase()} items={watchedSeries} state={watchedSeriesState} emptyLabel="Noch keine Serien abgeschlossen." detail={(item) => item.genres[0] ?? ""} />
+    <PosterRow title="Gesehene Filme" eyebrow="ALLE" items={watchedMovies} state={watchedMoviesState} emptyLabel="Noch keine Filme abgeschlossen." detail={(item) => item.genres[0] ?? ""} />
+    <PosterRow title="Gesehene Serien" eyebrow="ALLE" items={watchedSeries} state={watchedSeriesState} emptyLabel="Noch keine Serien abgeschlossen." detail={(item) => item.genres[0] ?? ""} />
 
     <section className="chart-grid">
       <BarChart title="Meistgesehene Genres" data={topGenres(watchedMovies, watchedSeries)} />

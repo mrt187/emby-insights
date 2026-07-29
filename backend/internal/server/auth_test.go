@@ -66,19 +66,19 @@ func (reader *fakeContinueWatchingReader) ContinueWatching(_ context.Context, us
 }
 
 type fakeWatchedReader struct {
-	movies       []emby.WatchedItem
-	series       []emby.WatchedItem
-	moviesPeriod string
-	seriesPeriod string
+	movies     []emby.WatchedItem
+	series     []emby.WatchedItem
+	moviesUser string
+	seriesUser string
 }
 
-func (reader *fakeWatchedReader) WatchedMovies(_ context.Context, _ string, period string) ([]emby.WatchedItem, error) {
-	reader.moviesPeriod = period
+func (reader *fakeWatchedReader) WatchedMovies(_ context.Context, userID string) ([]emby.WatchedItem, error) {
+	reader.moviesUser = userID
 	return reader.movies, nil
 }
 
-func (reader *fakeWatchedReader) WatchedSeries(_ context.Context, _ string, period string) ([]emby.WatchedItem, error) {
-	reader.seriesPeriod = period
+func (reader *fakeWatchedReader) WatchedSeries(_ context.Context, userID string) ([]emby.WatchedItem, error) {
+	reader.seriesUser = userID
 	return reader.series, nil
 }
 
@@ -261,7 +261,7 @@ func TestContinueWatchingUsesSessionIdentity(t *testing.T) {
 	}
 }
 
-func TestWatchedMoviesAndSeriesUsePeriod(t *testing.T) {
+func TestWatchedMoviesAndSeriesUseSessionIdentity(t *testing.T) {
 	store := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
 	reader := &fakeWatchedReader{
 		movies: []emby.WatchedItem{{ID: "1", Title: "Dune"}},
@@ -269,39 +269,26 @@ func TestWatchedMoviesAndSeriesUsePeriod(t *testing.T) {
 	}
 	app := &App{sessions: store, watched: reader}
 
-	moviesRequest := httptest.NewRequest(http.MethodGet, "/api/watched-movies?period=month", nil)
+	moviesRequest := httptest.NewRequest(http.MethodGet, "/api/watched-movies", nil)
 	moviesRequest.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
 	moviesRecorder := httptest.NewRecorder()
 	app.Handler().ServeHTTP(moviesRecorder, moviesRequest)
 	if moviesRecorder.Code != http.StatusOK || !strings.Contains(moviesRecorder.Body.String(), "Dune") {
 		t.Fatalf("watched-movies status = %d, body = %s", moviesRecorder.Code, moviesRecorder.Body.String())
 	}
-	if reader.moviesPeriod != "month" {
-		t.Fatalf("moviesPeriod = %q", reader.moviesPeriod)
+	if reader.moviesUser != "user-1" {
+		t.Fatalf("moviesUser = %q", reader.moviesUser)
 	}
 
-	seriesRequest := httptest.NewRequest(http.MethodGet, "/api/watched-series?period=year", nil)
+	seriesRequest := httptest.NewRequest(http.MethodGet, "/api/watched-series", nil)
 	seriesRequest.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
 	seriesRecorder := httptest.NewRecorder()
 	app.Handler().ServeHTTP(seriesRecorder, seriesRequest)
 	if seriesRecorder.Code != http.StatusOK || !strings.Contains(seriesRecorder.Body.String(), "Severance") {
 		t.Fatalf("watched-series status = %d, body = %s", seriesRecorder.Code, seriesRecorder.Body.String())
 	}
-	if reader.seriesPeriod != "year" {
-		t.Fatalf("seriesPeriod = %q", reader.seriesPeriod)
-	}
-}
-
-func TestWatchedMoviesRejectsInvalidPeriod(t *testing.T) {
-	store := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
-	app := &App{sessions: store, watched: &fakeWatchedReader{}}
-	request := httptest.NewRequest(http.MethodGet, "/api/watched-movies?period=decade", nil)
-	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
-	recorder := httptest.NewRecorder()
-	app.Handler().ServeHTTP(recorder, request)
-
-	if recorder.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	if reader.seriesUser != "user-1" {
+		t.Fatalf("seriesUser = %q", reader.seriesUser)
 	}
 }
 

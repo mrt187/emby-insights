@@ -8,6 +8,20 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.2] - 2026-07-29
+
+### Changed
+
+- "Gesehene Filme" and "Gesehene Serien" (and their `GET /api/watched-movies`
+  / `GET /api/watched-series` endpoints) no longer depend on the Woche/
+  Monat/Jahr selector — they always show everything Emby has marked fully
+  played.
+- The Statistics page's top rows are now one row of four equal metric
+  cards (Sehzeit, Filme abgeschlossen, Serien abgeschlossen, Lieblingsgenre)
+  instead of a separate summary banner plus three cards. Filme/Serien now
+  show all-time totals; Sehzeit/Lieblingsgenre stay tied to the period
+  selector.
+
 ## [0.8.1] - 2026-07-29
 
 ### Changed

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"time"
+	"strconv"
 )
 
 const watchedItemsLimit = 24
@@ -20,36 +20,30 @@ type WatchedItem struct {
 }
 
 type WatchedReader interface {
-	WatchedMovies(ctx context.Context, userID, period string) ([]WatchedItem, error)
-	WatchedSeries(ctx context.Context, userID, period string) ([]WatchedItem, error)
+	WatchedMovies(ctx context.Context, userID string) ([]WatchedItem, error)
+	WatchedSeries(ctx context.Context, userID string) ([]WatchedItem, error)
 }
 
-// WatchedMovies reads movies Emby has marked fully played, narrowed to the
-// given period by LastPlayedDate.
-func (client *Client) WatchedMovies(ctx context.Context, userID, period string) ([]WatchedItem, error) {
-	return client.watchedItems(ctx, userID, period, "Movie")
+// WatchedMovies reads all movies Emby has marked fully played.
+func (client *Client) WatchedMovies(ctx context.Context, userID string) ([]WatchedItem, error) {
+	return client.watchedItems(ctx, userID, "Movie")
 }
 
-// WatchedSeries reads series Emby has marked fully played — Emby rolls a
+// WatchedSeries reads all series Emby has marked fully played — Emby rolls a
 // series' Played status up from its episodes, so this already means "every
 // currently available episode has been watched".
-func (client *Client) WatchedSeries(ctx context.Context, userID, period string) ([]WatchedItem, error) {
-	return client.watchedItems(ctx, userID, period, "Series")
+func (client *Client) WatchedSeries(ctx context.Context, userID string) ([]WatchedItem, error) {
+	return client.watchedItems(ctx, userID, "Series")
 }
 
-func (client *Client) watchedItems(ctx context.Context, userID, period, itemType string) ([]WatchedItem, error) {
-	from, to, err := periodRange(period, time.Now())
-	if err != nil {
-		return nil, err
-	}
-
+func (client *Client) watchedItems(ctx context.Context, userID, itemType string) ([]WatchedItem, error) {
 	query := url.Values{
 		"Filters":          {"IsPlayed"},
 		"IncludeItemTypes": {itemType},
 		"SortBy":           {"DatePlayed"},
 		"SortOrder":        {"Descending"},
 		"Fields":           {"Genres"},
-		"Limit":            {"100"},
+		"Limit":            {strconv.Itoa(watchedItemsLimit)},
 		"Recursive":        {"true"},
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, client.baseURL+"/Users/"+userID+"/Items?"+query.Encode(), nil)
@@ -85,28 +79,13 @@ func (client *Client) watchedItems(ctx context.Context, userID, period, itemType
 	}
 
 	// The bulk list endpoint omits UserData.LastPlayedDate on this Emby
-	// version (only the single-item endpoint returns it), so the period is
-	// checked one item at a time. The list is already sorted by DatePlayed
-	// descending, so the first item played before the period start ends the
-	// scan — everything after it is even older.
+	// version (only the single-item endpoint returns it), so it is looked up
+	// individually per item — bounded by watchedItemsLimit above.
 	items := make([]WatchedItem, 0, len(result.Items))
 	for _, item := range result.Items {
 		lastPlayedDate, err := client.itemLastPlayedDate(ctx, userID, item.Id)
 		if err != nil {
 			return nil, err
-		}
-		if lastPlayedDate == "" {
-			continue
-		}
-		played, err := time.Parse(time.RFC3339, lastPlayedDate)
-		if err != nil {
-			continue
-		}
-		if played.Before(from) {
-			break
-		}
-		if played.After(to) {
-			continue
 		}
 
 		var posterURL string
@@ -121,9 +100,6 @@ func (client *Client) watchedItems(ctx context.Context, userID, period, itemType
 			Genres:         item.Genres,
 			LastPlayedDate: lastPlayedDate,
 		})
-		if len(items) >= watchedItemsLimit {
-			break
-		}
 	}
 	return items, nil
 }

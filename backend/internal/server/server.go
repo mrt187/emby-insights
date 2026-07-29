@@ -258,11 +258,7 @@ func (app *App) watchedMovies(writer http.ResponseWriter, request *http.Request)
 	if !ok {
 		return
 	}
-	period, ok := parsePeriod(writer, request)
-	if !ok {
-		return
-	}
-	items, err := app.watched.WatchedMovies(request.Context(), identity.UserID, period)
+	items, err := app.watched.WatchedMovies(request.Context(), identity.UserID)
 	if err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "watched movies are unavailable"})
 		return
@@ -275,11 +271,7 @@ func (app *App) watchedSeries(writer http.ResponseWriter, request *http.Request)
 	if !ok {
 		return
 	}
-	period, ok := parsePeriod(writer, request)
-	if !ok {
-		return
-	}
-	items, err := app.watched.WatchedSeries(request.Context(), identity.UserID, period)
+	items, err := app.watched.WatchedSeries(request.Context(), identity.UserID)
 	if err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "watched series are unavailable"})
 		return
