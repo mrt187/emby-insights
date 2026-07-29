@@ -8,6 +8,18 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.16] - 2026-07-29
+
+### Changed
+
+- Reworked the Home carousel into three purpose-built tiles instead of a
+  generic repeated layout: the profile picture together with "Mitglied
+  seit"/last-active/total-requests; the next upcoming release shown with
+  its actual poster; and open requests + new-for-you side by side in one
+  tile.
+- Moved the "Suchen" field on the Anfragen tab above the "Meine Anfragen"
+  headline instead of between it and the poster row.
+
 ## [0.8.15] - 2026-07-29
 
 ### Changed
