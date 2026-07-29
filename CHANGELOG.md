@@ -8,6 +8,19 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.5] - 2026-07-29
+
+### Added
+
+- Clicking any poster now opens a detail screen: description, cast/crew
+  with photos, rating, genres, and a personal status badge ("Angesehen",
+  "Verfügbar", or "X von Y Folgen" for series). Sourced from Emby for
+  everything already in the library (Demnächst, Neu für dich, Weiterschauen,
+  Gesehene Filme/Serien), and from Seerr/TMDB for posters that may not be in
+  Emby yet (Anfragen, the five discover lists) — the latter without a
+  personal status.
+- New endpoints: `GET /api/media/emby?id=`, `GET /api/media/seerr?mediaType=&id=`.
+
 ## [0.8.4] - 2026-07-29
 
 ### Changed

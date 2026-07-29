@@ -21,6 +21,8 @@ type Request struct {
 	Title     string `json:"title"`
 	PosterURL string `json:"posterUrl"`
 	Status    string `json:"status"`
+	TmdbID    string `json:"tmdbId"`
+	MediaType string `json:"mediaType"`
 }
 
 type RequestsReader interface {
@@ -75,6 +77,8 @@ func (client *Client) Requests(ctx context.Context, embyUserID string) ([]Reques
 			Title:     detail.title,
 			PosterURL: detail.posterURL,
 			Status:    statusLabel(entry.Status, entry.Media.Status),
+			TmdbID:    strconv.Itoa(entry.Media.TmdbID),
+			MediaType: entry.Media.MediaType,
 		})
 	}
 	return requests, nil

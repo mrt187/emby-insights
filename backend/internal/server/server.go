@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -32,6 +33,8 @@ type App struct {
 	watchedLibraryIDs    []string
 	requests             seerr.RequestsReader
 	discover             seerr.DiscoverReader
+	embyMediaDetail      emby.MediaDetailReader
+	seerrMediaDetail     seerr.MediaDetailReader
 	sessions             session.Store
 	cookieSecure         bool
 }
@@ -64,6 +67,8 @@ func New(cfg config.Config) (*App, error) {
 		watchedLibraryIDs:    cfg.EmbyWatchedLibraryIDs,
 		requests:             seerrClient,
 		discover:             seerrClient,
+		embyMediaDetail:      embyClient,
+		seerrMediaDetail:     seerrClient,
 		sessions:             session.NewRedisStore(cache),
 		cookieSecure:         cfg.CookieSecure,
 	}, nil
@@ -101,6 +106,8 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/discover/series/upcoming", app.discoverHandler(func(ctx context.Context, discover seerr.DiscoverReader) ([]seerr.DiscoverItem, error) {
 		return discover.UpcomingSeries(ctx)
 	}))
+	mux.HandleFunc("GET /api/media/emby", app.embyMediaDetailHandler)
+	mux.HandleFunc("GET /api/media/seerr", app.seerrMediaDetailHandler)
 	return mux
 }
 
@@ -227,6 +234,42 @@ func (app *App) discoverHandler(read func(context.Context, seerr.DiscoverReader)
 		}
 		respondJSON(writer, http.StatusOK, orEmpty(items))
 	}
+}
+
+func (app *App) embyMediaDetailHandler(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	itemID := request.URL.Query().Get("id")
+	if itemID == "" {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "id is required"})
+		return
+	}
+	detail, err := app.embyMediaDetail.EmbyMediaDetail(request.Context(), identity.UserID, itemID)
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "media detail is unavailable"})
+		return
+	}
+	respondJSON(writer, http.StatusOK, detail)
+}
+
+func (app *App) seerrMediaDetailHandler(writer http.ResponseWriter, request *http.Request) {
+	if _, ok := app.identityFromRequest(writer, request); !ok {
+		return
+	}
+	mediaType := request.URL.Query().Get("mediaType")
+	tmdbID, parseErr := strconv.Atoi(request.URL.Query().Get("id"))
+	if (mediaType != "movie" && mediaType != "tv") || parseErr != nil {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "mediaType must be movie or tv, and id must be a TMDB id"})
+		return
+	}
+	detail, err := app.seerrMediaDetail.MediaDetail(request.Context(), mediaType, tmdbID)
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "media detail is unavailable"})
+		return
+	}
+	respondJSON(writer, http.StatusOK, detail)
 }
 
 func (app *App) newForYouItems(writer http.ResponseWriter, request *http.Request) {

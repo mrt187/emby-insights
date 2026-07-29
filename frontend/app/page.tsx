@@ -8,12 +8,20 @@ type Period = "Woche" | "Monat" | "Jahr";
 type StatisticsPeriod = "week" | "month" | "year";
 type PersonalStats = { watchSeconds: number; previousWatchSeconds: number; completedMovies: number; completedSeries: number; favouriteGenre: string; periodStartsAt: string; periodEndsAt: string };
 type UpcomingItem = { id: string; title: string; posterUrl: string; premiereDate: string };
-type RequestItem = { id: string; title: string; posterUrl: string; status: string };
+type RequestItem = { id: string; title: string; posterUrl: string; status: string; tmdbId: string; mediaType: string };
 type NewForYouItem = { id: string; title: string; posterUrl: string };
 type ContinueWatchingItem = { id: string; title: string; posterUrl: string; progressPercent: number };
 type WatchedItem = { id: string; title: string; posterUrl: string; genres: string[]; lastPlayedDate: string };
 type DiscoverItem = { id: string; title: string; posterUrl: string; mediaType: string };
-type IconName = "home" | "chart" | "sparkle" | "user" | "bell" | "arrow" | "clock" | "movie" | "series" | "genre";
+type MediaSelection = { source: "emby"; id: string } | { source: "seerr"; id: string; mediaType: string };
+type MediaPerson = { name: string; role: string; imageUrl: string };
+type MediaDetail = {
+  id: string; title: string; overview: string; posterUrl: string; backdropUrl: string;
+  genres: string[]; communityRating: number; officialRating?: string; year: number; runtimeMinutes: number;
+  cast: MediaPerson[]; crew: MediaPerson[];
+  isSeries?: boolean; watchedEpisodes?: number; totalEpisodes?: number; played?: boolean;
+};
+type IconName = "home" | "chart" | "sparkle" | "user" | "bell" | "arrow" | "close" | "clock" | "movie" | "series" | "genre";
 type Tone = "blue" | "peach" | "mint" | "lilac";
 type LoadState = "loading" | "ready" | "error";
 
@@ -22,7 +30,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.4";
+const APP_VERSION = "0.8.5";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -42,6 +50,7 @@ export default function Home() {
   const [requestState, setRequestState] = useState<LoadState>("loading");
   const [newForYouItems, setNewForYouItems] = useState<NewForYouItem[]>([]);
   const [newForYouState, setNewForYouState] = useState<LoadState>("loading");
+  const [selectedMedia, setSelectedMedia] = useState<MediaSelection | null>(null);
   const noticeRef = useRef<HTMLDivElement>(null);
   const noticeButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -111,6 +120,7 @@ export default function Home() {
   const openNotices = () => { setNoticeOpen((open) => !open); setUnread(0); };
 
   return <main className="app-shell">
+    {selectedMedia && <MediaDetailScreen selection={selectedMedia} onClose={() => setSelectedMedia(null)} />}
     <a className="skip-link" href="#dashboard-content">Zum Inhalt springen</a>
     <aside className="side-nav" aria-label="Hauptnavigation">
       <div className="brand"><img className="brand-logo" src="/emby-insights-logo.svg" alt="Emby Insights" width="31" height="31" /><span>insights</span></div>
@@ -130,9 +140,9 @@ export default function Home() {
           {noticeOpen && <div ref={noticeRef} className="notifications" id="notifications" role="dialog" aria-label="Benachrichtigungen"><strong>Benachrichtigungen</strong><p>Deine Anfrage „Severance“ wird bearbeitet.</p><p>Am Freitag erscheint Alien: Earth.</p></div>}
         </div>
       </header>
-      {page === "Heute" && <Today user={user} onStats={() => selectPage("Statistik")} upcoming={upcomingItems} upcomingState={upcomingState} requests={requestItems} requestState={requestState} newForYou={newForYouItems} newForYouState={newForYouState} />}
-      {page === "Statistik" && <Stats />}
-      {page === "Anfragen" && <Requests items={requestItems} state={requestState} />}
+      {page === "Heute" && <Today user={user} onStats={() => selectPage("Statistik")} upcoming={upcomingItems} upcomingState={upcomingState} requests={requestItems} requestState={requestState} newForYou={newForYouItems} newForYouState={newForYouState} onSelectMedia={setSelectedMedia} />}
+      {page === "Statistik" && <Stats onSelectMedia={setSelectedMedia} />}
+      {page === "Anfragen" && <Requests items={requestItems} state={requestState} onSelectMedia={setSelectedMedia} />}
       {page === "Profil" && <Profile user={user} />}
     </section>
 
@@ -148,6 +158,7 @@ function Icon({ name }: { name: IconName }) {
     user: <><circle cx="12" cy="8" r="3.5" /><path d="M4.5 21c.8-4 3.2-6 7.5-6s6.7 2 7.5 6" /></>,
     bell: <><path d="M18 10a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M10 22h4" /></>,
     arrow: <path d="M5 12h14m-6-6 6 6-6 6" />,
+    close: <path d="M18 6 6 18M6 6l12 12" />,
     clock: <><circle cx="12" cy="12" r="8.5" /><path d="M12 7v5l3.5 2" /></>,
     movie: <><rect x="3" y="5" width="18" height="15" rx="2" /><path d="M7 5v15m10-15v15M3 10h18" /></>,
     series: <><path d="M5 3h14v18H5z" /><path d="M8 7h8M8 11h8M8 15h5" /></>,
@@ -161,17 +172,18 @@ function UserAvatar({ name }: { name: string }) {
   return <span className="user-avatar"><span className="avatar-initial">{initial}</span><img src="/api/me/avatar" alt="" width="44" height="44" onError={(event) => event.currentTarget.remove()} /></span>;
 }
 
-function Today({ user, onStats, upcoming, upcomingState, requests, requestState, newForYou, newForYouState }: {
+function Today({ user, onStats, upcoming, upcomingState, requests, requestState, newForYou, newForYouState, onSelectMedia }: {
   user: { name: string }; onStats: () => void;
   upcoming: UpcomingItem[]; upcomingState: LoadState; requests: RequestItem[]; requestState: LoadState;
   newForYou: NewForYouItem[]; newForYouState: LoadState;
+  onSelectMedia: (selection: MediaSelection) => void;
 }) {
   return <div className="content today-view">
     <section className="section-heading rhythm-heading"><div><p className="eyebrow">DEIN PROFIL</p><h2>Dein Rhythmus</h2></div><button className="text-button" onClick={onStats}>Alle Details <Icon name="arrow" /></button></section>
     <UserInsightCard user={user} upcoming={upcoming} upcomingState={upcomingState} requests={requests} requestState={requestState} newForYou={newForYou} newForYouState={newForYouState} />
-    <PosterRow title="Demnächst" eyebrow="COMING SOON · NÄCHSTE 4 WOCHEN" items={upcoming} state={upcomingState} emptyLabel="Nichts Neues in den nächsten vier Wochen." detail={(item) => formatPremiereDate(item.premiereDate)} />
-    <PosterRow title="Meine Anfragen" eyebrow="SEERR · OFFEN" items={requests} state={requestState} emptyLabel="Keine offenen Anfragen." detail={(item) => item.status} />
-    <PosterRow title="Neu für dich" eyebrow="IN DEN LETZTEN 14 TAGEN" items={newForYou} state={newForYouState} emptyLabel="Nichts Neues in den letzten 14 Tagen." detail={() => "Ungesehen"} />
+    <PosterRow title="Demnächst" eyebrow="COMING SOON · NÄCHSTE 4 WOCHEN" items={upcoming} state={upcomingState} emptyLabel="Nichts Neues in den nächsten vier Wochen." detail={(item) => formatPremiereDate(item.premiereDate)} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
+    <PosterRow title="Meine Anfragen" eyebrow="SEERR · OFFEN" items={requests} state={requestState} emptyLabel="Keine offenen Anfragen." detail={(item) => item.status} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />
+    <PosterRow title="Neu für dich" eyebrow="IN DEN LETZTEN 14 TAGEN" items={newForYou} state={newForYouState} emptyLabel="Nichts Neues in den letzten 14 Tagen." detail={() => "Ungesehen"} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
   </div>;
 }
 
@@ -281,21 +293,26 @@ function MetricCard({ icon, tone, value, label, detail, positive, genre = false 
   return <article className={`metric-card tone-${tone}${genre ? " genre-card" : ""}`}><span className="metric-icon"><Icon name={icon} /></span><strong>{value}</strong><p>{label}</p><small className={positive ? "up" : undefined}>{detail}</small></article>;
 }
 
-function PosterRow<T extends { id: string; title: string; posterUrl?: string }>({ title, eyebrow, items, detail, state, emptyLabel, progress }: {
-  title?: string; eyebrow?: string; items: readonly T[]; detail: (item: T) => string; state?: LoadState; emptyLabel?: string; progress?: (item: T) => number;
+function PosterRow<T extends { id: string; title: string; posterUrl?: string }>({ title, eyebrow, items, detail, state, emptyLabel, progress, onSelect }: {
+  title?: string; eyebrow?: string; items: readonly T[]; detail: (item: T) => string; state?: LoadState; emptyLabel?: string; progress?: (item: T) => number; onSelect?: (item: T) => void;
 }) {
   return <section className="poster-section">
     {(title || eyebrow) && <div className="section-heading"><div>{eyebrow && <p className="eyebrow">{eyebrow}</p>}{title && <h2>{title}</h2>}</div></div>}
     {state === "loading" && <p className="poster-status" role="status">Wird geladen …</p>}
     {state === "error" && <p className="poster-status">Nicht verfügbar</p>}
     {state !== "loading" && state !== "error" && items.length === 0 && <p className="poster-status">{emptyLabel ?? "Nichts vorhanden."}</p>}
-    {items.length > 0 && <div className="poster-scroller">{items.map((item) => <article className="poster-entry" key={item.id}>
-      <div className="poster wide" role="img" aria-label={item.title}>
-        {item.posterUrl ? <img src={item.posterUrl} alt="" loading="lazy" /> : <span>{item.title}</span>}
-        {progress && <div className="poster-progress"><div className="poster-progress-fill" style={{ width: `${progress(item)}%` }} /></div>}
-      </div>
-      <strong>{item.title}</strong><small>{detail(item)}</small>
-    </article>)}</div>}
+    {items.length > 0 && <div className="poster-scroller">{items.map((item) => {
+      const inner = <>
+        <div className="poster wide" role="img" aria-label={item.title}>
+          {item.posterUrl ? <img src={item.posterUrl} alt="" loading="lazy" /> : <span>{item.title}</span>}
+          {progress && <div className="poster-progress"><div className="poster-progress-fill" style={{ width: `${progress(item)}%` }} /></div>}
+        </div>
+        <strong>{item.title}</strong><small>{detail(item)}</small>
+      </>;
+      return onSelect
+        ? <button type="button" className="poster-entry poster-entry-button" key={item.id} onClick={() => onSelect(item)}>{inner}</button>
+        : <article className="poster-entry" key={item.id}>{inner}</article>;
+    })}</div>}
   </section>;
 }
 
@@ -336,7 +353,7 @@ function BarChart({ title, data }: { title: string; data: { label: string; value
   </section>;
 }
 
-function Stats() {
+function Stats({ onSelectMedia }: { onSelectMedia: (selection: MediaSelection) => void }) {
   const [period, setPeriod] = useState<Period>("Woche");
   const [statistics, setStatistics] = useState<PersonalStats | null>(null);
   const [state, setState] = useState<LoadState>("loading");
@@ -388,9 +405,9 @@ function Stats() {
       <MetricCard icon="genre" tone="lilac" value={statistics?.favouriteGenre || "—"} label="Lieblingsgenre" detail={statistics ? "Nach Sehzeit" : loadingCopy(state)} genre />
     </section>
 
-    <PosterRow title="Was ich gerade schaue" eyebrow="WEITERSCHAUEN" items={continueWatching} state={continueWatchingState} emptyLabel="Nichts in Bearbeitung." detail={(item) => `${item.progressPercent} % gesehen`} progress={(item) => item.progressPercent} />
-    <PosterRow title="Gesehene Filme" eyebrow="ALLE" items={watchedMovies} state={watchedMoviesState} emptyLabel="Noch keine Filme abgeschlossen." detail={(item) => item.genres[0] ?? ""} />
-    <PosterRow title="Gesehene Serien" eyebrow="ALLE" items={watchedSeries} state={watchedSeriesState} emptyLabel="Noch keine Serien abgeschlossen." detail={(item) => item.genres[0] ?? ""} />
+    <PosterRow title="Was ich gerade schaue" eyebrow="WEITERSCHAUEN" items={continueWatching} state={continueWatchingState} emptyLabel="Nichts in Bearbeitung." detail={(item) => `${item.progressPercent} % gesehen`} progress={(item) => item.progressPercent} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
+    <PosterRow title="Gesehene Filme" eyebrow="ALLE" items={watchedMovies} state={watchedMoviesState} emptyLabel="Noch keine Filme abgeschlossen." detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
+    <PosterRow title="Gesehene Serien" eyebrow="ALLE" items={watchedSeries} state={watchedSeriesState} emptyLabel="Noch keine Serien abgeschlossen." detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
 
     <section className="chart-grid">
       <BarChart title="Meistgesehene Genres" data={topGenres(watchedMovies, watchedSeries)} />
@@ -412,7 +429,7 @@ function useDiscoverList(path: string) {
   return [items, state] as const;
 }
 
-function Requests({ items, state }: { items: RequestItem[]; state: LoadState }) {
+function Requests({ items, state, onSelectMedia }: { items: RequestItem[]; state: LoadState; onSelectMedia: (selection: MediaSelection) => void }) {
   const [trending, trendingState] = useDiscoverList("/api/discover/trending");
   const [popularMovies, popularMoviesState] = useDiscoverList("/api/discover/movies/popular");
   const [upcomingMovies, upcomingMoviesState] = useDiscoverList("/api/discover/movies/upcoming");
@@ -421,15 +438,85 @@ function Requests({ items, state }: { items: RequestItem[]; state: LoadState }) 
 
   return <div className="content page-view">
     <section className="section-heading"><div><p className="eyebrow">SEERR · OFFEN</p><h2>Meine Anfragen</h2></div></section>
-    <PosterRow title="" eyebrow="" items={items} state={state} emptyLabel="Keine offenen Anfragen." detail={(item) => item.status} />
+    <PosterRow title="" eyebrow="" items={items} state={state} emptyLabel="Keine offenen Anfragen." detail={(item) => item.status} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />
 
-    <PosterRow title="Im Trend" eyebrow="SEERR · TMDB" items={trending} state={trendingState} emptyLabel="Nichts im Trend." detail={(item) => item.mediaType === "tv" ? "Serie" : "Film"} />
-    <PosterRow title="Beliebte Filme" eyebrow="SEERR · TMDB" items={popularMovies} state={popularMoviesState} emptyLabel="Keine Daten." detail={() => "Beliebt"} />
-    <PosterRow title="Demnächst erscheinende Filme" eyebrow="SEERR · TMDB" items={upcomingMovies} state={upcomingMoviesState} emptyLabel="Keine Daten." detail={() => "Demnächst"} />
-    <PosterRow title="Beliebte Serien" eyebrow="SEERR · TMDB" items={popularSeries} state={popularSeriesState} emptyLabel="Keine Daten." detail={() => "Beliebt"} />
-    <PosterRow title="Demnächst erscheinende Serien" eyebrow="SEERR · TMDB" items={upcomingSeries} state={upcomingSeriesState} emptyLabel="Keine Daten." detail={() => "Demnächst"} />
+    <PosterRow title="Im Trend" eyebrow="SEERR · TMDB" items={trending} state={trendingState} emptyLabel="Nichts im Trend." detail={(item) => item.mediaType === "tv" ? "Serie" : "Film"} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />
+    <PosterRow title="Beliebte Filme" eyebrow="SEERR · TMDB" items={popularMovies} state={popularMoviesState} emptyLabel="Keine Daten." detail={() => "Beliebt"} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />
+    <PosterRow title="Demnächst erscheinende Filme" eyebrow="SEERR · TMDB" items={upcomingMovies} state={upcomingMoviesState} emptyLabel="Keine Daten." detail={() => "Demnächst"} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />
+    <PosterRow title="Beliebte Serien" eyebrow="SEERR · TMDB" items={popularSeries} state={popularSeriesState} emptyLabel="Keine Daten." detail={() => "Beliebt"} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />
+    <PosterRow title="Demnächst erscheinende Serien" eyebrow="SEERR · TMDB" items={upcomingSeries} state={upcomingSeriesState} emptyLabel="Keine Daten." detail={() => "Demnächst"} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />
   </div>;
 }
+function MediaDetailScreen({ selection, onClose }: { selection: MediaSelection; onClose: () => void }) {
+  const [detail, setDetail] = useState<MediaDetail | null>(null);
+  const [state, setState] = useState<LoadState>("loading");
+  const mediaType = selection.source === "seerr" ? selection.mediaType : undefined;
+
+  useEffect(() => {
+    let active = true;
+    const url = selection.source === "emby"
+      ? `/api/media/emby?id=${encodeURIComponent(selection.id)}`
+      : `/api/media/seerr?mediaType=${encodeURIComponent(mediaType ?? "")}&id=${encodeURIComponent(selection.id)}`;
+    fetch(url, { credentials: "include" })
+      .then(async (response) => { if (!response.ok) throw new Error("detail unavailable"); const data = await response.json(); if (active) { setDetail(data); setState("ready"); } })
+      .catch(() => active && setState("error"));
+    return () => { active = false; };
+  }, [selection.source, selection.id, mediaType]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  const status = detail ? mediaStatus(detail) : null;
+  const crewAndCast = detail ? [...detail.crew, ...detail.cast] : [];
+
+  return <div className="media-detail-overlay" role="dialog" aria-modal="true" aria-label={detail?.title ?? "Details"}>
+    <div className="media-detail-scroll">
+      <button type="button" className="media-detail-close" onClick={onClose} aria-label="Schließen"><Icon name="close" /></button>
+      {state === "loading" && <p className="poster-status media-detail-status" role="status">Wird geladen …</p>}
+      {state === "error" && <p className="poster-status media-detail-status">Details nicht verfügbar.</p>}
+      {detail && <div className="media-detail">
+        {detail.backdropUrl && <div className="media-detail-backdrop" style={{ backgroundImage: `url(${detail.backdropUrl})` }} />}
+        <div className="media-detail-hero">
+          <div className="media-detail-poster">{detail.posterUrl ? <img src={detail.posterUrl} alt="" /> : <span>{detail.title}</span>}</div>
+          <div className="media-detail-info">
+            {status && <span className="media-status-badge">{status}</span>}
+            <h1>{detail.title}{detail.year ? ` (${detail.year})` : ""}</h1>
+            <p className="media-detail-meta">
+              {detail.officialRating && <span>{detail.officialRating}</span>}
+              {detail.runtimeMinutes > 0 && <span>{detail.runtimeMinutes} Minuten</span>}
+              {detail.genres.length > 0 && <span>{detail.genres.join(", ")}</span>}
+            </p>
+            {detail.communityRating > 0 && <p className="media-detail-rating">★ {detail.communityRating.toFixed(1)}</p>}
+          </div>
+        </div>
+        {detail.overview && <section className="media-detail-overview"><h2>Übersicht</h2><p>{detail.overview}</p></section>}
+        {crewAndCast.length > 0 && <section className="media-detail-cast">
+          <h2>Besetzung</h2>
+          <div className="cast-grid">
+            {crewAndCast.slice(0, 12).map((person, index) => <div className="cast-entry" key={`${person.name}-${index}`}>
+              <div className="cast-avatar">{person.imageUrl ? <img src={person.imageUrl} alt="" loading="lazy" /> : <span>{person.name.charAt(0)}</span>}</div>
+              <strong>{person.name}</strong><small>{person.role}</small>
+            </div>)}
+          </div>
+        </section>}
+      </div>}
+    </div>
+  </div>;
+}
+
+function mediaStatus(detail: MediaDetail) {
+  if (detail.isSeries) {
+    if (!detail.totalEpisodes) return null;
+    if ((detail.watchedEpisodes ?? 0) >= detail.totalEpisodes) return "Angesehen";
+    return `${detail.watchedEpisodes ?? 0} von ${detail.totalEpisodes} Folgen`;
+  }
+  if (detail.played !== undefined) return detail.played ? "Angesehen" : "Verfügbar";
+  return null;
+}
+
 function Profile({ user }: { user: { name: string } }) {
   const [signingOut, setSigningOut] = useState(false);
   const logout = async () => {

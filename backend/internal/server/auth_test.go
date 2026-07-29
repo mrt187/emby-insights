@@ -117,6 +117,30 @@ func (reader *fakeDiscoverReader) UpcomingSeries(context.Context) ([]seerr.Disco
 	return nil, nil
 }
 
+type fakeEmbyMediaDetailReader struct {
+	detail emby.MediaDetail
+	userID string
+	itemID string
+}
+
+func (reader *fakeEmbyMediaDetailReader) EmbyMediaDetail(_ context.Context, userID, itemID string) (emby.MediaDetail, error) {
+	reader.userID = userID
+	reader.itemID = itemID
+	return reader.detail, nil
+}
+
+type fakeSeerrMediaDetailReader struct {
+	detail    seerr.MediaDetail
+	mediaType string
+	tmdbID    int
+}
+
+func (reader *fakeSeerrMediaDetailReader) MediaDetail(_ context.Context, mediaType string, tmdbID int) (seerr.MediaDetail, error) {
+	reader.mediaType = mediaType
+	reader.tmdbID = tmdbID
+	return reader.detail, nil
+}
+
 type memorySessionStore struct {
 	identity emby.Identity
 	deleted  bool
@@ -350,5 +374,60 @@ func TestDiscoverEndpointsRequireAuthAndReturnData(t *testing.T) {
 	app.Handler().ServeHTTP(popularRecorder, popular)
 	if popularRecorder.Code != http.StatusOK || !strings.Contains(popularRecorder.Body.String(), "The Odyssey") {
 		t.Fatalf("popular movies status = %d, body = %s", popularRecorder.Code, popularRecorder.Body.String())
+	}
+}
+
+func TestEmbyMediaDetailUsesSessionIdentity(t *testing.T) {
+	store := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	reader := &fakeEmbyMediaDetailReader{detail: emby.MediaDetail{ID: "154950", Title: "Dune"}}
+	app := &App{sessions: store, embyMediaDetail: reader}
+
+	request := httptest.NewRequest(http.MethodGet, "/api/media/emby?id=154950", nil)
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "Dune") {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	if reader.userID != "user-1" || reader.itemID != "154950" {
+		t.Fatalf("userID = %q, itemID = %q", reader.userID, reader.itemID)
+	}
+}
+
+func TestEmbyMediaDetailRequiresID(t *testing.T) {
+	app := &App{sessions: &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}, embyMediaDetail: &fakeEmbyMediaDetailReader{}}
+	request := httptest.NewRequest(http.MethodGet, "/api/media/emby", nil)
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestSeerrMediaDetailValidatesMediaType(t *testing.T) {
+	store := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	reader := &fakeSeerrMediaDetailReader{detail: seerr.MediaDetail{ID: "1228710", Title: "The Mandalorian and Grogu"}}
+	app := &App{sessions: store, seerrMediaDetail: reader}
+
+	good := httptest.NewRequest(http.MethodGet, "/api/media/seerr?mediaType=movie&id=1228710", nil)
+	good.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	goodRecorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(goodRecorder, good)
+	if goodRecorder.Code != http.StatusOK || !strings.Contains(goodRecorder.Body.String(), "Mandalorian") {
+		t.Fatalf("status = %d, body = %s", goodRecorder.Code, goodRecorder.Body.String())
+	}
+	if reader.mediaType != "movie" || reader.tmdbID != 1228710 {
+		t.Fatalf("mediaType = %q, tmdbID = %d", reader.mediaType, reader.tmdbID)
+	}
+
+	bad := httptest.NewRequest(http.MethodGet, "/api/media/seerr?mediaType=book&id=1228710", nil)
+	bad.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	badRecorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(badRecorder, bad)
+	if badRecorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, body = %s", badRecorder.Code, badRecorder.Body.String())
 	}
 }
