@@ -9,7 +9,6 @@ Stand: 28. Juli 2026
 - Nutzeranmeldung über `POST /Users/AuthenticateByName`.
 - Serverseitige Integration über einen statischen API-Schlüssel.
 - Neue, ungesehene Inhalte pro Nutzer über `GET /Users/{UserId}/Items/Latest` mit `IsPlayed=false`.
-- ComingSoon-Bibliotheken sind normale Emby-Bibliotheken und können über die Emby-API gelesen werden.
 - Wiedergabestatus, Genre und der Abschluss von Filmen beziehungsweise Serien können über die Emby-Metadaten und Nutzerstatusdaten ermittelt werden.
 
 ## Playback Reporting
@@ -27,17 +26,17 @@ Tracearr wird nicht benötigt. Ein kleiner, regulärer Emby-Connector liest Play
 
 Die API liefert bereits ungesehene, neueste Inhalte pro Nutzer. Der exakte 14-Tage-Filter wird gegen die laufende Emby-Instanz getestet; falls nötig, filtert das Backend die abgefragten Ergebnisse anhand des Hinzufügedatums.
 
-## ComingSoon
+## Release calendar
 
-**Verifiziert im Plugin-Quellcode**
+**Verifiziert im Radarr-/Sonarr- und TMDB-Quellcode**
 
-- ComingSoon erzeugt je Liste eine normale Emby-Bibliothek.
-- Die erzeugte NFO enthält den Release-Termin als `premiered` und zusätzlich als lokalisierte `tagline`.
-- Poster und Release-Informationen lassen sich daher ohne direkte Radarr-/Sonarr-Anbindung über die Emby-API anzeigen.
+- Radarr liefert überwachte Filme einschließlich Kino- und Digitaltermin sowie TMDB-ID.
+- Sonarr liefert künftige Episoden mit `airDateUtc` und der TVDB-ID der Serie.
+- TMDB ergänzt regionale Filmtermine; für Deutschland werden Kino- und Digitaltermine verwendet. Eine TVDB-ID kann über TMDB in eine TMDB-ID aufgelöst werden.
 
 **Folgerung**
 
-Emby Insights liest ausschließlich die ComingSoon-Bibliotheken per Emby-API.
+Emby Insights liest den Kalender direkt und erzeugt keine Emby-Bibliotheken.
 
 ## Seerr
 
@@ -55,7 +54,7 @@ Für Seerr verwenden wir zuerst die stabile Emby-ID-Verknüpfung. Der Benutzerna
 ## Echtzeit
 
 - **Seerr:** Webhook an Emby Insights für Anfrage- und Verfügbarkeitsereignisse.
-- **ComingSoon:** Änderungen werden beim nächsten ComingSoon-Refresh über die Emby-Bibliothek sichtbar.
+- **Release calendar:** Radarr-, Sonarr- und TMDB-Daten werden für 15 Minuten in Redis zwischengespeichert.
 - **Emby:** Erfordert einen Test der verfügbaren Bibliotheksereignisse; andernfalls nutzt Emby Insights einen gezielten kurzen Abgleich.
 - **Browser:** Das Go-Backend sendet neue Daten sofort über eine eigene Live-Verbindung an geöffnete Dashboards.
 

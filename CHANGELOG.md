@@ -8,6 +8,25 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.23] - 2026-07-30
+
+### Added
+
+- The Home dashboard now reads the release calendar directly from Radarr and
+  Sonarr, optionally enriching movie release dates through TMDB for the
+  configured region. It no longer needs the separate ComingSoon Emby plugin
+  or its generated libraries.
+- A new "Im Kino" row shows upcoming cinema starts and films currently in
+  cinemas. Cards state either the cinema start date or the expected end of
+  the cinema window, while the Upcoming row uses relative availability text.
+- Calendar responses are cached in Redis for 15 minutes. If TMDB is
+  temporarily unavailable, Radarr's dates keep the movie calendar usable.
+
+### Changed
+
+- Upcoming TV episodes now carry their season and episode number directly;
+  no title-format parsing from generated ComingSoon entries is needed.
+
 ## [0.8.22] - 2026-07-29
 
 ### Added

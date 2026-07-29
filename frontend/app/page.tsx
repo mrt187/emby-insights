@@ -13,7 +13,7 @@ type WeekdayWatchTime = { weekday: number; watchSeconds: number };
 type LongestSession = { itemName: string; watchSeconds: number; startedAt: string };
 type MostActiveDay = { date: string; watchSeconds: number };
 type UserProfile = { memberSince: string; lastActiveDate: string; lastLoginDate: string };
-type UpcomingItem = { id: string; title: string; posterUrl: string; premiereDate: string };
+type UpcomingItem = { id: string; tmdbId: string; title: string; posterUrl: string; mediaType: string; availabilityDate: string; cinemaStartDate?: string; cinemaEndDate?: string; seasonNumber?: number; episodeNumber?: number; episodeTitle?: string };
 type RequestItem = { id: string; title: string; posterUrl: string; status: string; tmdbId: string; mediaType: string };
 type NewForYouItem = { id: string; title: string; posterUrl: string };
 type ContinueWatchingItem = { id: string; title: string; posterUrl: string; progressPercent: number };
@@ -44,12 +44,34 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.22";
+const APP_VERSION = "0.8.23";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "" : dateFormatter.format(date);
+}
+function availabilityWording(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Demnächst verfügbar";
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const release = new Date(date); release.setHours(0, 0, 0, 0);
+  const days = Math.round((release.getTime() - today.getTime()) / 86_400_000);
+  if (days <= 0) return "Heute verfügbar";
+  if (days === 1) return "Verfügbar morgen";
+  if (days < 7) return `Verfügbar in ${days} Tagen`;
+  const weeks = Math.ceil(days / 7);
+  return `Verfügbar in ${weeks} ${weeks === 1 ? "Woche" : "Wochen"}`;
+}
+function cinemaWording(item: UpcomingItem) {
+  const start = item.cinemaStartDate ? new Date(item.cinemaStartDate) : null;
+  if (start && start.getTime() > Date.now()) return `Kinostart ${formatPremiereDate(item.cinemaStartDate!)}`;
+  return item.cinemaEndDate ? `Im Kino bis ${formatPremiereDate(item.cinemaEndDate)}` : "Im Kino";
+}
+function upcomingTitle(item: UpcomingItem) {
+  if (item.mediaType !== "tv") return item.title;
+  const episode = item.seasonNumber && item.episodeNumber ? `S${item.seasonNumber.toString().padStart(2, "0")}E${item.episodeNumber.toString().padStart(2, "0")}` : "Neue Folge";
+  return `${item.title} · ${episode}`;
 }
 const fullDateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "long", year: "numeric" });
 function formatFullDate(value: string) {
@@ -65,6 +87,8 @@ export default function Home() {
   const [checkingSession, setCheckingSession] = useState(true);
   const [upcomingItems, setUpcomingItems] = useState<UpcomingItem[]>([]);
   const [upcomingState, setUpcomingState] = useState<LoadState>("loading");
+  const [cinemaItems, setCinemaItems] = useState<UpcomingItem[]>([]);
+  const [cinemaState, setCinemaState] = useState<LoadState>("loading");
   const [requestItems, setRequestItems] = useState<RequestItem[]>([]);
   const [requestState, setRequestState] = useState<LoadState>("loading");
   const [newForYouItems, setNewForYouItems] = useState<NewForYouItem[]>([]);
@@ -93,6 +117,19 @@ export default function Home() {
         if (active) { setUpcomingItems(data); setUpcomingState("ready"); }
       })
       .catch(() => active && setUpcomingState("error"));
+    return () => { active = false; };
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    fetch("/api/in-cinemas", { credentials: "include" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("cinema releases unavailable");
+        const data = await response.json();
+        if (active) { setCinemaItems(data); setCinemaState("ready"); }
+      })
+      .catch(() => active && setCinemaState("error"));
     return () => { active = false; };
   }, [user]);
 
@@ -204,7 +241,7 @@ export default function Home() {
           {noticeOpen && <div ref={noticeRef} className="notifications" id="notifications" role="dialog" aria-label="Benachrichtigungen"><strong>Benachrichtigungen</strong><p>Deine Anfrage „Severance“ wird bearbeitet.</p><p>Am Freitag erscheint Alien: Earth.</p></div>}
         </div>
       </header>
-      {page === "Heute" && <Today upcoming={upcomingItems} upcomingState={upcomingState} requests={requestItems} requestState={requestState} newForYou={newForYouItems} newForYouState={newForYouState} availableRequests={availableRequests} onSelectMedia={setSelectedMedia} />}
+      {page === "Heute" && <Today upcoming={upcomingItems} upcomingState={upcomingState} cinema={cinemaItems} cinemaState={cinemaState} requests={requestItems} requestState={requestState} newForYou={newForYouItems} newForYouState={newForYouState} availableRequests={availableRequests} onSelectMedia={setSelectedMedia} />}
       {page === "Statistik" && <Stats onSelectMedia={setSelectedMedia} />}
       {page === "Anfragen" && <Requests onSelectMedia={setSelectedMedia} />}
       {page === "Profil" && <Profile user={user} userProfile={userProfile} totalRequests={totalRequests} onSelectMedia={setSelectedMedia} />}
@@ -236,8 +273,9 @@ function UserAvatar({ name }: { name: string }) {
   return <span className="user-avatar"><span className="avatar-initial">{initial}</span><img src="/api/me/avatar" alt="" width="44" height="44" onError={(event) => event.currentTarget.remove()} /></span>;
 }
 
-function Today({ upcoming, upcomingState, requests, requestState, newForYou, newForYouState, availableRequests, onSelectMedia }: {
-  upcoming: UpcomingItem[]; upcomingState: LoadState; requests: RequestItem[]; requestState: LoadState;
+function Today({ upcoming, upcomingState, cinema, cinemaState, requests, requestState, newForYou, newForYouState, availableRequests, onSelectMedia }: {
+	upcoming: UpcomingItem[]; upcomingState: LoadState; requests: RequestItem[]; requestState: LoadState;
+	cinema: UpcomingItem[]; cinemaState: LoadState;
   newForYou: NewForYouItem[]; newForYouState: LoadState; availableRequests: RequestItem[];
   onSelectMedia: (selection: MediaSelection) => void;
 }) {
@@ -254,7 +292,8 @@ function Today({ upcoming, upcomingState, requests, requestState, newForYou, new
 
   return <div className="content today-view">
     <RelevantNow events={events} onShowAll={() => setAllEventsOpen(true)} />
-    <PosterRow title="Demnächst" eyebrow="COMING SOON · NÄCHSTE 4 WOCHEN" items={upcoming} state={upcomingState} emptyLabel="Nichts Neues in den nächsten vier Wochen." detail={(item) => formatPremiereDate(item.premiereDate)} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
+    <PosterRow title="Demnächst" eyebrow="RADARR · SONARR · NÄCHSTE 4 WOCHEN" items={upcoming} state={upcomingState} emptyLabel="Nichts Neues in den nächsten vier Wochen." itemTitle={upcomingTitle} detail={(item) => availabilityWording(item.availabilityDate)} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />
+    <PosterRow title="Im Kino" eyebrow="KOMMENDE UND AKTUELLE KINOSTARTS" items={cinema} state={cinemaState} emptyLabel="Zurzeit keine Kinostarts." detail={cinemaWording} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />
     <PosterRow title="Meine Anfragen" eyebrow="SEERR · OFFEN" items={requests} state={requestState} emptyLabel="Keine offenen Anfragen." detail={(item) => item.status} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />
     <PosterRow title="Neu für dich" eyebrow="IN DEN LETZTEN 14 TAGEN" items={newForYou} state={newForYouState} emptyLabel="Nichts Neues in den letzten 14 Tagen." detail={() => "Ungesehen"} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
 
@@ -266,15 +305,6 @@ function Today({ upcoming, upcomingState, requests, requestState, newForYou, new
 type RelevantEvent = { key: string; tone: Tone; icon: IconName; status: string; detail: ReactNode; onOpen: () => void };
 
 const RELEASE_WINDOW_HOURS = 48;
-// ComingSoon stores episodes as "Silo - S03E05 - Memory" and films as their
-// plain title, both as Type "Movie" — so the distinction has to come from
-// the name. Anything that does not match is treated as a film title.
-const EPISODE_TITLE = /^(.*?) - S(\d+)E(\d+)(?: - .*)?$/i;
-
-function formatReleaseTitle(title: string) {
-  const match = EPISODE_TITLE.exec(title);
-  return match ? `${match[1]} · Staffel ${Number(match[2])}, Folge ${Number(match[3])}` : title;
-}
 
 function releaseWording(premiereDate: string) {
   const date = new Date(premiereDate);
@@ -305,12 +335,12 @@ function relevantEvents({ availableRequests, upcoming, newForYou, onSelectMedia,
 
   const horizon = Date.now() + RELEASE_WINDOW_HOURS * 60 * 60 * 1000;
   for (const item of upcoming) {
-    const premiere = new Date(item.premiereDate).getTime();
+    const premiere = new Date(item.availabilityDate).getTime();
     if (Number.isNaN(premiere) || premiere > horizon) continue;
     events.push({
-      key: `release-${item.id}`, tone: "peach", icon: "clock", status: releaseWording(item.premiereDate),
-      detail: formatReleaseTitle(item.title),
-      onOpen: () => onSelectMedia({ source: "emby", id: item.id }),
+      key: `release-${item.id}`, tone: "peach", icon: "clock", status: releaseWording(item.availabilityDate),
+      detail: upcomingTitle(item),
+      onOpen: () => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType }),
     });
   }
 
@@ -370,8 +400,8 @@ function MetricCard({ icon, tone, value, label, detail, positive, genre = false,
     : <article className={`metric-card tone-${tone}${genre ? " genre-card" : ""}`}>{inner}</article>;
 }
 
-function PosterRow<T extends { id: string; title: string; posterUrl?: string }>({ title, eyebrow, gridTitle, items, detail, state, emptyLabel, progress, onSelect }: {
-  title?: string; eyebrow?: string; gridTitle?: string; items: readonly T[]; detail: (item: T) => string; state?: LoadState; emptyLabel?: string; progress?: (item: T) => number; onSelect?: (item: T) => void;
+function PosterRow<T extends { id: string; title: string; posterUrl?: string }>({ title, eyebrow, gridTitle, items, detail, itemTitle, state, emptyLabel, progress, onSelect }: {
+  title?: string; eyebrow?: string; gridTitle?: string; items: readonly T[]; detail: (item: T) => string; itemTitle?: (item: T) => string; state?: LoadState; emptyLabel?: string; progress?: (item: T) => number; onSelect?: (item: T) => void;
 }) {
   const [gridOpen, setGridOpen] = useState(false);
   const resolvedGridTitle = gridTitle ?? title ?? "Übersicht";
@@ -385,11 +415,11 @@ function PosterRow<T extends { id: string; title: string; posterUrl?: string }>(
     {state !== "loading" && state !== "error" && items.length === 0 && <p className="poster-status">{emptyLabel ?? "Nichts vorhanden."}</p>}
     {items.length > 0 && <div className="poster-scroller">{items.map((item) => {
       const inner = <>
-        <div className="poster wide" role="img" aria-label={item.title}>
-          {item.posterUrl ? <img src={item.posterUrl} alt="" loading="lazy" /> : <span>{item.title}</span>}
+        <div className="poster wide" role="img" aria-label={itemTitle?.(item) ?? item.title}>
+          {item.posterUrl ? <img src={item.posterUrl} alt="" loading="lazy" /> : <span>{itemTitle?.(item) ?? item.title}</span>}
           {progress && <div className="poster-progress"><div className="poster-progress-fill" style={{ width: `${progress(item)}%` }} /></div>}
         </div>
-        <strong>{item.title}</strong><small>{detail(item)}</small>
+        <strong>{itemTitle?.(item) ?? item.title}</strong><small>{detail(item)}</small>
       </>;
       return onSelect
         ? <button type="button" className="poster-entry poster-entry-button" key={item.id} onClick={() => onSelect(item)}>{inner}</button>

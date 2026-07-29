@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mrt187/EmbyInsights/internal/comingsoon"
 	"github.com/mrt187/EmbyInsights/internal/emby"
 	"github.com/mrt187/EmbyInsights/internal/seerr"
 	"github.com/mrt187/EmbyInsights/internal/store"
@@ -91,14 +92,17 @@ func (reader *fakeStatisticsReader) PersonalWatchTime(_ context.Context, userID,
 	return reader.statistics, nil
 }
 
-type fakeUpcomingReader struct {
-	items      []emby.UpcomingItem
-	libraryIDs []string
+type fakeComingSoonReader struct {
+	upcoming []comingsoon.Item
+	cinema   []comingsoon.Item
 }
 
-func (reader *fakeUpcomingReader) Upcoming(_ context.Context, libraryIDs []string) ([]emby.UpcomingItem, error) {
-	reader.libraryIDs = libraryIDs
-	return reader.items, nil
+func (reader *fakeComingSoonReader) Upcoming(context.Context) ([]comingsoon.Item, error) {
+	return reader.upcoming, nil
+}
+
+func (reader *fakeComingSoonReader) InCinemas(context.Context) ([]comingsoon.Item, error) {
+	return reader.cinema, nil
 }
 
 type fakeNewForYouReader struct {
@@ -492,7 +496,7 @@ func TestMeProfileUsesSessionIdentity(t *testing.T) {
 }
 
 func TestUpcomingRequiresAuthentication(t *testing.T) {
-	app := &App{sessions: &memorySessionStore{}, upcoming: &fakeUpcomingReader{}}
+	app := &App{sessions: &memorySessionStore{}, comingSoon: &fakeComingSoonReader{}}
 	request := httptest.NewRequest(http.MethodGet, "/api/upcoming", nil)
 	recorder := httptest.NewRecorder()
 	app.Handler().ServeHTTP(recorder, request)
@@ -502,10 +506,10 @@ func TestUpcomingRequiresAuthentication(t *testing.T) {
 	}
 }
 
-func TestUpcomingUsesConfiguredLibraryIDs(t *testing.T) {
+func TestUpcomingUsesDirectCalendar(t *testing.T) {
 	store := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
-	reader := &fakeUpcomingReader{items: []emby.UpcomingItem{{ID: "1", Title: "Alien: Earth"}}}
-	app := &App{sessions: store, upcoming: reader, comingSoonLibraryIDs: []string{"library-1"}}
+	reader := &fakeComingSoonReader{upcoming: []comingsoon.Item{{ID: "1", TmdbID: "1", Title: "Alien: Earth", AvailabilityDate: "2026-08-03T00:00:00Z"}}}
+	app := &App{sessions: store, comingSoon: reader}
 	request := httptest.NewRequest(http.MethodGet, "/api/upcoming", nil)
 	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
 	recorder := httptest.NewRecorder()
@@ -513,9 +517,6 @@ func TestUpcomingUsesConfiguredLibraryIDs(t *testing.T) {
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
-	}
-	if len(reader.libraryIDs) != 1 || reader.libraryIDs[0] != "library-1" {
-		t.Fatalf("libraryIDs = %#v", reader.libraryIDs)
 	}
 	if !strings.Contains(recorder.Body.String(), "Alien: Earth") {
 		t.Fatalf("body = %s", recorder.Body.String())

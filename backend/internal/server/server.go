@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/mrt187/EmbyInsights/internal/comingsoon"
 	"github.com/mrt187/EmbyInsights/internal/config"
 	"github.com/mrt187/EmbyInsights/internal/emby"
 	"github.com/mrt187/EmbyInsights/internal/seerr"
@@ -18,35 +19,35 @@ import (
 )
 
 const sessionCookieName = "emby_insights_session"
+const comingSoonCacheTTL = 15 * time.Minute
 
 type App struct {
-	database             *pgxpool.Pool
-	redis                *redis.Client
-	authenticator        emby.Authenticator
-	statistics           emby.PersonalStatisticsReader
-	deviceStatistics     emby.DeviceStatisticsReader
-	sessionStatistics    emby.SessionStatisticsReader
-	avatars              emby.AvatarReader
-	upcoming             emby.UpcomingReader
-	comingSoonLibraryIDs []string
-	newForYou            emby.NewForYouReader
-	newForYouLibraryIDs  []string
-	continueWatching     emby.ContinueWatchingReader
-	watched              emby.WatchedReader
-	watchedLibraryIDs    []string
-	completed            emby.CompletedReader
-	profile              emby.ProfileReader
-	requests             seerr.RequestsReader
-	availableRequests    seerr.AvailableRequestsReader
-	requestStats         seerr.RequestStatsReader
-	discover             seerr.DiscoverReader
-	embyMediaDetail      emby.MediaDetailReader
-	seerrMediaDetail     seerr.MediaDetailReader
-	seerrRequestCreator  seerr.RequestCreator
-	tracking             store.TrackingStore
-	favorites            emby.FavoriteWriter
-	sessions             session.Store
-	cookieSecure         bool
+	database            *pgxpool.Pool
+	redis               *redis.Client
+	authenticator       emby.Authenticator
+	statistics          emby.PersonalStatisticsReader
+	deviceStatistics    emby.DeviceStatisticsReader
+	sessionStatistics   emby.SessionStatisticsReader
+	avatars             emby.AvatarReader
+	comingSoon          comingsoon.Reader
+	newForYou           emby.NewForYouReader
+	newForYouLibraryIDs []string
+	continueWatching    emby.ContinueWatchingReader
+	watched             emby.WatchedReader
+	watchedLibraryIDs   []string
+	completed           emby.CompletedReader
+	profile             emby.ProfileReader
+	requests            seerr.RequestsReader
+	availableRequests   seerr.AvailableRequestsReader
+	requestStats        seerr.RequestStatsReader
+	discover            seerr.DiscoverReader
+	embyMediaDetail     emby.MediaDetailReader
+	seerrMediaDetail    seerr.MediaDetailReader
+	seerrRequestCreator seerr.RequestCreator
+	tracking            store.TrackingStore
+	favorites           emby.FavoriteWriter
+	sessions            session.Store
+	cookieSecure        bool
 }
 
 func New(cfg config.Config) (*App, error) {
@@ -63,33 +64,32 @@ func New(cfg config.Config) (*App, error) {
 	embyClient := emby.NewClient(cfg.EmbyBaseURL, cfg.EmbyDeviceID, cfg.EmbyAdminAPIKey)
 	seerrClient := seerr.NewClient(cfg.SeerrBaseURL, cfg.SeerrAPIKey)
 	return &App{
-		database:             database,
-		redis:                cache,
-		authenticator:        embyClient,
-		statistics:           embyClient,
-		deviceStatistics:     embyClient,
-		sessionStatistics:    embyClient,
-		avatars:              embyClient,
-		upcoming:             embyClient,
-		comingSoonLibraryIDs: cfg.EmbyComingSoonLibraryIDs,
-		newForYou:            embyClient,
-		newForYouLibraryIDs:  cfg.EmbyNewForYouLibraryIDs,
-		continueWatching:     embyClient,
-		watched:              embyClient,
-		watchedLibraryIDs:    cfg.EmbyWatchedLibraryIDs,
-		completed:            embyClient,
-		profile:              embyClient,
-		requests:             seerrClient,
-		availableRequests:    seerrClient,
-		requestStats:         seerrClient,
-		discover:             seerrClient,
-		embyMediaDetail:      embyClient,
-		seerrMediaDetail:     seerrClient,
-		seerrRequestCreator:  seerrClient,
-		tracking:             store.NewPostgresTrackingStore(database),
-		favorites:            embyClient,
-		sessions:             session.NewRedisStore(cache),
-		cookieSecure:         cfg.CookieSecure,
+		database:            database,
+		redis:               cache,
+		authenticator:       embyClient,
+		statistics:          embyClient,
+		deviceStatistics:    embyClient,
+		sessionStatistics:   embyClient,
+		avatars:             embyClient,
+		comingSoon:          comingsoon.NewClient(cfg.RadarrBaseURL, cfg.RadarrAPIKey, cfg.SonarrBaseURL, cfg.SonarrAPIKey, cfg.TmdbAPIKey, cfg.ComingSoonRegion, cfg.ComingSoonDaysAhead),
+		newForYou:           embyClient,
+		newForYouLibraryIDs: cfg.EmbyNewForYouLibraryIDs,
+		continueWatching:    embyClient,
+		watched:             embyClient,
+		watchedLibraryIDs:   cfg.EmbyWatchedLibraryIDs,
+		completed:           embyClient,
+		profile:             embyClient,
+		requests:            seerrClient,
+		availableRequests:   seerrClient,
+		requestStats:        seerrClient,
+		discover:            seerrClient,
+		embyMediaDetail:     embyClient,
+		seerrMediaDetail:    seerrClient,
+		seerrRequestCreator: seerrClient,
+		tracking:            store.NewPostgresTrackingStore(database),
+		favorites:           embyClient,
+		sessions:            session.NewRedisStore(cache),
+		cookieSecure:        cfg.CookieSecure,
 	}, nil
 }
 
@@ -111,6 +111,7 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/stats/longest-session", app.longestSessionStats)
 	mux.HandleFunc("GET /api/stats/most-active-day", app.mostActiveDayStats)
 	mux.HandleFunc("GET /api/upcoming", app.upcomingItems)
+	mux.HandleFunc("GET /api/in-cinemas", app.inCinemaItems)
 	mux.HandleFunc("GET /api/requests", app.myRequests)
 	mux.HandleFunc("GET /api/requests/available", app.availableRequestItems)
 	mux.HandleFunc("GET /api/requests/total", app.requestsTotal)
@@ -341,12 +342,48 @@ func (app *App) upcomingItems(writer http.ResponseWriter, request *http.Request)
 	if _, ok := app.identityFromRequest(writer, request); !ok {
 		return
 	}
-	items, err := app.upcoming.Upcoming(request.Context(), app.comingSoonLibraryIDs)
+	items, err := app.cachedComingSoonItems(request.Context(), "upcoming", app.comingSoon.Upcoming)
 	if err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "upcoming releases are unavailable"})
 		return
 	}
 	respondJSON(writer, http.StatusOK, orEmpty(items))
+}
+
+func (app *App) inCinemaItems(writer http.ResponseWriter, request *http.Request) {
+	if _, ok := app.identityFromRequest(writer, request); !ok {
+		return
+	}
+	items, err := app.cachedComingSoonItems(request.Context(), "in-cinemas", app.comingSoon.InCinemas)
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "cinema releases are unavailable"})
+		return
+	}
+	respondJSON(writer, http.StatusOK, orEmpty(items))
+}
+
+// cachedComingSoonItems keeps calendar and TMDB lookups off the request path
+// for a short period. The upstream services remain the source of truth; a
+// cache failure must never make the dashboard unavailable.
+func (app *App) cachedComingSoonItems(ctx context.Context, kind string, read func(context.Context) ([]comingsoon.Item, error)) ([]comingsoon.Item, error) {
+	if app.redis != nil {
+		if value, err := app.redis.Get(ctx, "comingsoon:"+kind).Result(); err == nil {
+			var items []comingsoon.Item
+			if json.Unmarshal([]byte(value), &items) == nil {
+				return items, nil
+			}
+		}
+	}
+	items, err := read(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if app.redis != nil {
+		if value, err := json.Marshal(items); err == nil {
+			_ = app.redis.Set(ctx, "comingsoon:"+kind, value, comingSoonCacheTTL).Err()
+		}
+	}
+	return items, nil
 }
 
 func (app *App) myRequests(writer http.ResponseWriter, request *http.Request) {

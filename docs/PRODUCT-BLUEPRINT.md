@@ -28,8 +28,8 @@ Normale Emby-Nutzer in einem privaten oder Familien-Server. Administratoren konf
 2. Persönliche Home-Ansicht mit Begrüßung und wenigen klaren Karten.
 3. Persönliche Wochen-/Monatsstatistiken aus Emby und Playback Reporting.
 4. Eigene Anfragen und deren verständlicher Status aus Seerr.
-5. Persönliche Coming-Soon-Ansicht aus dem ComingSoon-Plugin.
-6. Benachrichtigungen über eine anklickbare Glocke mit Anzahl ungelesener Nachrichten. Quellen: Seerr, ComingSoon und Emby; Beispiele sind „Anfrage genehmigt“, „Neue Folge erscheint morgen“ oder „Deine Anfrage ist jetzt in Emby verfügbar“. Eine Verfügbarkeits-Benachrichtigung erhält nur der Nutzer, der den Titel angefragt hat. Beim Öffnen werden sie als gelesen markiert.
+5. Persönliche Ansicht kommender Veröffentlichungen aus Radarr, Sonarr und TMDB.
+6. Benachrichtigungen über eine anklickbare Glocke mit Anzahl ungelesener Nachrichten. Quellen: Seerr, Release-Kalender und Emby; Beispiele sind „Anfrage genehmigt“, „Neue Folge erscheint morgen“ oder „Deine Anfrage ist jetzt in Emby verfügbar“. Eine Verfügbarkeits-Benachrichtigung erhält nur der Nutzer, der den Titel angefragt hat. Beim Öffnen werden sie als gelesen markiert.
 7. Responsive Oberfläche: Smartphone zuerst, Tablet optimiert, Desktop ergänzt.
 8. Serverseitige Konfiguration der Verbindungen über eine `.env`-Datei; API-Schlüssel werden niemals an den Browser übertragen.
 
@@ -41,7 +41,7 @@ Vorgesehene Karten:
 
 - **Willkommen** — Tageszeit, Name, kurze persönliche Zusammenfassung.
 - **Meine Woche** — Datenquelle: Emby und Playback Reporting. Sehzeit, gesehene Filme, vollständig abgeschlossene Serien und Lieblingsgenre; Zeitraum zwischen Woche, Monat und Jahr umschaltbar.
-- **Demnächst** — Datenquelle: die von ComingSoon erzeugten Emby-Bibliotheken, ausgelesen über die Emby-API. Direkte Radarr-/Sonarr-Anbindungen sind nicht nötig. Die einfache, nicht nutzerbezogene Startseiten-Karte zeigt alle Releases der nächsten vier Wochen als horizontal scrollbare Poster-Reihe; das Release-Datum steht als Text unter dem Poster. Kein eigener vollständiger Kalender.
+- **Demnächst** — Datenquellen: Radarr, Sonarr und optional TMDB für regional korrekte Filmtermine. Die einfache, nicht nutzerbezogene Startseiten-Karte zeigt die nächsten vier Wochen als horizontal scrollbare Poster-Reihe; darunter steht „Verfügbar in …“. Eine separate Reihe **Im Kino** zeigt kommende Kinostarts sowie Filme zwischen regionalem Kinostart und ihrer digitalen Verfügbarkeit.
 - **Meine Anfragen** — Datenquelle: Seerr. Horizontal scrollbare Poster-Reihe mit ausschließlich offenen oder noch nicht verfügbaren Anfragen. Der Status steht als verständlicher Text unter dem Poster, z. B. angefragt, genehmigt oder in Bearbeitung.
 - **Neu für dich** — Datenquelle: Emby-API. 15 Poster in einer horizontal scrollbaren Reihe. Gezeigt werden Inhalte, die in den letzten 14 Tagen zur Bibliothek hinzugefügt wurden und die der jeweilige Nutzer noch nicht gesehen hat.
 

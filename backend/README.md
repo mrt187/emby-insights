@@ -1,6 +1,6 @@
 # Emby Insights backend
 
-The Go backend is the only component the browser may call. It will later authenticate Emby users and aggregate data from the Emby Insights connector, Seerr and ComingSoon.
+The Go backend is the only component the browser may call. It authenticates Emby users and aggregates data from the Emby Insights connector, Radarr, Sonarr, TMDB and Seerr.
 
 ## Current endpoints
 

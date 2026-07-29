@@ -8,14 +8,14 @@ Die Produktgrundlage und das MVP stehen in [docs/PRODUCT-BLUEPRINT.md](docs/PROD
 
 ## Status
 
-Current release: [v0.8.22](CHANGELOG.md#0822---2026-07-29).
+Current release: [v0.8.23](CHANGELOG.md#0823---2026-07-30).
 
 The personal dashboard foundation is implemented: Emby login, protected
 sessions, personal watch-time statistics, and the all-in-one Unraid container.
 Clicking any poster opens a detail screen (description, cast, rating,
 personal status). All four Home cards (My Week, Upcoming, Requests, Neu für
 dich) read real data
-from Emby, ComingSoon and Seerr, the Statistics page adds continue watching,
+from Emby, Radarr, Sonarr, TMDB and Seerr, the Statistics page adds continue watching,
 watched movies/series, and genre/weekday charts, and the Requests page adds
 five Seerr/TMDB discover lists.
 

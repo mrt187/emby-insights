@@ -28,7 +28,7 @@ func TestLoadUsesConfiguredValues(t *testing.T) {
 	}
 }
 
-func TestLoadLeavesSeerrAndComingSoonUnconfiguredByDefault(t *testing.T) {
+func TestLoadLeavesOptionalIntegrationsUnconfiguredByDefault(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:password@localhost:5432/emby_insights")
 	t.Setenv("REDIS_URL", "redis://localhost:6379/0")
 	t.Setenv("EMBY_BASE_URL", "http://emby:8096/emby")
@@ -39,26 +39,31 @@ func TestLoadLeavesSeerrAndComingSoonUnconfiguredByDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.SeerrBaseURL != "" || cfg.SeerrAPIKey != "" || cfg.EmbyComingSoonLibraryIDs != nil || cfg.EmbyNewForYouLibraryIDs != nil {
-		t.Fatalf("cfg = %#v, want Seerr, ComingSoon and New for You left unconfigured", cfg)
+	if cfg.SeerrBaseURL != "" || cfg.SeerrAPIKey != "" || cfg.RadarrBaseURL != "" || cfg.SonarrBaseURL != "" || cfg.EmbyNewForYouLibraryIDs != nil {
+		t.Fatalf("cfg = %#v, want optional integrations left unconfigured", cfg)
 	}
 }
 
-func TestLoadParsesComingSoonLibraryIDs(t *testing.T) {
+func TestLoadReadsDirectComingSoonConfiguration(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:password@localhost:5432/emby_insights")
 	t.Setenv("REDIS_URL", "redis://localhost:6379/0")
 	t.Setenv("EMBY_BASE_URL", "http://emby:8096/emby")
 	t.Setenv("EMBY_DEVICE_ID", "test-device")
 	t.Setenv("EMBY_ADMIN_API_KEY", "test-admin-key")
-	t.Setenv("EMBY_COMINGSOON_LIBRARY_IDS", " library-1 ,library-2,")
+	t.Setenv("RADARR_URL", "http://radarr:7878")
+	t.Setenv("RADARR_API_KEY", "radarr-key")
+	t.Setenv("SONARR_URL", "http://sonarr:8989")
+	t.Setenv("SONARR_API_KEY", "sonarr-key")
+	t.Setenv("TMDB_API_KEY", "tmdb-key")
+	t.Setenv("COMINGSOON_REGION", "AT")
+	t.Setenv("COMINGSOON_DAYS_AHEAD", "35")
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	want := []string{"library-1", "library-2"}
-	if len(cfg.EmbyComingSoonLibraryIDs) != len(want) || cfg.EmbyComingSoonLibraryIDs[0] != want[0] || cfg.EmbyComingSoonLibraryIDs[1] != want[1] {
-		t.Fatalf("EmbyComingSoonLibraryIDs = %#v, want %#v", cfg.EmbyComingSoonLibraryIDs, want)
+	if cfg.RadarrBaseURL != "http://radarr:7878" || cfg.SonarrBaseURL != "http://sonarr:8989" || cfg.TmdbAPIKey != "tmdb-key" || cfg.ComingSoonRegion != "AT" || cfg.ComingSoonDaysAhead != 35 {
+		t.Fatalf("cfg = %#v, want direct Coming Soon configuration", cfg)
 	}
 }
 
