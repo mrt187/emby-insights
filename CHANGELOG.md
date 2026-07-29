@@ -8,6 +8,16 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.1] - 2026-07-29
+
+### Changed
+
+- Toned down the Statistics page's top two rows (weekly summary banner and
+  the metric cards): smaller padding, type, and card height, so they no
+  longer dominate the page above the newer sections.
+- The mobile bottom navigation now shows icons only; the labels remain for
+  screen readers but are no longer shown visually.
+
 ## [0.8.0] - 2026-07-29
 
 ### Fixed
