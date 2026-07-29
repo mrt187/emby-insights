@@ -66,19 +66,23 @@ func (reader *fakeContinueWatchingReader) ContinueWatching(_ context.Context, us
 }
 
 type fakeWatchedReader struct {
-	movies     []emby.WatchedItem
-	series     []emby.WatchedItem
-	moviesUser string
-	seriesUser string
+	movies           []emby.WatchedItem
+	series           []emby.WatchedItem
+	moviesUser       string
+	seriesUser       string
+	moviesLibraryIDs []string
+	seriesLibraryIDs []string
 }
 
-func (reader *fakeWatchedReader) WatchedMovies(_ context.Context, userID string) ([]emby.WatchedItem, error) {
+func (reader *fakeWatchedReader) WatchedMovies(_ context.Context, userID string, libraryIDs []string) ([]emby.WatchedItem, error) {
 	reader.moviesUser = userID
+	reader.moviesLibraryIDs = libraryIDs
 	return reader.movies, nil
 }
 
-func (reader *fakeWatchedReader) WatchedSeries(_ context.Context, userID string) ([]emby.WatchedItem, error) {
+func (reader *fakeWatchedReader) WatchedSeries(_ context.Context, userID string, libraryIDs []string) ([]emby.WatchedItem, error) {
 	reader.seriesUser = userID
+	reader.seriesLibraryIDs = libraryIDs
 	return reader.series, nil
 }
 
@@ -267,7 +271,7 @@ func TestWatchedMoviesAndSeriesUseSessionIdentity(t *testing.T) {
 		movies: []emby.WatchedItem{{ID: "1", Title: "Dune"}},
 		series: []emby.WatchedItem{{ID: "2", Title: "Severance"}},
 	}
-	app := &App{sessions: store, watched: reader}
+	app := &App{sessions: store, watched: reader, watchedLibraryIDs: []string{"3", "5", "123857"}}
 
 	moviesRequest := httptest.NewRequest(http.MethodGet, "/api/watched-movies", nil)
 	moviesRequest.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
@@ -278,6 +282,9 @@ func TestWatchedMoviesAndSeriesUseSessionIdentity(t *testing.T) {
 	}
 	if reader.moviesUser != "user-1" {
 		t.Fatalf("moviesUser = %q", reader.moviesUser)
+	}
+	if len(reader.moviesLibraryIDs) != 3 {
+		t.Fatalf("moviesLibraryIDs = %#v", reader.moviesLibraryIDs)
 	}
 
 	seriesRequest := httptest.NewRequest(http.MethodGet, "/api/watched-series", nil)

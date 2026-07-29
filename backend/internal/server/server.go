@@ -29,6 +29,7 @@ type App struct {
 	newForYouLibraryIDs  []string
 	continueWatching     emby.ContinueWatchingReader
 	watched              emby.WatchedReader
+	watchedLibraryIDs    []string
 	requests             seerr.RequestsReader
 	discover             seerr.DiscoverReader
 	sessions             session.Store
@@ -60,6 +61,7 @@ func New(cfg config.Config) (*App, error) {
 		newForYouLibraryIDs:  cfg.EmbyNewForYouLibraryIDs,
 		continueWatching:     embyClient,
 		watched:              embyClient,
+		watchedLibraryIDs:    cfg.EmbyWatchedLibraryIDs,
 		requests:             seerrClient,
 		discover:             seerrClient,
 		sessions:             session.NewRedisStore(cache),
@@ -258,7 +260,7 @@ func (app *App) watchedMovies(writer http.ResponseWriter, request *http.Request)
 	if !ok {
 		return
 	}
-	items, err := app.watched.WatchedMovies(request.Context(), identity.UserID)
+	items, err := app.watched.WatchedMovies(request.Context(), identity.UserID, app.watchedLibraryIDs)
 	if err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "watched movies are unavailable"})
 		return
@@ -271,7 +273,7 @@ func (app *App) watchedSeries(writer http.ResponseWriter, request *http.Request)
 	if !ok {
 		return
 	}
-	items, err := app.watched.WatchedSeries(request.Context(), identity.UserID)
+	items, err := app.watched.WatchedSeries(request.Context(), identity.UserID, app.watchedLibraryIDs)
 	if err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "watched series are unavailable"})
 		return

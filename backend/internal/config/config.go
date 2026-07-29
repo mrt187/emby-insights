@@ -17,6 +17,7 @@ type Config struct {
 	EmbyAdminAPIKey          string
 	EmbyComingSoonLibraryIDs []string
 	EmbyNewForYouLibraryIDs  []string
+	EmbyWatchedLibraryIDs    []string
 	SeerrBaseURL             string
 	SeerrAPIKey              string
 	CookieSecure             bool
@@ -58,6 +59,7 @@ func Load() (Config, error) {
 		EmbyAdminAPIKey:          embyAdminAPIKey,
 		EmbyComingSoonLibraryIDs: splitList(valueOr("EMBY_COMINGSOON_LIBRARY_IDS", "")),
 		EmbyNewForYouLibraryIDs:  splitList(valueOr("EMBY_NEW_FOR_YOU_LIBRARY_IDS", "")),
+		EmbyWatchedLibraryIDs:    splitList(valueOr("EMBY_WATCHED_LIBRARY_IDS", "")),
 		SeerrBaseURL:             valueOr("SEERR_URL", ""),
 		SeerrAPIKey:              valueOr("SEERR_API_KEY", ""),
 		CookieSecure:             valueOr("COOKIE_SECURE", "true") != "false",

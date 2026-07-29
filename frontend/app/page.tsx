@@ -22,7 +22,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.3";
+const APP_VERSION = "0.8.4";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -383,8 +383,8 @@ function Stats() {
     <section className="period-tabs" aria-label="Zeitraum auswählen">{(["Woche", "Monat", "Jahr"] as Period[]).map((item) => <button className={period === item ? "selected" : ""} onClick={() => { setStatistics(null); setState("loading"); setPeriod(item); }} key={item} aria-pressed={period === item}>{item}</button>)}</section>
     <section className="week-grid" aria-label={`Kennzahlen für ${period}`}>
       <MetricCard icon="clock" tone="blue" value={statistics ? formatDuration(statistics.watchSeconds) : "—"} label="Sehzeit" detail={statistics ? comparisonText(statistics) : loadingCopy(state)} />
-      <MetricCard icon="movie" tone="peach" value={watchedMoviesState === "ready" ? watchedMovies.length : "—"} label="Filme abgeschlossen" detail={watchedMoviesState === "ready" ? "Insgesamt" : loadingCopy(watchedMoviesState)} />
-      <MetricCard icon="series" tone="mint" value={watchedSeriesState === "ready" ? watchedSeries.length : "—"} label="Serien abgeschlossen" detail={watchedSeriesState === "ready" ? "Insgesamt" : loadingCopy(watchedSeriesState)} />
+      <MetricCard icon="movie" tone="peach" value={statistics ? statistics.completedMovies : "—"} label="Filme abgeschlossen" detail={statistics ? period : loadingCopy(state)} />
+      <MetricCard icon="series" tone="mint" value={statistics ? statistics.completedSeries : "—"} label="Serien abgeschlossen" detail={statistics ? period : loadingCopy(state)} />
       <MetricCard icon="genre" tone="lilac" value={statistics?.favouriteGenre || "—"} label="Lieblingsgenre" detail={statistics ? "Nach Sehzeit" : loadingCopy(state)} genre />
     </section>
 

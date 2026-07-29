@@ -8,6 +8,20 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.4] - 2026-07-29
+
+### Changed
+
+- The Statistics page's Filme/Serien metric cards are period-scoped again
+  (from `/api/stats`), so switching Woche/Monat/Jahr now updates all four
+  cards, not just Sehzeit/Lieblingsgenre. "Gesehene Filme"/"Gesehene Serien"
+  (the lists below) still always show everything, independent of the
+  period selector — only the two concerns were conflated before.
+- "Gesehene Filme"/"Gesehene Serien" are now scoped to the Emby libraries
+  configured via the new `EMBY_WATCHED_LIBRARY_IDS` (comma-separated),
+  matching the Movies/TV shows/4K Filme scoping already used for "Neu für
+  dich".
+
 ## [0.8.3] - 2026-07-29
 
 ### Changed
