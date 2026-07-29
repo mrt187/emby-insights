@@ -8,11 +8,12 @@ Die Produktgrundlage und das MVP stehen in [docs/PRODUCT-BLUEPRINT.md](docs/PROD
 
 ## Status
 
-Current release: [v0.4.0](CHANGELOG.md#040---2026-07-29).
+Current release: [v0.5.0](CHANGELOG.md#050---2026-07-29).
 
 The personal dashboard foundation is implemented: Emby login, protected
 sessions, personal watch-time statistics, and the all-in-one Unraid container.
-Home data rows and the remaining statistics metrics are in progress.
+The Upcoming and Requests Home cards now read real ComingSoon and Seerr data;
+"Neu für dich" is still a placeholder.
 
 ## Releases
 

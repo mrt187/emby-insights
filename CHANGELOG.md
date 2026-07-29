@@ -8,6 +8,20 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.5.0] - 2026-07-29
+
+### Added
+
+- The Home "Demnächst" card now shows real upcoming releases read from the
+  ComingSoon libraries configured via `EMBY_COMINGSOON_LIBRARY_IDS`, instead
+  of placeholder titles.
+- The Home and Requests "Meine Anfragen" cards now show real open Seerr
+  requests via a new Jellyseerr/Overseerr connector, configured via
+  `SEERR_URL` and `SEERR_API_KEY`. Both cards show real cover art where the
+  source provides it.
+- Both integrations are optional: leaving their environment variables empty
+  disables the corresponding card instead of failing startup.
+
 ## [0.4.0] - 2026-07-29
 
 ### Added

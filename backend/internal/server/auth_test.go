@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/mrt187/EmbyInsights/internal/emby"
+	"github.com/mrt187/EmbyInsights/internal/seerr"
 )
 
 type fakeAuthenticator struct {
@@ -30,6 +31,26 @@ func (reader *fakeStatisticsReader) PersonalWatchTime(_ context.Context, userID,
 	reader.userID = userID
 	reader.period = period
 	return reader.statistics, nil
+}
+
+type fakeUpcomingReader struct {
+	items      []emby.UpcomingItem
+	libraryIDs []string
+}
+
+func (reader *fakeUpcomingReader) Upcoming(_ context.Context, libraryIDs []string) ([]emby.UpcomingItem, error) {
+	reader.libraryIDs = libraryIDs
+	return reader.items, nil
+}
+
+type fakeRequestsReader struct {
+	items      []seerr.Request
+	embyUserID string
+}
+
+func (reader *fakeRequestsReader) Requests(_ context.Context, embyUserID string) ([]seerr.Request, error) {
+	reader.embyUserID = embyUserID
+	return reader.items, nil
 }
 
 type memorySessionStore struct {
@@ -106,5 +127,56 @@ func TestStatsUsesSessionIdentity(t *testing.T) {
 	}
 	if strings.Contains(recorder.Body.String(), "secret-token") {
 		t.Fatal("statistics response exposed Emby access token")
+	}
+}
+
+func TestUpcomingRequiresAuthentication(t *testing.T) {
+	app := &App{sessions: &memorySessionStore{}, upcoming: &fakeUpcomingReader{}}
+	request := httptest.NewRequest(http.MethodGet, "/api/upcoming", nil)
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestUpcomingUsesConfiguredLibraryIDs(t *testing.T) {
+	store := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	reader := &fakeUpcomingReader{items: []emby.UpcomingItem{{ID: "1", Title: "Alien: Earth"}}}
+	app := &App{sessions: store, upcoming: reader, comingSoonLibraryIDs: []string{"library-1"}}
+	request := httptest.NewRequest(http.MethodGet, "/api/upcoming", nil)
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	if len(reader.libraryIDs) != 1 || reader.libraryIDs[0] != "library-1" {
+		t.Fatalf("libraryIDs = %#v", reader.libraryIDs)
+	}
+	if !strings.Contains(recorder.Body.String(), "Alien: Earth") {
+		t.Fatalf("body = %s", recorder.Body.String())
+	}
+}
+
+func TestMyRequestsUsesSessionIdentity(t *testing.T) {
+	store := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	reader := &fakeRequestsReader{items: []seerr.Request{{ID: "1", Title: "Severance", Status: "Angefragt"}}}
+	app := &App{sessions: store, requests: reader}
+	request := httptest.NewRequest(http.MethodGet, "/api/requests", nil)
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	if reader.embyUserID != "user-1" {
+		t.Fatalf("embyUserID = %q", reader.embyUserID)
+	}
+	if !strings.Contains(recorder.Body.String(), "Severance") {
+		t.Fatalf("body = %s", recorder.Body.String())
 	}
 }

@@ -344,9 +344,11 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   padding: 9px; border-radius: 10px; margin-bottom: 10px;
   color: #f7f4ea; font-family: Georgia, serif; font-weight: 700; font-size: 17px;
   text-shadow: 0 1px 7px #000;
+  background: linear-gradient(135deg, #24312c, #384a3f);
 }
 .poster::after { content: ""; position: absolute; inset: 0; background: linear-gradient(transparent 30%, #0009); }
 .poster span { position: relative; z-index: 1; }
+.poster img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
 .poster.wide {
   height: 226px; border: 1px solid rgb(255 255 255 / 10%); border-radius: 18px;
   box-shadow: 0 14px 26px rgb(0 0 0 / 18%);
@@ -361,6 +363,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 }
 .poster-entry strong { margin-top: 2px; color: #f1f6f3; font-size: 13px; }
 .poster-entry small { margin-top: 4px; color: #98dcb2; font-size: 11px; }
+.poster-status { color: #9db3a7; font-size: 13px; padding: 4px 2px; }
 
 /* Placeholder cover art — replace once real Emby/Seerr artwork is wired up. */
 .last { background: radial-gradient(circle at 20% 20%,#e5e0b7 0,transparent 18%),linear-gradient(135deg,#2b433f,#7e9276 48%,#333b28); }

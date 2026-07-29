@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/mrt187/EmbyInsights/internal/config"
 	"github.com/mrt187/EmbyInsights/internal/emby"
+	"github.com/mrt187/EmbyInsights/internal/seerr"
 	"github.com/mrt187/EmbyInsights/internal/session"
 	"github.com/redis/go-redis/v9"
 )
@@ -17,13 +18,16 @@ import (
 const sessionCookieName = "emby_insights_session"
 
 type App struct {
-	database      *pgxpool.Pool
-	redis         *redis.Client
-	authenticator emby.Authenticator
-	statistics    emby.PersonalStatisticsReader
-	avatars       emby.AvatarReader
-	sessions      session.Store
-	cookieSecure  bool
+	database             *pgxpool.Pool
+	redis                *redis.Client
+	authenticator        emby.Authenticator
+	statistics           emby.PersonalStatisticsReader
+	avatars              emby.AvatarReader
+	upcoming             emby.UpcomingReader
+	comingSoonLibraryIDs []string
+	requests             seerr.RequestsReader
+	sessions             session.Store
+	cookieSecure         bool
 }
 
 func New(cfg config.Config) (*App, error) {
@@ -39,13 +43,16 @@ func New(cfg config.Config) (*App, error) {
 	cache := redis.NewClient(options)
 	embyClient := emby.NewClient(cfg.EmbyBaseURL, cfg.EmbyDeviceID, cfg.EmbyAdminAPIKey)
 	return &App{
-		database:      database,
-		redis:         cache,
-		authenticator: embyClient,
-		statistics:    embyClient,
-		avatars:       embyClient,
-		sessions:      session.NewRedisStore(cache),
-		cookieSecure:  cfg.CookieSecure,
+		database:             database,
+		redis:                cache,
+		authenticator:        embyClient,
+		statistics:           embyClient,
+		avatars:              embyClient,
+		upcoming:             embyClient,
+		comingSoonLibraryIDs: cfg.EmbyComingSoonLibraryIDs,
+		requests:             seerr.NewClient(cfg.SeerrBaseURL, cfg.SeerrAPIKey),
+		sessions:             session.NewRedisStore(cache),
+		cookieSecure:         cfg.CookieSecure,
 	}, nil
 }
 
@@ -60,6 +67,8 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/me", app.me)
 	mux.HandleFunc("GET /api/me/avatar", app.avatar)
 	mux.HandleFunc("GET /api/stats", app.stats)
+	mux.HandleFunc("GET /api/upcoming", app.upcomingItems)
+	mux.HandleFunc("GET /api/requests", app.myRequests)
 	return mux
 }
 
@@ -136,6 +145,40 @@ func (app *App) stats(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	respondJSON(writer, http.StatusOK, statistics)
+}
+
+func (app *App) upcomingItems(writer http.ResponseWriter, request *http.Request) {
+	if _, ok := app.identityFromRequest(writer, request); !ok {
+		return
+	}
+	items, err := app.upcoming.Upcoming(request.Context(), app.comingSoonLibraryIDs)
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "upcoming releases are unavailable"})
+		return
+	}
+	respondJSON(writer, http.StatusOK, orEmpty(items))
+}
+
+func (app *App) myRequests(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	items, err := app.requests.Requests(request.Context(), identity.UserID)
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "requests are unavailable"})
+		return
+	}
+	respondJSON(writer, http.StatusOK, orEmpty(items))
+}
+
+// orEmpty ensures a nil slice serializes as `[]` instead of `null`, so the
+// frontend never has to special-case a missing array.
+func orEmpty[T any](items []T) []T {
+	if items == nil {
+		return []T{}
+	}
+	return items
 }
 
 func (app *App) logout(writer http.ResponseWriter, request *http.Request) {

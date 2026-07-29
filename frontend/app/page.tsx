@@ -7,6 +7,8 @@ type Page = "Heute" | "Statistik" | "Anfragen" | "Profil";
 type Period = "Woche" | "Monat" | "Jahr";
 type StatisticsPeriod = "week" | "month" | "year";
 type PersonalStats = { watchSeconds: number; previousWatchSeconds: number; completedMovies: number; completedSeries: number; favouriteGenre: string; periodStartsAt: string; periodEndsAt: string };
+type UpcomingItem = { id: string; title: string; posterUrl: string; premiereDate: string };
+type RequestItem = { id: string; title: string; posterUrl: string; status: string };
 type IconName = "home" | "chart" | "sparkle" | "user" | "bell" | "arrow" | "clock" | "movie" | "series" | "genre";
 type Tone = "blue" | "peach" | "mint" | "lilac";
 type LoadState = "loading" | "ready" | "error";
@@ -16,19 +18,16 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.4.0";
+const APP_VERSION = "0.5.0";
 
-const upcoming = [
-  { date: "01. Aug.", title: "The Last of Us", art: "last" }, { date: "04. Aug.", title: "Alien: Earth", art: "alien" },
-  { date: "08. Aug.", title: "Wednesday", art: "wednesday" }, { date: "12. Aug.", title: "The Bear", art: "bear" },
-  { date: "15. Aug.", title: "Andor", art: "andor" }, { date: "22. Aug.", title: "Foundation", art: "foundation" },
-];
+const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
+function formatPremiereDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : dateFormatter.format(date);
+}
 
-const requests = [
-  { title: "Dune: Part Three", status: "Wird gesucht", art: "dune" }, { title: "The Bear · Staffel 5", status: "Genehmigt", art: "bear" },
-  { title: "Severance · Staffel 3", status: "In Bearbeitung", art: "severance" }, { title: "Mickey 17", status: "Angefragt", art: "mickey" },
-];
-
+// Still a placeholder: "Neu für dich" is not wired to the Emby "latest
+// unseen items" endpoint yet.
 const newForYou = [
   ["Sinners", "sinners"], ["The Studio", "studio"], ["Mickey 17", "mickey"], ["The Gorge", "gorge"], ["The Brutalist", "brutalist"],
   ["Black Mirror", "mirror"], ["Companion", "companion"], ["Anora", "anora"], ["Flow", "flow"], ["The Monkey", "monkey"],
@@ -43,6 +42,10 @@ export default function Home() {
   const [checkingSession, setCheckingSession] = useState(true);
   const [weekStats, setWeekStats] = useState<PersonalStats | null>(null);
   const [weekState, setWeekState] = useState<LoadState>("loading");
+  const [upcomingItems, setUpcomingItems] = useState<UpcomingItem[]>([]);
+  const [upcomingState, setUpcomingState] = useState<LoadState>("loading");
+  const [requestItems, setRequestItems] = useState<RequestItem[]>([]);
+  const [requestState, setRequestState] = useState<LoadState>("loading");
   const noticeRef = useRef<HTMLDivElement>(null);
   const noticeButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -63,6 +66,32 @@ export default function Home() {
         if (active) { setWeekStats(data); setWeekState("ready"); }
       })
       .catch(() => active && setWeekState("error"));
+    return () => { active = false; };
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    fetch("/api/upcoming", { credentials: "include" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("upcoming unavailable");
+        const data = await response.json();
+        if (active) { setUpcomingItems(data); setUpcomingState("ready"); }
+      })
+      .catch(() => active && setUpcomingState("error"));
+    return () => { active = false; };
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    fetch("/api/requests", { credentials: "include" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("requests unavailable");
+        const data = await response.json();
+        if (active) { setRequestItems(data); setRequestState("ready"); }
+      })
+      .catch(() => active && setRequestState("error"));
     return () => { active = false; };
   }, [user]);
 
@@ -105,9 +134,9 @@ export default function Home() {
           {noticeOpen && <div ref={noticeRef} className="notifications" id="notifications" role="dialog" aria-label="Benachrichtigungen"><strong>Benachrichtigungen</strong><p>Deine Anfrage „Severance“ wird bearbeitet.</p><p>Am Freitag erscheint Alien: Earth.</p></div>}
         </div>
       </header>
-      {page === "Heute" && <Today user={user} onStats={() => selectPage("Statistik")} statistics={weekStats} state={weekState} />}
+      {page === "Heute" && <Today user={user} onStats={() => selectPage("Statistik")} statistics={weekStats} state={weekState} upcoming={upcomingItems} upcomingState={upcomingState} requests={requestItems} requestState={requestState} />}
       {page === "Statistik" && <Stats />}
-      {page === "Anfragen" && <Requests />}
+      {page === "Anfragen" && <Requests items={requestItems} state={requestState} />}
       {page === "Profil" && <Profile user={user} />}
     </section>
 
@@ -136,14 +165,17 @@ function UserAvatar({ name }: { name: string }) {
   return <span className="user-avatar"><span className="avatar-initial">{initial}</span><img src="/api/me/avatar" alt="" width="44" height="44" onError={(event) => event.currentTarget.remove()} /></span>;
 }
 
-function Today({ user, onStats, statistics, state }: { user: { name: string }; onStats: () => void; statistics: PersonalStats | null; state: LoadState }) {
+function Today({ user, onStats, statistics, state, upcoming, upcomingState, requests, requestState }: {
+  user: { name: string }; onStats: () => void; statistics: PersonalStats | null; state: LoadState;
+  upcoming: UpcomingItem[]; upcomingState: LoadState; requests: RequestItem[]; requestState: LoadState;
+}) {
   const detail = state === "error" ? "Noch keine Statistik verfügbar" : statistics ? comparisonText(statistics) : "Wird geladen …";
   return <div className="content today-view">
     <section className="section-heading rhythm-heading"><div><p className="eyebrow">DEIN PROFIL</p><h2>Dein Rhythmus</h2></div><button className="text-button" onClick={onStats}>Alle Details <Icon name="arrow" /></button></section>
     <UserInsightCard user={user} statistics={statistics} state={state} detail={detail} />
-    <PosterRow title="Demnächst" eyebrow="COMING SOON · NÄCHSTE 4 WOCHEN" items={upcoming} detail={(item) => item.date} />
-    <PosterRow title="Meine Anfragen" eyebrow="SEERR · OFFEN" items={requests} detail={(item) => item.status} />
-    <PosterRow title="Neu für dich" eyebrow="IN DEN LETZTEN 14 TAGEN" items={newForYou.map(([title, art]) => ({ title, art }))} detail={() => "Ungesehen"} />
+    <PosterRow title="Demnächst" eyebrow="COMING SOON · NÄCHSTE 4 WOCHEN" items={upcoming} state={upcomingState} emptyLabel="Nichts Neues in den nächsten vier Wochen." detail={(item) => formatPremiereDate(item.premiereDate)} />
+    <PosterRow title="Meine Anfragen" eyebrow="SEERR · OFFEN" items={requests} state={requestState} emptyLabel="Keine offenen Anfragen." detail={(item) => item.status} />
+    <PosterRow title="Neu für dich" eyebrow="IN DEN LETZTEN 14 TAGEN" items={newForYou.map(([title, art]) => ({ id: art, title, art }))} detail={() => "Ungesehen"} />
   </div>;
 }
 
@@ -231,8 +263,16 @@ function MetricCard({ icon, tone, value, label, detail, positive, genre = false 
   return <article className={`metric-card tone-${tone}${genre ? " genre-card" : ""}`}><span className="metric-icon"><Icon name={icon} /></span><strong>{value}</strong><p>{label}</p><small className={positive ? "up" : undefined}>{detail}</small></article>;
 }
 
-function PosterRow({ title, eyebrow, items, detail }: { title?: string; eyebrow?: string; items: readonly { title: string; art: string }[]; detail: (item: { title: string; art: string }) => string }) {
-  return <section className="poster-section">{(title || eyebrow) && <div className="section-heading"><div>{eyebrow && <p className="eyebrow">{eyebrow}</p>}{title && <h2>{title}</h2>}</div></div>}<div className="poster-scroller">{items.map((item) => <article className="poster-entry" key={item.title}><div className={`poster wide ${item.art}`} role="img" aria-label={item.title}><span>{item.title}</span></div><strong>{item.title}</strong><small>{detail(item)}</small></article>)}</div></section>;
+function PosterRow<T extends { id: string; title: string; posterUrl?: string; art?: string }>({ title, eyebrow, items, detail, state, emptyLabel }: {
+  title?: string; eyebrow?: string; items: readonly T[]; detail: (item: T) => string; state?: LoadState; emptyLabel?: string;
+}) {
+  return <section className="poster-section">
+    {(title || eyebrow) && <div className="section-heading"><div>{eyebrow && <p className="eyebrow">{eyebrow}</p>}{title && <h2>{title}</h2>}</div></div>}
+    {state === "loading" && <p className="poster-status" role="status">Wird geladen …</p>}
+    {state === "error" && <p className="poster-status">Nicht verfügbar</p>}
+    {state !== "loading" && state !== "error" && items.length === 0 && <p className="poster-status">{emptyLabel ?? "Nichts vorhanden."}</p>}
+    {items.length > 0 && <div className="poster-scroller">{items.map((item) => <article className="poster-entry" key={item.id}><div className={`poster wide${item.art ? ` ${item.art}` : ""}`} role="img" aria-label={item.title}>{item.posterUrl ? <img src={item.posterUrl} alt="" loading="lazy" /> : <span>{item.title}</span>}</div><strong>{item.title}</strong><small>{detail(item)}</small></article>)}</div>}
+  </section>;
 }
 
 function Stats() {
@@ -258,7 +298,12 @@ function Stats() {
   </div>;
 }
 
-function Requests() { return <div className="content page-view"><section className="section-heading"><div><p className="eyebrow">SEERR · OFFEN</p><h2>Meine Anfragen</h2></div></section><PosterRow title="" eyebrow="" items={requests} detail={(item) => item.status} /></div>; }
+function Requests({ items, state }: { items: RequestItem[]; state: LoadState }) {
+  return <div className="content page-view">
+    <section className="section-heading"><div><p className="eyebrow">SEERR · OFFEN</p><h2>Meine Anfragen</h2></div></section>
+    <PosterRow title="" eyebrow="" items={items} state={state} emptyLabel="Keine offenen Anfragen." detail={(item) => item.status} />
+  </div>;
+}
 function Profile({ user }: { user: { name: string } }) {
   const [signingOut, setSigningOut] = useState(false);
   const logout = async () => {
