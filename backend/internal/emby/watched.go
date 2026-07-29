@@ -84,13 +84,28 @@ func (client *Client) watchedItems(ctx context.Context, userID, period, itemType
 		return nil, fmt.Errorf("decode Emby watched items: %w", err)
 	}
 
+	// The bulk list endpoint omits UserData.LastPlayedDate on this Emby
+	// version (only the single-item endpoint returns it), so the period is
+	// checked one item at a time. The list is already sorted by DatePlayed
+	// descending, so the first item played before the period start ends the
+	// scan — everything after it is even older.
 	items := make([]WatchedItem, 0, len(result.Items))
 	for _, item := range result.Items {
-		if item.UserData.LastPlayedDate == "" {
+		lastPlayedDate, err := client.itemLastPlayedDate(ctx, userID, item.Id)
+		if err != nil {
+			return nil, err
+		}
+		if lastPlayedDate == "" {
 			continue
 		}
-		played, err := time.Parse(time.RFC3339, item.UserData.LastPlayedDate)
-		if err != nil || played.Before(from) || played.After(to) {
+		played, err := time.Parse(time.RFC3339, lastPlayedDate)
+		if err != nil {
+			continue
+		}
+		if played.Before(from) {
+			break
+		}
+		if played.After(to) {
 			continue
 		}
 
@@ -104,11 +119,38 @@ func (client *Client) watchedItems(ctx context.Context, userID, period, itemType
 			Title:          item.Name,
 			PosterURL:      posterURL,
 			Genres:         item.Genres,
-			LastPlayedDate: item.UserData.LastPlayedDate,
+			LastPlayedDate: lastPlayedDate,
 		})
 		if len(items) >= watchedItemsLimit {
 			break
 		}
 	}
 	return items, nil
+}
+
+func (client *Client) itemLastPlayedDate(ctx context.Context, userID, itemID string) (string, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, client.baseURL+"/Users/"+userID+"/Items/"+itemID, nil)
+	if err != nil {
+		return "", err
+	}
+	request.Header.Set("X-Emby-Token", client.adminAPIKey)
+
+	response, err := client.httpClient.Do(request)
+	if err != nil {
+		return "", fmt.Errorf("call Emby item detail: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("Emby item detail returned %s", response.Status)
+	}
+
+	var result struct {
+		UserData struct {
+			LastPlayedDate string `json:"LastPlayedDate"`
+		} `json:"UserData"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("decode Emby item detail: %w", err)
+	}
+	return result.UserData.LastPlayedDate, nil
 }

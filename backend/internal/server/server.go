@@ -30,6 +30,7 @@ type App struct {
 	continueWatching     emby.ContinueWatchingReader
 	watched              emby.WatchedReader
 	requests             seerr.RequestsReader
+	discover             seerr.DiscoverReader
 	sessions             session.Store
 	cookieSecure         bool
 }
@@ -46,6 +47,7 @@ func New(cfg config.Config) (*App, error) {
 	}
 	cache := redis.NewClient(options)
 	embyClient := emby.NewClient(cfg.EmbyBaseURL, cfg.EmbyDeviceID, cfg.EmbyAdminAPIKey)
+	seerrClient := seerr.NewClient(cfg.SeerrBaseURL, cfg.SeerrAPIKey)
 	return &App{
 		database:             database,
 		redis:                cache,
@@ -58,7 +60,8 @@ func New(cfg config.Config) (*App, error) {
 		newForYouLibraryIDs:  cfg.EmbyNewForYouLibraryIDs,
 		continueWatching:     embyClient,
 		watched:              embyClient,
-		requests:             seerr.NewClient(cfg.SeerrBaseURL, cfg.SeerrAPIKey),
+		requests:             seerrClient,
+		discover:             seerrClient,
 		sessions:             session.NewRedisStore(cache),
 		cookieSecure:         cfg.CookieSecure,
 	}, nil
@@ -81,6 +84,21 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/continue-watching", app.continueWatchingItems)
 	mux.HandleFunc("GET /api/watched-movies", app.watchedMovies)
 	mux.HandleFunc("GET /api/watched-series", app.watchedSeries)
+	mux.HandleFunc("GET /api/discover/trending", app.discoverHandler(func(ctx context.Context, discover seerr.DiscoverReader) ([]seerr.DiscoverItem, error) {
+		return discover.Trending(ctx)
+	}))
+	mux.HandleFunc("GET /api/discover/movies/popular", app.discoverHandler(func(ctx context.Context, discover seerr.DiscoverReader) ([]seerr.DiscoverItem, error) {
+		return discover.PopularMovies(ctx)
+	}))
+	mux.HandleFunc("GET /api/discover/movies/upcoming", app.discoverHandler(func(ctx context.Context, discover seerr.DiscoverReader) ([]seerr.DiscoverItem, error) {
+		return discover.UpcomingMovies(ctx)
+	}))
+	mux.HandleFunc("GET /api/discover/series/popular", app.discoverHandler(func(ctx context.Context, discover seerr.DiscoverReader) ([]seerr.DiscoverItem, error) {
+		return discover.PopularSeries(ctx)
+	}))
+	mux.HandleFunc("GET /api/discover/series/upcoming", app.discoverHandler(func(ctx context.Context, discover seerr.DiscoverReader) ([]seerr.DiscoverItem, error) {
+		return discover.UpcomingSeries(ctx)
+	}))
 	return mux
 }
 
@@ -190,6 +208,23 @@ func (app *App) myRequests(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	respondJSON(writer, http.StatusOK, orEmpty(items))
+}
+
+// discoverHandler builds a handler for one Seerr discover list. Discover
+// data is not personal, but the endpoint still requires a session like the
+// rest of the API.
+func (app *App) discoverHandler(read func(context.Context, seerr.DiscoverReader) ([]seerr.DiscoverItem, error)) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		if _, ok := app.identityFromRequest(writer, request); !ok {
+			return
+		}
+		items, err := read(request.Context(), app.discover)
+		if err != nil {
+			respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "discover list is unavailable"})
+			return
+		}
+		respondJSON(writer, http.StatusOK, orEmpty(items))
+	}
 }
 
 func (app *App) newForYouItems(writer http.ResponseWriter, request *http.Request) {

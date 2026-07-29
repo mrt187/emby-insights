@@ -8,6 +8,24 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.0] - 2026-07-29
+
+### Fixed
+
+- "Gesehene Filme" and "Gesehene Serien" were always empty: this Emby
+  server's bulk `/Items` list endpoint omits `UserData.LastPlayedDate`
+  (only the single-item endpoint returns it). The watched-items reader now
+  looks up each item's last-played date individually, stopping as soon as it
+  finds one played before the selected period (the list is already sorted
+  by play date, descending).
+
+### Added
+
+- The Requests page now shows five Seerr/TMDB discover lists: "Im Trend",
+  "Beliebte Filme", "Demnächst erscheinende Filme", "Beliebte Serien" and
+  "Demnächst erscheinende Serien", via five new endpoints under
+  `/api/discover/*`.
+
 ## [0.7.0] - 2026-07-29
 
 ### Added

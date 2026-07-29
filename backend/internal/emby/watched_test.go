@@ -12,23 +12,31 @@ func TestWatchedMoviesFiltersToCurrentWeek(t *testing.T) {
 	now := time.Now().UTC()
 	thisWeek := now.Add(-6 * time.Hour).Format(time.RFC3339)
 	lastMonth := now.AddDate(0, -1, 0).Format(time.RFC3339)
+	lastPlayedByID := map[string]string{"1": thisWeek, "2": lastMonth}
 
 	testServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != "/emby/Users/user-1/Items" {
-			t.Fatalf("path = %q", request.URL.Path)
-		}
-		if request.URL.Query().Get("IncludeItemTypes") != "Movie" {
-			t.Fatalf("IncludeItemTypes = %q", request.URL.Query().Get("IncludeItemTypes"))
-		}
-		if request.URL.Query().Get("Filters") != "IsPlayed" {
-			t.Fatalf("Filters = %q", request.URL.Query().Get("Filters"))
-		}
 		writer.Header().Set("Content-Type", "application/json")
-		_, _ = writer.Write([]byte(`{"Items":[
-			{"Id":"1","Name":"Dune","Genres":["Science Fiction"],"ImageTags":{"Primary":"tag-1"},"UserData":{"LastPlayedDate":"` + thisWeek + `"}},
-			{"Id":"2","Name":"Old Movie","Genres":["Drama"],"UserData":{"LastPlayedDate":"` + lastMonth + `"}},
-			{"Id":"3","Name":"NeverPlayed"}
-		]}`))
+		switch {
+		case request.URL.Path == "/emby/Users/user-1/Items":
+			if request.URL.Query().Get("IncludeItemTypes") != "Movie" {
+				t.Fatalf("IncludeItemTypes = %q", request.URL.Query().Get("IncludeItemTypes"))
+			}
+			if request.URL.Query().Get("Filters") != "IsPlayed" {
+				t.Fatalf("Filters = %q", request.URL.Query().Get("Filters"))
+			}
+			_, _ = writer.Write([]byte(`{"Items":[
+				{"Id":"1","Name":"Dune","Genres":["Science Fiction"],"ImageTags":{"Primary":"tag-1"}},
+				{"Id":"2","Name":"Old Movie","Genres":["Drama"]},
+				{"Id":"3","Name":"NeverPlayed"}
+			]}`))
+		case request.URL.Path == "/emby/Users/user-1/Items/1":
+			_, _ = writer.Write([]byte(`{"UserData":{"LastPlayedDate":"` + lastPlayedByID["1"] + `"}}`))
+		case request.URL.Path == "/emby/Users/user-1/Items/2":
+			// Older than the current week: ends the scan (list is sorted descending).
+			_, _ = writer.Write([]byte(`{"UserData":{"LastPlayedDate":"` + lastPlayedByID["2"] + `"}}`))
+		default:
+			t.Fatalf("unexpected path %q", request.URL.Path)
+		}
 	}))
 	defer testServer.Close()
 
@@ -47,11 +55,18 @@ func TestWatchedMoviesFiltersToCurrentWeek(t *testing.T) {
 func TestWatchedSeriesUsesSeriesItemType(t *testing.T) {
 	now := time.Now().UTC().Format(time.RFC3339)
 	testServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Query().Get("IncludeItemTypes") != "Series" {
-			t.Fatalf("IncludeItemTypes = %q", request.URL.Query().Get("IncludeItemTypes"))
-		}
 		writer.Header().Set("Content-Type", "application/json")
-		_, _ = writer.Write([]byte(`{"Items":[{"Id":"1","Name":"Severance","UserData":{"LastPlayedDate":"` + now + `"}}]}`))
+		switch request.URL.Path {
+		case "/emby/Users/user-1/Items":
+			if request.URL.Query().Get("IncludeItemTypes") != "Series" {
+				t.Fatalf("IncludeItemTypes = %q", request.URL.Query().Get("IncludeItemTypes"))
+			}
+			_, _ = writer.Write([]byte(`{"Items":[{"Id":"1","Name":"Severance"}]}`))
+		case "/emby/Users/user-1/Items/1":
+			_, _ = writer.Write([]byte(`{"UserData":{"LastPlayedDate":"` + now + `"}}`))
+		default:
+			t.Fatalf("unexpected path %q", request.URL.Path)
+		}
 	}))
 	defer testServer.Close()
 

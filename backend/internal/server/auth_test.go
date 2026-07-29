@@ -92,6 +92,27 @@ func (reader *fakeRequestsReader) Requests(_ context.Context, embyUserID string)
 	return reader.items, nil
 }
 
+type fakeDiscoverReader struct {
+	trending      []seerr.DiscoverItem
+	popularMovies []seerr.DiscoverItem
+}
+
+func (reader *fakeDiscoverReader) Trending(context.Context) ([]seerr.DiscoverItem, error) {
+	return reader.trending, nil
+}
+func (reader *fakeDiscoverReader) PopularMovies(context.Context) ([]seerr.DiscoverItem, error) {
+	return reader.popularMovies, nil
+}
+func (reader *fakeDiscoverReader) PopularSeries(context.Context) ([]seerr.DiscoverItem, error) {
+	return nil, nil
+}
+func (reader *fakeDiscoverReader) UpcomingMovies(context.Context) ([]seerr.DiscoverItem, error) {
+	return nil, nil
+}
+func (reader *fakeDiscoverReader) UpcomingSeries(context.Context) ([]seerr.DiscoverItem, error) {
+	return nil, nil
+}
+
 type memorySessionStore struct {
 	identity emby.Identity
 	deleted  bool
@@ -301,5 +322,39 @@ func TestMyRequestsUsesSessionIdentity(t *testing.T) {
 	}
 	if !strings.Contains(recorder.Body.String(), "Severance") {
 		t.Fatalf("body = %s", recorder.Body.String())
+	}
+}
+
+func TestDiscoverEndpointsRequireAuthAndReturnData(t *testing.T) {
+	reader := &fakeDiscoverReader{
+		trending:      []seerr.DiscoverItem{{ID: "1", Title: "Dune", MediaType: "movie"}},
+		popularMovies: []seerr.DiscoverItem{{ID: "2", Title: "The Odyssey", MediaType: "movie"}},
+	}
+	app := &App{sessions: &memorySessionStore{}, discover: reader}
+
+	unauth := httptest.NewRequest(http.MethodGet, "/api/discover/trending", nil)
+	unauthRecorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(unauthRecorder, unauth)
+	if unauthRecorder.Code != http.StatusUnauthorized {
+		t.Fatalf("unauth status = %d", unauthRecorder.Code)
+	}
+
+	store := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	app.sessions = store
+
+	trending := httptest.NewRequest(http.MethodGet, "/api/discover/trending", nil)
+	trending.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	trendingRecorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(trendingRecorder, trending)
+	if trendingRecorder.Code != http.StatusOK || !strings.Contains(trendingRecorder.Body.String(), "Dune") {
+		t.Fatalf("trending status = %d, body = %s", trendingRecorder.Code, trendingRecorder.Body.String())
+	}
+
+	popular := httptest.NewRequest(http.MethodGet, "/api/discover/movies/popular", nil)
+	popular.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	popularRecorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(popularRecorder, popular)
+	if popularRecorder.Code != http.StatusOK || !strings.Contains(popularRecorder.Body.String(), "The Odyssey") {
+		t.Fatalf("popular movies status = %d, body = %s", popularRecorder.Code, popularRecorder.Body.String())
 	}
 }

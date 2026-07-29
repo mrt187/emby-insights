@@ -12,6 +12,7 @@ type RequestItem = { id: string; title: string; posterUrl: string; status: strin
 type NewForYouItem = { id: string; title: string; posterUrl: string };
 type ContinueWatchingItem = { id: string; title: string; posterUrl: string; progressPercent: number };
 type WatchedItem = { id: string; title: string; posterUrl: string; genres: string[]; lastPlayedDate: string };
+type DiscoverItem = { id: string; title: string; posterUrl: string; mediaType: string };
 type IconName = "home" | "chart" | "sparkle" | "user" | "bell" | "arrow" | "clock" | "movie" | "series" | "genre";
 type Tone = "blue" | "peach" | "mint" | "lilac";
 type LoadState = "loading" | "ready" | "error";
@@ -21,7 +22,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.7.0";
+const APP_VERSION = "0.8.0";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -394,10 +395,35 @@ function Stats() {
   </div>;
 }
 
+function useDiscoverList(path: string) {
+  const [items, setItems] = useState<DiscoverItem[]>([]);
+  const [state, setState] = useState<LoadState>("loading");
+  useEffect(() => {
+    let active = true;
+    fetch(path, { credentials: "include" })
+      .then(async (response) => { if (!response.ok) throw new Error("discover list unavailable"); const data = await response.json(); if (active) { setItems(data); setState("ready"); } })
+      .catch(() => active && setState("error"));
+    return () => { active = false; };
+  }, [path]);
+  return [items, state] as const;
+}
+
 function Requests({ items, state }: { items: RequestItem[]; state: LoadState }) {
+  const [trending, trendingState] = useDiscoverList("/api/discover/trending");
+  const [popularMovies, popularMoviesState] = useDiscoverList("/api/discover/movies/popular");
+  const [upcomingMovies, upcomingMoviesState] = useDiscoverList("/api/discover/movies/upcoming");
+  const [popularSeries, popularSeriesState] = useDiscoverList("/api/discover/series/popular");
+  const [upcomingSeries, upcomingSeriesState] = useDiscoverList("/api/discover/series/upcoming");
+
   return <div className="content page-view">
     <section className="section-heading"><div><p className="eyebrow">SEERR · OFFEN</p><h2>Meine Anfragen</h2></div></section>
     <PosterRow title="" eyebrow="" items={items} state={state} emptyLabel="Keine offenen Anfragen." detail={(item) => item.status} />
+
+    <PosterRow title="Im Trend" eyebrow="SEERR · TMDB" items={trending} state={trendingState} emptyLabel="Nichts im Trend." detail={(item) => item.mediaType === "tv" ? "Serie" : "Film"} />
+    <PosterRow title="Beliebte Filme" eyebrow="SEERR · TMDB" items={popularMovies} state={popularMoviesState} emptyLabel="Keine Daten." detail={() => "Beliebt"} />
+    <PosterRow title="Demnächst erscheinende Filme" eyebrow="SEERR · TMDB" items={upcomingMovies} state={upcomingMoviesState} emptyLabel="Keine Daten." detail={() => "Demnächst"} />
+    <PosterRow title="Beliebte Serien" eyebrow="SEERR · TMDB" items={popularSeries} state={popularSeriesState} emptyLabel="Keine Daten." detail={() => "Beliebt"} />
+    <PosterRow title="Demnächst erscheinende Serien" eyebrow="SEERR · TMDB" items={upcomingSeries} state={upcomingSeriesState} emptyLabel="Keine Daten." detail={() => "Demnächst"} />
   </div>;
 }
 function Profile({ user }: { user: { name: string } }) {
