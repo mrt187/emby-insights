@@ -13,8 +13,9 @@ services:
     volumes:
       - ./config:/config
     networks:
-      - dockernet
+      - vpn-proton
 
 networks:
-  dockernet:
+  vpn-proton:
     external: true
+    name: wg0
