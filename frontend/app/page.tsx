@@ -22,7 +22,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.2";
+const APP_VERSION = "0.8.3";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -36,8 +36,6 @@ export default function Home() {
   const [unread, setUnread] = useState(2);
   const [user, setUser] = useState<{ id: string; name: string } | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
-  const [weekStats, setWeekStats] = useState<PersonalStats | null>(null);
-  const [weekState, setWeekState] = useState<LoadState>("loading");
   const [upcomingItems, setUpcomingItems] = useState<UpcomingItem[]>([]);
   const [upcomingState, setUpcomingState] = useState<LoadState>("loading");
   const [requestItems, setRequestItems] = useState<RequestItem[]>([]);
@@ -53,19 +51,6 @@ export default function Home() {
       .catch(() => null)
       .finally(() => setCheckingSession(false));
   }, []);
-
-  useEffect(() => {
-    if (!user) return;
-    let active = true;
-    fetch("/api/stats?period=week", { credentials: "include" })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("statistics unavailable");
-        const data = await response.json();
-        if (active) { setWeekStats(data); setWeekState("ready"); }
-      })
-      .catch(() => active && setWeekState("error"));
-    return () => { active = false; };
-  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -145,7 +130,7 @@ export default function Home() {
           {noticeOpen && <div ref={noticeRef} className="notifications" id="notifications" role="dialog" aria-label="Benachrichtigungen"><strong>Benachrichtigungen</strong><p>Deine Anfrage „Severance“ wird bearbeitet.</p><p>Am Freitag erscheint Alien: Earth.</p></div>}
         </div>
       </header>
-      {page === "Heute" && <Today user={user} onStats={() => selectPage("Statistik")} statistics={weekStats} state={weekState} upcoming={upcomingItems} upcomingState={upcomingState} requests={requestItems} requestState={requestState} newForYou={newForYouItems} newForYouState={newForYouState} />}
+      {page === "Heute" && <Today user={user} onStats={() => selectPage("Statistik")} upcoming={upcomingItems} upcomingState={upcomingState} requests={requestItems} requestState={requestState} newForYou={newForYouItems} newForYouState={newForYouState} />}
       {page === "Statistik" && <Stats />}
       {page === "Anfragen" && <Requests items={requestItems} state={requestState} />}
       {page === "Profil" && <Profile user={user} />}
@@ -176,36 +161,55 @@ function UserAvatar({ name }: { name: string }) {
   return <span className="user-avatar"><span className="avatar-initial">{initial}</span><img src="/api/me/avatar" alt="" width="44" height="44" onError={(event) => event.currentTarget.remove()} /></span>;
 }
 
-function Today({ user, onStats, statistics, state, upcoming, upcomingState, requests, requestState, newForYou, newForYouState }: {
-  user: { name: string }; onStats: () => void; statistics: PersonalStats | null; state: LoadState;
+function Today({ user, onStats, upcoming, upcomingState, requests, requestState, newForYou, newForYouState }: {
+  user: { name: string }; onStats: () => void;
   upcoming: UpcomingItem[]; upcomingState: LoadState; requests: RequestItem[]; requestState: LoadState;
   newForYou: NewForYouItem[]; newForYouState: LoadState;
 }) {
-  const detail = state === "error" ? "Noch keine Statistik verfügbar" : statistics ? comparisonText(statistics) : "Wird geladen …";
   return <div className="content today-view">
     <section className="section-heading rhythm-heading"><div><p className="eyebrow">DEIN PROFIL</p><h2>Dein Rhythmus</h2></div><button className="text-button" onClick={onStats}>Alle Details <Icon name="arrow" /></button></section>
-    <UserInsightCard user={user} statistics={statistics} state={state} detail={detail} />
+    <UserInsightCard user={user} upcoming={upcoming} upcomingState={upcomingState} requests={requests} requestState={requestState} newForYou={newForYou} newForYouState={newForYouState} />
     <PosterRow title="Demnächst" eyebrow="COMING SOON · NÄCHSTE 4 WOCHEN" items={upcoming} state={upcomingState} emptyLabel="Nichts Neues in den nächsten vier Wochen." detail={(item) => formatPremiereDate(item.premiereDate)} />
     <PosterRow title="Meine Anfragen" eyebrow="SEERR · OFFEN" items={requests} state={requestState} emptyLabel="Keine offenen Anfragen." detail={(item) => item.status} />
     <PosterRow title="Neu für dich" eyebrow="IN DEN LETZTEN 14 TAGEN" items={newForYou} state={newForYouState} emptyLabel="Nichts Neues in den letzten 14 Tagen." detail={() => "Ungesehen"} />
   </div>;
 }
 
-function UserInsightCard({ user, statistics, state, detail }: { user: { name: string }; statistics: PersonalStats | null; state: LoadState; detail: string }) {
-  return <section className="user-insight-card" aria-label={`Wochenübersicht von ${user.name}`}>
-    <WeeklyCarousel user={user} statistics={statistics} state={state} detail={detail} />
-    {state === "loading" && <span className="sr-only" role="status">Deine Wochenstatistik wird geladen …</span>}
+function UserInsightCard({ user, upcoming, upcomingState, requests, requestState, newForYou, newForYouState }: {
+  user: { name: string };
+  upcoming: UpcomingItem[]; upcomingState: LoadState; requests: RequestItem[]; requestState: LoadState;
+  newForYou: NewForYouItem[]; newForYouState: LoadState;
+}) {
+  return <section className="user-insight-card" aria-label={`Kurzüberblick von ${user.name}`}>
+    <HighlightCarousel user={user} upcoming={upcoming} upcomingState={upcomingState} requests={requests} requestState={requestState} newForYou={newForYou} newForYouState={newForYouState} />
   </section>;
 }
 
 const SLIDE_INTERVAL = 5000;
 
-function WeeklyCarousel({ user, statistics, state, detail }: { user: { name: string }; statistics: PersonalStats | null; state: LoadState; detail: string }) {
+function HighlightCarousel({ user, upcoming, upcomingState, requests, requestState, newForYou, newForYouState }: {
+  user: { name: string };
+  upcoming: UpcomingItem[]; upcomingState: LoadState; requests: RequestItem[]; requestState: LoadState;
+  newForYou: NewForYouItem[]; newForYouState: LoadState;
+}) {
+  const nextRelease = upcoming[0];
   const slides: { key: string; icon: IconName; tone: Tone; label: string; value: string; detail: string; text?: boolean }[] = [
-    { key: "week", icon: "clock", tone: "blue", label: "Diese Woche", value: statistics ? formatDuration(statistics.watchSeconds) : "—", detail },
-    { key: "movies", icon: "movie", tone: "peach", label: "Filme", value: statistics ? String(statistics.completedMovies) : "—", detail: statistics ? "Abgeschlossen" : loadingCopy(state) },
-    { key: "series", icon: "series", tone: "mint", label: "Serien", value: statistics ? String(statistics.completedSeries) : "—", detail: statistics ? "Abgeschlossen" : loadingCopy(state) },
-    { key: "genre", icon: "genre", tone: "lilac", label: "Lieblingsgenre", value: statistics?.favouriteGenre || "—", detail: statistics ? "Nach Sehzeit" : loadingCopy(state), text: true },
+    {
+      key: "upcoming", icon: "clock", tone: "blue", label: "Nächste Veröffentlichung",
+      value: upcomingState === "ready" ? (nextRelease?.title ?? "—") : "—",
+      detail: upcomingState === "ready" ? (nextRelease ? formatPremiereDate(nextRelease.premiereDate) : "Nichts geplant") : loadingCopy(upcomingState),
+      text: true,
+    },
+    {
+      key: "requests", icon: "sparkle", tone: "peach", label: "Offene Anfragen",
+      value: requestState === "ready" ? String(requests.length) : "—",
+      detail: requestState === "ready" ? "Bei Seerr" : loadingCopy(requestState),
+    },
+    {
+      key: "new", icon: "genre", tone: "mint", label: "Neu für dich",
+      value: newForYouState === "ready" ? String(newForYou.length) : "—",
+      detail: newForYouState === "ready" ? "Letzte 14 Tage" : loadingCopy(newForYouState),
+    },
   ];
 
   const scroller = useRef<HTMLDivElement>(null);
@@ -235,7 +239,7 @@ function WeeklyCarousel({ user, statistics, state, detail }: { user: { name: str
       className="weekly-scroller"
       role="group"
       aria-roledescription="Karussell"
-      aria-label="Deine Wochenwerte"
+      aria-label="Deine Kurzübersicht"
       tabIndex={0}
       onScroll={(event) => setActive(Math.round(event.currentTarget.scrollLeft / event.currentTarget.clientWidth))}
       onPointerDown={stop}
@@ -251,7 +255,7 @@ function WeeklyCarousel({ user, statistics, state, detail }: { user: { name: str
       >
         <div className="user-insight-identity">
           <div className="profile-avatar"><UserAvatar name={user.name} /></div>
-          <div><p className="eyebrow">DEIN MEDIENPROFIL</p><h3>{user.name}</h3><p>Deine ganz persönliche Woche in Emby.</p></div>
+          <div><p className="eyebrow">DEIN MEDIENPROFIL</p><h3>{user.name}</h3><p>Dein persönlicher Überblick auf einen Blick.</p></div>
         </div>
         <div className={`weekly-stat tone-${slide.tone}${slide.text ? " weekly-slide-text" : ""}`}>
           <span className="user-stat-icon"><Icon name={slide.icon} /></span>
@@ -378,7 +382,7 @@ function Stats() {
   return <div className="content page-view">
     <section className="period-tabs" aria-label="Zeitraum auswählen">{(["Woche", "Monat", "Jahr"] as Period[]).map((item) => <button className={period === item ? "selected" : ""} onClick={() => { setStatistics(null); setState("loading"); setPeriod(item); }} key={item} aria-pressed={period === item}>{item}</button>)}</section>
     <section className="week-grid" aria-label={`Kennzahlen für ${period}`}>
-      <MetricCard icon="clock" tone="blue" value={statistics ? formatDuration(statistics.watchSeconds) : "—"} label="Sehzeit" detail={statistics ? period : loadingCopy(state)} />
+      <MetricCard icon="clock" tone="blue" value={statistics ? formatDuration(statistics.watchSeconds) : "—"} label="Sehzeit" detail={statistics ? comparisonText(statistics) : loadingCopy(state)} />
       <MetricCard icon="movie" tone="peach" value={watchedMoviesState === "ready" ? watchedMovies.length : "—"} label="Filme abgeschlossen" detail={watchedMoviesState === "ready" ? "Insgesamt" : loadingCopy(watchedMoviesState)} />
       <MetricCard icon="series" tone="mint" value={watchedSeriesState === "ready" ? watchedSeries.length : "—"} label="Serien abgeschlossen" detail={watchedSeriesState === "ready" ? "Insgesamt" : loadingCopy(watchedSeriesState)} />
       <MetricCard icon="genre" tone="lilac" value={statistics?.favouriteGenre || "—"} label="Lieblingsgenre" detail={statistics ? "Nach Sehzeit" : loadingCopy(state)} genre />

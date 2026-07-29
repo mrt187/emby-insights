@@ -8,6 +8,15 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.3] - 2026-07-29
+
+### Changed
+
+- The Home "Dein Rhythmus" carousel no longer repeats Sehzeit/Filme/Serien/
+  Lieblingsgenre, since those now live on the Statistics page. It shows
+  three fresh highlights instead: the next upcoming release, the number of
+  open Seerr requests, and the number of new-for-you items.
+
 ## [0.8.2] - 2026-07-29
 
 ### Changed
