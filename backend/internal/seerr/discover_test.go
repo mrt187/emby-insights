@@ -53,6 +53,39 @@ func TestPopularMoviesUsesCorrectPath(t *testing.T) {
 	}
 }
 
+func TestSearchSkipsPersonResultsAndEncodesQuery(t *testing.T) {
+	testServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/api/v1/search" {
+			t.Fatalf("path = %q", request.URL.Path)
+		}
+		if request.URL.Query().Get("query") != "tom hanks" {
+			t.Fatalf("query = %q", request.URL.Query().Get("query"))
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"results":[
+			{"id":31,"mediaType":"person","name":"Tom Hanks"},
+			{"id":13,"mediaType":"movie","title":"Forrest Gump","posterPath":"/gump.jpg"}
+		]}`))
+	}))
+	defer testServer.Close()
+
+	items, err := NewClient(testServer.URL, "api-key").Search(context.Background(), "tom hanks")
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(items) != 1 || items[0].Title != "Forrest Gump" || items[0].MediaType != "movie" {
+		t.Fatalf("items = %#v, want the person result filtered out", items)
+	}
+}
+
+func TestSearchReturnsNilWhenClientIsNil(t *testing.T) {
+	var client *Client
+	items, err := client.Search(context.Background(), "anything")
+	if err != nil || items != nil {
+		t.Fatalf("Search() = %#v, %v, want nil, nil", items, err)
+	}
+}
+
 func TestDiscoverReturnsNilWhenClientIsNil(t *testing.T) {
 	var client *Client
 	items, err := client.Trending(context.Background())

@@ -29,6 +29,26 @@ type fakeStatisticsReader struct {
 	period     string
 }
 
+type fakeProfileReader struct {
+	profile emby.UserProfile
+	userID  string
+}
+
+func (reader *fakeProfileReader) UserProfile(_ context.Context, userID string) (emby.UserProfile, error) {
+	reader.userID = userID
+	return reader.profile, nil
+}
+
+type fakeRequestStatsReader struct {
+	stats  seerr.RequestStats
+	userID string
+}
+
+func (reader *fakeRequestStatsReader) RequestStats(_ context.Context, userID string) (seerr.RequestStats, error) {
+	reader.userID = userID
+	return reader.stats, nil
+}
+
 func (reader *fakeStatisticsReader) PersonalWatchTime(_ context.Context, userID, period string) (emby.PersonalWatchTime, error) {
 	reader.userID = userID
 	reader.period = period
@@ -122,6 +142,8 @@ func (reader *fakeRequestsReader) Requests(_ context.Context, embyUserID string)
 type fakeDiscoverReader struct {
 	trending      []seerr.DiscoverItem
 	popularMovies []seerr.DiscoverItem
+	searchResults []seerr.DiscoverItem
+	searchQuery   string
 }
 
 func (reader *fakeDiscoverReader) Trending(context.Context) ([]seerr.DiscoverItem, error) {
@@ -138,6 +160,10 @@ func (reader *fakeDiscoverReader) UpcomingMovies(context.Context) ([]seerr.Disco
 }
 func (reader *fakeDiscoverReader) UpcomingSeries(context.Context) ([]seerr.DiscoverItem, error) {
 	return nil, nil
+}
+func (reader *fakeDiscoverReader) Search(_ context.Context, query string) ([]seerr.DiscoverItem, error) {
+	reader.searchQuery = query
+	return reader.searchResults, nil
 }
 
 type fakeEmbyMediaDetailReader struct {
@@ -254,6 +280,24 @@ func TestStatsUsesSessionIdentity(t *testing.T) {
 	}
 	if strings.Contains(recorder.Body.String(), "secret-token") {
 		t.Fatal("statistics response exposed Emby access token")
+	}
+}
+
+func TestMeProfileUsesSessionIdentity(t *testing.T) {
+	store := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	profileReader := &fakeProfileReader{profile: emby.UserProfile{MemberSince: "2026-01-14T08:00:48Z", LastActiveDate: "2026-07-29T13:59:59Z"}}
+	app := &App{sessions: store, profile: profileReader}
+
+	request := httptest.NewRequest(http.MethodGet, "/api/me/profile", nil)
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "2026-01-14T08:00:48Z") {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	if profileReader.userID != "user-1" {
+		t.Fatalf("userID = %q", profileReader.userID)
 	}
 }
 
@@ -413,6 +457,49 @@ func TestMyRequestsUsesSessionIdentity(t *testing.T) {
 	}
 	if !strings.Contains(recorder.Body.String(), "Severance") {
 		t.Fatalf("body = %s", recorder.Body.String())
+	}
+}
+
+func TestRequestsTotalUsesSessionIdentity(t *testing.T) {
+	store := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	reader := &fakeRequestStatsReader{stats: seerr.RequestStats{Total: 302}}
+	app := &App{sessions: store, requestStats: reader}
+
+	request := httptest.NewRequest(http.MethodGet, "/api/requests/total", nil)
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "302") {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	if reader.userID != "user-1" {
+		t.Fatalf("userID = %q", reader.userID)
+	}
+}
+
+func TestDiscoverSearchRequiresQuery(t *testing.T) {
+	store := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	reader := &fakeDiscoverReader{searchResults: []seerr.DiscoverItem{{ID: "13", Title: "Forrest Gump", MediaType: "movie"}}}
+	app := &App{sessions: store, discover: reader}
+
+	missing := httptest.NewRequest(http.MethodGet, "/api/discover/search", nil)
+	missing.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	missingRecorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(missingRecorder, missing)
+	if missingRecorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, body = %s", missingRecorder.Code, missingRecorder.Body.String())
+	}
+
+	good := httptest.NewRequest(http.MethodGet, "/api/discover/search?query=forrest", nil)
+	good.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	goodRecorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(goodRecorder, good)
+	if goodRecorder.Code != http.StatusOK || !strings.Contains(goodRecorder.Body.String(), "Forrest Gump") {
+		t.Fatalf("status = %d, body = %s", goodRecorder.Code, goodRecorder.Body.String())
+	}
+	if reader.searchQuery != "forrest" {
+		t.Fatalf("searchQuery = %q", reader.searchQuery)
 	}
 }
 

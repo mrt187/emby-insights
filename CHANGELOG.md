@@ -8,6 +8,22 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.15] - 2026-07-29
+
+### Changed
+
+- The Home carousel no longer repeats your name on every slide — only the
+  profile picture stays. A new combined slide shows "Mitglied seit" together
+  with your last activity and total Seerr request count. All slide text is
+  now centered so the tiles look fuller.
+
+### Added
+
+- A "Suchen" button on the Anfragen tab searches Seerr/TMDB directly — no
+  more being limited to the 5 curated discover lists. Results open the
+  existing detail screen, so requesting (including season selection for
+  series) works exactly like everywhere else.
+
 ## [0.8.14] - 2026-07-29
 
 ### Fixed

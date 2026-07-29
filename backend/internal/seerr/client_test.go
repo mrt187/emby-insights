@@ -73,3 +73,46 @@ func TestRequestsReturnsNilWhenSeerrUserUnknown(t *testing.T) {
 		t.Fatalf("Requests() = %#v, %v, want nil, nil", requests, err)
 	}
 }
+
+func TestRequestStatsReadsTotalRequestCount(t *testing.T) {
+	testServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch request.URL.Path {
+		case "/api/v1/user/jellyfin/emby-user-1":
+			_, _ = writer.Write([]byte(`{"id":27}`))
+		case "/api/v1/user/27":
+			_, _ = writer.Write([]byte(`{"requestCount":302}`))
+		default:
+			t.Fatalf("unexpected path %q", request.URL.Path)
+		}
+	}))
+	defer testServer.Close()
+
+	stats, err := NewClient(testServer.URL, "api-key").RequestStats(context.Background(), "emby-user-1")
+	if err != nil {
+		t.Fatalf("RequestStats() error = %v", err)
+	}
+	if stats.Total != 302 {
+		t.Fatalf("stats = %#v, want Total = 302", stats)
+	}
+}
+
+func TestRequestStatsReturnsZeroWhenSeerrUserUnknown(t *testing.T) {
+	testServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.WriteHeader(http.StatusNotFound)
+	}))
+	defer testServer.Close()
+
+	stats, err := NewClient(testServer.URL, "api-key").RequestStats(context.Background(), "unlinked-user")
+	if err != nil || stats.Total != 0 {
+		t.Fatalf("RequestStats() = %#v, %v, want zero value, nil", stats, err)
+	}
+}
+
+func TestRequestStatsReturnsZeroWhenClientIsNil(t *testing.T) {
+	var client *Client
+	stats, err := client.RequestStats(context.Background(), "emby-user-1")
+	if err != nil || stats.Total != 0 {
+		t.Fatalf("RequestStats() = %#v, %v, want zero value, nil", stats, err)
+	}
+}

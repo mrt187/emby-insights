@@ -32,7 +32,9 @@ type App struct {
 	watched              emby.WatchedReader
 	watchedLibraryIDs    []string
 	completed            emby.CompletedReader
+	profile              emby.ProfileReader
 	requests             seerr.RequestsReader
+	requestStats         seerr.RequestStatsReader
 	discover             seerr.DiscoverReader
 	embyMediaDetail      emby.MediaDetailReader
 	seerrMediaDetail     seerr.MediaDetailReader
@@ -68,7 +70,9 @@ func New(cfg config.Config) (*App, error) {
 		watched:              embyClient,
 		watchedLibraryIDs:    cfg.EmbyWatchedLibraryIDs,
 		completed:            embyClient,
+		profile:              embyClient,
 		requests:             seerrClient,
+		requestStats:         seerrClient,
 		discover:             seerrClient,
 		embyMediaDetail:      embyClient,
 		seerrMediaDetail:     seerrClient,
@@ -88,9 +92,11 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("POST /api/auth/logout", app.logout)
 	mux.HandleFunc("GET /api/me", app.me)
 	mux.HandleFunc("GET /api/me/avatar", app.avatar)
+	mux.HandleFunc("GET /api/me/profile", app.meProfile)
 	mux.HandleFunc("GET /api/stats", app.stats)
 	mux.HandleFunc("GET /api/upcoming", app.upcomingItems)
 	mux.HandleFunc("GET /api/requests", app.myRequests)
+	mux.HandleFunc("GET /api/requests/total", app.requestsTotal)
 	mux.HandleFunc("GET /api/new-for-you", app.newForYouItems)
 	mux.HandleFunc("GET /api/continue-watching", app.continueWatchingItems)
 	mux.HandleFunc("GET /api/watched-movies", app.watchedMovies)
@@ -112,6 +118,7 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/discover/series/upcoming", app.discoverHandler(func(ctx context.Context, discover seerr.DiscoverReader) ([]seerr.DiscoverItem, error) {
 		return discover.UpcomingSeries(ctx)
 	}))
+	mux.HandleFunc("GET /api/discover/search", app.discoverSearch)
 	mux.HandleFunc("GET /api/media/emby", app.embyMediaDetailHandler)
 	mux.HandleFunc("GET /api/media/seerr", app.seerrMediaDetailHandler)
 	mux.HandleFunc("POST /api/media/seerr/request", app.createSeerrRequestHandler)
@@ -172,6 +179,19 @@ func (app *App) me(writer http.ResponseWriter, request *http.Request) {
 	respondJSON(writer, http.StatusOK, profile(identity))
 }
 
+func (app *App) meProfile(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	userProfile, err := app.profile.UserProfile(request.Context(), identity.UserID)
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "user profile is unavailable"})
+		return
+	}
+	respondJSON(writer, http.StatusOK, userProfile)
+}
+
 func (app *App) stats(writer http.ResponseWriter, request *http.Request) {
 	identity, ok := app.identityFromRequest(writer, request)
 	if !ok {
@@ -221,6 +241,36 @@ func (app *App) myRequests(writer http.ResponseWriter, request *http.Request) {
 	items, err := app.requests.Requests(request.Context(), identity.UserID)
 	if err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "requests are unavailable"})
+		return
+	}
+	respondJSON(writer, http.StatusOK, orEmpty(items))
+}
+
+func (app *App) requestsTotal(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	stats, err := app.requestStats.RequestStats(request.Context(), identity.UserID)
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "request stats are unavailable"})
+		return
+	}
+	respondJSON(writer, http.StatusOK, stats)
+}
+
+func (app *App) discoverSearch(writer http.ResponseWriter, request *http.Request) {
+	if _, ok := app.identityFromRequest(writer, request); !ok {
+		return
+	}
+	query := request.URL.Query().Get("query")
+	if query == "" {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "query is required"})
+		return
+	}
+	items, err := app.discover.Search(request.Context(), query)
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "search is unavailable"})
 		return
 	}
 	respondJSON(writer, http.StatusOK, orEmpty(items))

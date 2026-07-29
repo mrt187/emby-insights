@@ -29,6 +29,14 @@ type RequestsReader interface {
 	Requests(context.Context, string) ([]Request, error)
 }
 
+type RequestStats struct {
+	Total int `json:"total"`
+}
+
+type RequestStatsReader interface {
+	RequestStats(ctx context.Context, embyUserID string) (RequestStats, error)
+}
+
 type Client struct {
 	baseURL    string
 	apiKey     string
@@ -82,6 +90,30 @@ func (client *Client) Requests(ctx context.Context, embyUserID string) ([]Reques
 		})
 	}
 	return requests, nil
+}
+
+// RequestStats reads the total number of requests this user has ever made
+// on Seerr — unlike Requests, this is not filtered to open/available ones.
+func (client *Client) RequestStats(ctx context.Context, embyUserID string) (RequestStats, error) {
+	if client == nil {
+		return RequestStats{}, nil
+	}
+
+	seerrUserID, ok, err := client.resolveUserID(ctx, embyUserID)
+	if err != nil {
+		return RequestStats{}, err
+	}
+	if !ok {
+		return RequestStats{}, nil
+	}
+
+	var result struct {
+		RequestCount int `json:"requestCount"`
+	}
+	if _, err := client.get(ctx, fmt.Sprintf("/api/v1/user/%d", seerrUserID), &result); err != nil {
+		return RequestStats{}, err
+	}
+	return RequestStats{Total: result.RequestCount}, nil
 }
 
 func (client *Client) resolveUserID(ctx context.Context, embyUserID string) (int, bool, error) {
