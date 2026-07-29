@@ -51,14 +51,28 @@ func TestEmbyMediaDetailSplitsCastAndCrew(t *testing.T) {
 	}
 }
 
-func TestEmbyMediaDetailComputesSeriesProgress(t *testing.T) {
-	testServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+func TestEmbyMediaDetailComputesSeriesProgressAndSeasons(t *testing.T) {
+	testServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
-		_, _ = writer.Write([]byte(`{
-			"Id":"1","Name":"Severance","Type":"Series",
-			"RecursiveItemCount":18,
-			"UserData":{"Played":false,"UnplayedItemCount":3}
-		}`))
+		switch {
+		case request.URL.Path == "/emby/Users/user-1/Items/1":
+			_, _ = writer.Write([]byte(`{
+				"Id":"1","Name":"Severance","Type":"Series",
+				"RecursiveItemCount":18,
+				"UserData":{"Played":false,"UnplayedItemCount":3}
+			}`))
+		case request.URL.Path == "/emby/Shows/1/Seasons":
+			if request.URL.Query().Get("UserId") != "user-1" {
+				t.Fatalf("UserId = %q", request.URL.Query().Get("UserId"))
+			}
+			_, _ = writer.Write([]byte(`{"Items":[
+				{"Id":"10","Name":"Staffel 1","IndexNumber":1,"RecursiveItemCount":9,"ImageTags":{"Primary":"tag-s1"},"UserData":{"Played":true,"UnplayedItemCount":0}},
+				{"Id":"11","Name":"Staffel 2","IndexNumber":2,"RecursiveItemCount":9,"UserData":{"Played":false,"UnplayedItemCount":3}},
+				{"Id":"12","Name":"Specials","IndexNumber":0,"RecursiveItemCount":0,"UserData":{"Played":false,"UnplayedItemCount":0}}
+			]}`))
+		default:
+			t.Fatalf("unexpected request %q", request.URL.String())
+		}
 	}))
 	defer testServer.Close()
 
@@ -74,5 +88,36 @@ func TestEmbyMediaDetailComputesSeriesProgress(t *testing.T) {
 	// the frontend's array spread crashes.
 	if detail.Crew == nil || detail.Cast == nil || detail.Genres == nil {
 		t.Fatalf("Crew/Cast/Genres must be non-nil empty slices, got %#v", detail)
+	}
+	if len(detail.Seasons) != 2 {
+		t.Fatalf("Seasons = %#v, want 2 (the empty 'Specials' season is skipped)", detail.Seasons)
+	}
+	if detail.Seasons[0].Title != "Staffel 1" || detail.Seasons[0].WatchedEpisodes != 9 || detail.Seasons[0].TotalEpisodes != 9 || !detail.Seasons[0].Played {
+		t.Fatalf("Seasons[0] = %#v", detail.Seasons[0])
+	}
+	if detail.Seasons[0].PosterURL == "" {
+		t.Fatalf("expected a poster URL for season 1")
+	}
+	if detail.Seasons[1].Title != "Staffel 2" || detail.Seasons[1].WatchedEpisodes != 6 || detail.Seasons[1].TotalEpisodes != 9 || detail.Seasons[1].Played {
+		t.Fatalf("Seasons[1] = %#v", detail.Seasons[1])
+	}
+}
+
+func TestEmbyMediaDetailMovieHasNoSeasons(t *testing.T) {
+	testServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/emby/Users/user-1/Items/154950" {
+			t.Fatalf("unexpected request %q", request.URL.String())
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"Id":"154950","Name":"Dune","Type":"Movie"}`))
+	}))
+	defer testServer.Close()
+
+	detail, err := NewClient(testServer.URL+"/emby", "dashboard-device", "admin-key").EmbyMediaDetail(context.Background(), "user-1", "154950")
+	if err != nil {
+		t.Fatalf("EmbyMediaDetail() error = %v", err)
+	}
+	if detail.Seasons == nil || len(detail.Seasons) != 0 {
+		t.Fatalf("Seasons = %#v, want empty slice", detail.Seasons)
 	}
 }

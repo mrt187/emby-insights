@@ -15,11 +15,12 @@ type WatchedItem = { id: string; title: string; posterUrl: string; genres: strin
 type DiscoverItem = { id: string; title: string; posterUrl: string; mediaType: string };
 type MediaSelection = { source: "emby"; id: string } | { source: "seerr"; id: string; mediaType: string };
 type MediaPerson = { name: string; role: string; imageUrl: string };
+type MediaSeason = { id: string; title: string; posterUrl: string; indexNumber: number; watchedEpisodes: number; totalEpisodes: number; played: boolean };
 type MediaDetail = {
   id: string; title: string; overview: string; posterUrl: string; backdropUrl: string;
   genres: string[]; communityRating: number; officialRating?: string; year: number; runtimeMinutes: number;
   cast: MediaPerson[]; crew: MediaPerson[];
-  isSeries?: boolean; watchedEpisodes?: number; totalEpisodes?: number; played?: boolean;
+  isSeries?: boolean; watchedEpisodes?: number; totalEpisodes?: number; played?: boolean; seasons?: MediaSeason[];
 };
 type IconName = "home" | "chart" | "sparkle" | "user" | "bell" | "arrow" | "close" | "clock" | "movie" | "series" | "genre";
 type Tone = "blue" | "peach" | "mint" | "lilac";
@@ -30,7 +31,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.6";
+const APP_VERSION = "0.8.7";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -524,6 +525,20 @@ function MediaDetailScreen({ selection, onClose }: { selection: MediaSelection; 
           </div>
         </div>
         {detail.overview && <section className="media-detail-overview"><h2>Übersicht</h2><p>{detail.overview}</p></section>}
+        {detail.seasons && detail.seasons.length > 0 && <section className="media-detail-seasons">
+          <h2>Staffeln</h2>
+          <div className="poster-scroller">{detail.seasons.map((season) => {
+            const progress = season.totalEpisodes > 0 ? Math.round((season.watchedEpisodes / season.totalEpisodes) * 100) : 0;
+            return <article className="poster-entry" key={season.id}>
+              <div className="poster wide" role="img" aria-label={season.title}>
+                {season.posterUrl ? <img src={season.posterUrl} alt="" loading="lazy" /> : <span>{season.title}</span>}
+                <div className="poster-progress"><div className="poster-progress-fill" style={{ width: `${progress}%` }} /></div>
+              </div>
+              <strong>{season.title}</strong>
+              <small>{season.played ? "Angesehen" : `${season.watchedEpisodes} von ${season.totalEpisodes} Folgen`}</small>
+            </article>;
+          })}</div>
+        </section>}
         {crewAndCast.length > 0 && <section className="media-detail-cast">
           <h2>Besetzung</h2>
           <div className="cast-grid">

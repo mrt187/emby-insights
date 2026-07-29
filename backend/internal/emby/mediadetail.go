@@ -14,6 +14,16 @@ type Person struct {
 	ImageURL string `json:"imageUrl"`
 }
 
+type Season struct {
+	ID              string `json:"id"`
+	Title           string `json:"title"`
+	PosterURL       string `json:"posterUrl"`
+	IndexNumber     int    `json:"indexNumber"`
+	WatchedEpisodes int    `json:"watchedEpisodes"`
+	TotalEpisodes   int    `json:"totalEpisodes"`
+	Played          bool   `json:"played"`
+}
+
 type MediaDetail struct {
 	ID              string   `json:"id"`
 	Title           string   `json:"title"`
@@ -31,6 +41,7 @@ type MediaDetail struct {
 	WatchedEpisodes int      `json:"watchedEpisodes"`
 	TotalEpisodes   int      `json:"totalEpisodes"`
 	Played          bool     `json:"played"`
+	Seasons         []Season `json:"seasons"`
 }
 
 type MediaDetailReader interface {
@@ -106,6 +117,7 @@ func (client *Client) EmbyMediaDetail(ctx context.Context, userID, itemID string
 		Played:          result.UserData.Played,
 		Cast:            []Person{},
 		Crew:            []Person{},
+		Seasons:         []Season{},
 	}
 	if result.ImageTags.Primary != "" {
 		detail.PosterURL = fmt.Sprintf("%s/Items/%s/Images/Primary?tag=%s&maxWidth=600", client.baseURL, result.Id, result.ImageTags.Primary)
@@ -116,6 +128,11 @@ func (client *Client) EmbyMediaDetail(ctx context.Context, userID, itemID string
 	if detail.IsSeries {
 		detail.TotalEpisodes = result.RecursiveItemCount
 		detail.WatchedEpisodes = result.RecursiveItemCount - result.UserData.UnplayedItemCount
+		seasons, err := client.seasons(ctx, userID, result.Id)
+		if err != nil {
+			return MediaDetail{}, err
+		}
+		detail.Seasons = seasons
 	}
 
 	for _, person := range result.People {
@@ -133,4 +150,67 @@ func (client *Client) EmbyMediaDetail(ctx context.Context, userID, itemID string
 	}
 
 	return detail, nil
+}
+
+func (client *Client) seasons(ctx context.Context, userID, seriesID string) ([]Season, error) {
+	query := url.Values{
+		"UserId": {userID},
+		"Fields": {"RecursiveItemCount"},
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, client.baseURL+"/Shows/"+seriesID+"/Seasons?"+query.Encode(), nil)
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("X-Emby-Token", client.adminAPIKey)
+
+	response, err := client.httpClient.Do(request)
+	if err != nil {
+		return nil, fmt.Errorf("call Emby seasons: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Emby seasons returned %s", response.Status)
+	}
+
+	var result struct {
+		Items []struct {
+			Id                 string `json:"Id"`
+			Name               string `json:"Name"`
+			IndexNumber        int    `json:"IndexNumber"`
+			RecursiveItemCount int    `json:"RecursiveItemCount"`
+			ImageTags          struct {
+				Primary string `json:"Primary"`
+			} `json:"ImageTags"`
+			UserData struct {
+				Played            bool `json:"Played"`
+				UnplayedItemCount int  `json:"UnplayedItemCount"`
+			} `json:"UserData"`
+		} `json:"Items"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode Emby seasons: %w", err)
+	}
+
+	seasons := make([]Season, 0, len(result.Items))
+	for _, item := range result.Items {
+		// Some seasons (e.g. "Specials") have no episodes in the library yet
+		// and would show as "0 von 0" — skip those.
+		if item.RecursiveItemCount == 0 {
+			continue
+		}
+		var posterURL string
+		if item.ImageTags.Primary != "" {
+			posterURL = fmt.Sprintf("%s/Items/%s/Images/Primary?tag=%s&maxWidth=300", client.baseURL, item.Id, item.ImageTags.Primary)
+		}
+		seasons = append(seasons, Season{
+			ID:              item.Id,
+			Title:           item.Name,
+			PosterURL:       posterURL,
+			IndexNumber:     item.IndexNumber,
+			TotalEpisodes:   item.RecursiveItemCount,
+			WatchedEpisodes: item.RecursiveItemCount - item.UserData.UnplayedItemCount,
+			Played:          item.UserData.Played,
+		})
+	}
+	return seasons, nil
 }

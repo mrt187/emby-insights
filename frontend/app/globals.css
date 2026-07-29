@@ -448,7 +448,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .media-detail-meta span:not(:last-child)::after { content: "•"; margin-left: 10px; color: var(--muted); }
 .media-detail-rating { margin-top: 10px; color: #f6cf6b; font-size: 15px; font-weight: 700; }
 
-.media-detail-overview h2, .media-detail-cast h2 { margin: 0 0 12px; font-size: 18px; font-weight: 800; letter-spacing: -.3px; }
+.media-detail-overview h2, .media-detail-cast h2, .media-detail-seasons h2 { margin: 0 0 12px; font-size: 18px; font-weight: 800; letter-spacing: -.3px; }
 .media-detail-overview p { color: var(--text-secondary); line-height: 1.6; max-width: 74ch; }
 
 .cast-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 16px; }

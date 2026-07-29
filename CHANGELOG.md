@@ -8,6 +8,15 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.7] - 2026-07-29
+
+### Added
+
+- The media detail screen now shows a series' seasons (poster, progress bar,
+  "Angesehen" or "X von Y Folgen"), read via Emby's `/Shows/{id}/Seasons`.
+  Seasons with no episodes in the library yet (e.g. an empty "Specials")
+  are skipped.
+
 ## [0.8.6] - 2026-07-29
 
 ### Fixed
