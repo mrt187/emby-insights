@@ -8,6 +8,31 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.22] - 2026-07-29
+
+### Added
+
+- Persönliches Tracking: eigene 1-5-Sterne-Bewertung und eine Merkliste,
+  gespeichert in unserer eigenen Datenbank statt bei Emby, da Emby von Haus
+  aus weder Sterne noch eine Merkliste kennt. Favoriten laufen dagegen
+  bewusst Emby-nativ, damit sie mit jeder anderen Emby-App synchron bleiben.
+  Im Detailscreen gibt es dafür eine neue Aktionsleiste zwischen Hero und
+  Übersicht; im Profil eine neue Sektion "Meine Listen".
+- Ein eingebetteter Postgres-Migrationsrunner (`backend/internal/store`)
+  ersetzt das bisherige `initdb`-Skript, das auf der laufenden Instanz ohnehin
+  nie erneut ausgeführt worden wäre. Ein Postgres-Advisory-Lock verhindert,
+  dass sich zwei Container beim "Update Stack" gegenseitig die Migration
+  kaputt machen.
+
+### Fixed
+
+- `entrypoint.sh` beendet den Container jetzt, sobald API oder Frontend
+  abstürzen, statt nur auf das Frontend zu warten — ein Absturz der API
+  (etwa durch eine fehlgeschlagene Migration) blieb bisher unsichtbar grün
+  in Unraid, während jeder `/api/*`-Aufruf ins Leere lief.
+- Die tote Fremdschlüsselbeziehung von `user_settings`/`notifications` auf
+  die nie befüllte Tabelle `user_mappings` wurde entfernt.
+
 ## [0.8.21] - 2026-07-29
 
 ### Changed

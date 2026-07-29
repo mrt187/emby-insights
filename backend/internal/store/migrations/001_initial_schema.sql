@@ -1,10 +1,3 @@
-CREATE TABLE schema_migrations (
-    version INTEGER PRIMARY KEY,
-    applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-INSERT INTO schema_migrations (version) VALUES (1);
-
 CREATE TABLE user_mappings (
     emby_user_id TEXT PRIMARY KEY,
     seerr_user_id TEXT,

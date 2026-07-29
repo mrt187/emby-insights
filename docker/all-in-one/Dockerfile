@@ -27,7 +27,6 @@ COPY --from=frontend-build /src/frontend/dist /app/frontend/dist
 COPY --from=frontend-build /src/frontend/node_modules /app/frontend/node_modules
 COPY --from=frontend-build /src/frontend/package.json /app/frontend/package.json
 COPY docker/all-in-one/entrypoint.sh /usr/local/bin/emby-insights-entrypoint
-COPY docker/all-in-one/initdb/001-initial-schema.sql /docker-entrypoint-initdb.d/001-initial-schema.sql
 
 RUN chmod 755 /usr/local/bin/emby-insights-entrypoint
 

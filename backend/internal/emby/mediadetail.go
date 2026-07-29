@@ -41,6 +41,7 @@ type MediaDetail struct {
 	WatchedEpisodes int      `json:"watchedEpisodes"`
 	TotalEpisodes   int      `json:"totalEpisodes"`
 	Played          bool     `json:"played"`
+	IsFavorite      bool     `json:"isFavorite"`
 	Seasons         []Season `json:"seasons"`
 	// CurrentSeasonNumber/CurrentEpisodeNumber are set when this detail was
 	// opened for an in-progress episode (e.g. from "Weiterschauen") — Emby's
@@ -105,6 +106,7 @@ func (client *Client) EmbyMediaDetail(ctx context.Context, userID, itemID string
 		UserData struct {
 			Played            bool `json:"Played"`
 			UnplayedItemCount int  `json:"UnplayedItemCount"`
+			IsFavorite        bool `json:"IsFavorite"`
 		} `json:"UserData"`
 	}
 	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
@@ -138,6 +140,7 @@ func (client *Client) EmbyMediaDetail(ctx context.Context, userID, itemID string
 		RuntimeMinutes:  int(result.RunTimeTicks / 10_000_000 / 60),
 		IsSeries:        result.Type == "Series",
 		Played:          result.UserData.Played,
+		IsFavorite:      result.UserData.IsFavorite,
 		Cast:            []Person{},
 		Crew:            []Person{},
 		Seasons:         []Season{},

@@ -28,6 +28,36 @@ type AvatarReader interface {
 	UserPrimaryImage(context.Context, Identity) (UserImage, error)
 }
 
+type FavoriteWriter interface {
+	SetFavorite(ctx context.Context, userID, itemID string, favorite bool) error
+}
+
+// SetFavorite adds or removes an item from the user's Emby favorites — the
+// first write operation against Emby other than Authenticate. Favorites are
+// deliberately kept native rather than duplicated into our own database, so
+// they stay in sync with every other Emby client.
+func (client *Client) SetFavorite(ctx context.Context, userID, itemID string, favorite bool) error {
+	method := http.MethodPost
+	if !favorite {
+		method = http.MethodDelete
+	}
+	url := client.baseURL + "/Users/" + userID + "/FavoriteItems/" + itemID
+	request, err := http.NewRequestWithContext(ctx, method, url, nil)
+	if err != nil {
+		return err
+	}
+	request.Header.Set("X-Emby-Token", client.adminAPIKey)
+	response, err := client.httpClient.Do(request)
+	if err != nil {
+		return fmt.Errorf("call Emby favorite: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return fmt.Errorf("Emby favorite returned %s", response.Status)
+	}
+	return nil
+}
+
 type UserImage struct {
 	ContentType string
 	Data        []byte

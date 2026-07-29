@@ -42,4 +42,9 @@ api_pid=$!
 ( cd /app/frontend && node node_modules/vinext/dist/cli.js start --port 8080 ) &
 frontend_pid=$!
 
-wait "$frontend_pid"
+# Exit as soon as either process dies (e.g. the API crashing on a failed
+# migration) instead of only watching the frontend — otherwise the container
+# stays up and looks healthy in Unraid while every /api/* call fails.
+while kill -0 "$api_pid" 2>/dev/null && kill -0 "$frontend_pid" 2>/dev/null; do
+    sleep 1
+done

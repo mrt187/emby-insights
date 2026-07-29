@@ -13,6 +13,7 @@ import (
 	"github.com/mrt187/EmbyInsights/internal/emby"
 	"github.com/mrt187/EmbyInsights/internal/seerr"
 	"github.com/mrt187/EmbyInsights/internal/session"
+	"github.com/mrt187/EmbyInsights/internal/store"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -42,6 +43,8 @@ type App struct {
 	embyMediaDetail      emby.MediaDetailReader
 	seerrMediaDetail     seerr.MediaDetailReader
 	seerrRequestCreator  seerr.RequestCreator
+	tracking             store.TrackingStore
+	favorites            emby.FavoriteWriter
 	sessions             session.Store
 	cookieSecure         bool
 }
@@ -83,6 +86,8 @@ func New(cfg config.Config) (*App, error) {
 		embyMediaDetail:      embyClient,
 		seerrMediaDetail:     seerrClient,
 		seerrRequestCreator:  seerrClient,
+		tracking:             store.NewPostgresTrackingStore(database),
+		favorites:            embyClient,
 		sessions:             session.NewRedisStore(cache),
 		cookieSecure:         cfg.CookieSecure,
 	}, nil
@@ -134,6 +139,12 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/media/emby", app.embyMediaDetailHandler)
 	mux.HandleFunc("GET /api/media/seerr", app.seerrMediaDetailHandler)
 	mux.HandleFunc("POST /api/media/seerr/request", app.createSeerrRequestHandler)
+	mux.HandleFunc("GET /api/tracking", app.getTracking)
+	mux.HandleFunc("PUT /api/tracking", app.upsertTracking)
+	mux.HandleFunc("GET /api/tracking/watchlist", app.trackingWatchlist)
+	mux.HandleFunc("GET /api/tracking/ratings", app.trackingRatings)
+	mux.HandleFunc("POST /api/media/emby/favorite", app.setFavoriteHandler(true))
+	mux.HandleFunc("DELETE /api/media/emby/favorite", app.setFavoriteHandler(false))
 	return mux
 }
 
@@ -481,6 +492,105 @@ func (app *App) createSeerrRequestHandler(writer http.ResponseWriter, request *h
 		return
 	}
 	writer.WriteHeader(http.StatusNoContent)
+}
+
+func (app *App) getTracking(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	mediaSource := request.URL.Query().Get("source")
+	mediaID := request.URL.Query().Get("id")
+	if mediaSource == "" || mediaID == "" {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "source and id are required"})
+		return
+	}
+
+	entry, found, err := app.tracking.Get(request.Context(), identity.UserID, mediaSource, mediaID)
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "tracking is unavailable"})
+		return
+	}
+	if !found {
+		respondJSON(writer, http.StatusOK, store.MediaTracking{MediaSource: mediaSource, MediaID: mediaID})
+		return
+	}
+	respondJSON(writer, http.StatusOK, entry)
+}
+
+func (app *App) upsertTracking(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+
+	var entry store.MediaTracking
+	request.Body = http.MaxBytesReader(writer, request.Body, 1<<16)
+	if err := json.NewDecoder(request.Body).Decode(&entry); err != nil {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	if entry.MediaSource == "" || entry.MediaID == "" {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "mediaSource and mediaId are required"})
+		return
+	}
+	if entry.Rating < 0 || entry.Rating > 5 {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "rating must be between 0 and 5"})
+		return
+	}
+
+	if err := app.tracking.Upsert(request.Context(), identity.UserID, entry); err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "saving tracking failed"})
+		return
+	}
+	writer.WriteHeader(http.StatusNoContent)
+}
+
+func (app *App) trackingWatchlist(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	items, err := app.tracking.Watchlist(request.Context(), identity.UserID)
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "watchlist is unavailable"})
+		return
+	}
+	respondJSON(writer, http.StatusOK, orEmpty(items))
+}
+
+func (app *App) trackingRatings(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	items, err := app.tracking.Ratings(request.Context(), identity.UserID)
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "ratings are unavailable"})
+		return
+	}
+	respondJSON(writer, http.StatusOK, orEmpty(items))
+}
+
+// setFavoriteHandler returns a handler for both the POST and DELETE Emby
+// favorite routes, since they differ only in which way the toggle goes.
+func (app *App) setFavoriteHandler(favorite bool) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		identity, ok := app.identityFromRequest(writer, request)
+		if !ok {
+			return
+		}
+		itemID := request.URL.Query().Get("itemId")
+		if itemID == "" {
+			respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "itemId is required"})
+			return
+		}
+		if err := app.favorites.SetFavorite(request.Context(), identity.UserID, itemID, favorite); err != nil {
+			respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "updating the Emby favorite failed"})
+			return
+		}
+		writer.WriteHeader(http.StatusNoContent)
+	}
 }
 
 func (app *App) newForYouItems(writer http.ResponseWriter, request *http.Request) {

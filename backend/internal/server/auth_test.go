@@ -12,6 +12,7 @@ import (
 
 	"github.com/mrt187/EmbyInsights/internal/emby"
 	"github.com/mrt187/EmbyInsights/internal/seerr"
+	"github.com/mrt187/EmbyInsights/internal/store"
 )
 
 type fakeAuthenticator struct {
@@ -251,6 +252,50 @@ func (creator *fakeRequestCreator) CreateRequest(_ context.Context, embyUserID, 
 	creator.tmdbID = tmdbID
 	creator.seasons = seasons
 	return creator.err
+}
+
+type fakeTrackingStore struct {
+	getEntry     store.MediaTracking
+	getFound     bool
+	getErr       error
+	upsertUserID string
+	upserted     store.MediaTracking
+	upsertErr    error
+	watchlist    []store.MediaTracking
+	ratings      []store.MediaTracking
+	err          error
+}
+
+func (fake *fakeTrackingStore) Get(_ context.Context, _, _, _ string) (store.MediaTracking, bool, error) {
+	return fake.getEntry, fake.getFound, fake.getErr
+}
+
+func (fake *fakeTrackingStore) Upsert(_ context.Context, embyUserID string, entry store.MediaTracking) error {
+	fake.upsertUserID = embyUserID
+	fake.upserted = entry
+	return fake.upsertErr
+}
+
+func (fake *fakeTrackingStore) Watchlist(_ context.Context, _ string) ([]store.MediaTracking, error) {
+	return fake.watchlist, fake.err
+}
+
+func (fake *fakeTrackingStore) Ratings(_ context.Context, _ string) ([]store.MediaTracking, error) {
+	return fake.ratings, fake.err
+}
+
+type fakeFavoriteWriter struct {
+	userID   string
+	itemID   string
+	favorite bool
+	err      error
+}
+
+func (fake *fakeFavoriteWriter) SetFavorite(_ context.Context, userID, itemID string, favorite bool) error {
+	fake.userID = userID
+	fake.itemID = itemID
+	fake.favorite = favorite
+	return fake.err
 }
 
 type memorySessionStore struct {
@@ -836,6 +881,188 @@ func TestCreateSeerrRequestHandlerRequiresSession(t *testing.T) {
 	app := &App{sessions: &memorySessionStore{}, seerrRequestCreator: &fakeRequestCreator{}}
 
 	request := httptest.NewRequest(http.MethodPost, "/api/media/seerr/request", bytes.NewReader([]byte(`{"mediaType":"movie","tmdbId":1}`)))
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestGetTrackingReturnsExistingEntry(t *testing.T) {
+	sessions := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	tracking := &fakeTrackingStore{getEntry: store.MediaTracking{MediaID: "42", Title: "Alien", Rating: 4}, getFound: true}
+	app := &App{sessions: sessions, tracking: tracking}
+
+	request := httptest.NewRequest(http.MethodGet, "/api/tracking?source=emby&id=42", nil)
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "Alien") {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestGetTrackingReturnsEmptyEntryWhenUntracked(t *testing.T) {
+	sessions := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	app := &App{sessions: sessions, tracking: &fakeTrackingStore{}}
+
+	request := httptest.NewRequest(http.MethodGet, "/api/tracking?source=emby&id=42", nil)
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	if strings.Contains(recorder.Body.String(), `"rating"`) {
+		t.Fatalf("expected no rating field for an untracked item, body = %s", recorder.Body.String())
+	}
+}
+
+func TestGetTrackingRequiresParams(t *testing.T) {
+	sessions := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	app := &App{sessions: sessions, tracking: &fakeTrackingStore{}}
+
+	request := httptest.NewRequest(http.MethodGet, "/api/tracking", nil)
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestUpsertTrackingSavesEntry(t *testing.T) {
+	sessions := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	tracking := &fakeTrackingStore{}
+	app := &App{sessions: sessions, tracking: tracking}
+
+	request := httptest.NewRequest(http.MethodPut, "/api/tracking", bytes.NewReader([]byte(`{"mediaSource":"emby","mediaId":"42","mediaType":"Movie","title":"Alien","rating":5,"onWatchlist":true}`)))
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	if tracking.upsertUserID != "user-1" || tracking.upserted.MediaID != "42" || tracking.upserted.Rating != 5 || !tracking.upserted.OnWatchlist {
+		t.Fatalf("upserted = %#v (userID %q)", tracking.upserted, tracking.upsertUserID)
+	}
+}
+
+func TestUpsertTrackingValidatesRating(t *testing.T) {
+	sessions := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	app := &App{sessions: sessions, tracking: &fakeTrackingStore{}}
+
+	request := httptest.NewRequest(http.MethodPut, "/api/tracking", bytes.NewReader([]byte(`{"mediaSource":"emby","mediaId":"42","rating":9}`)))
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestUpsertTrackingRequiresSession(t *testing.T) {
+	app := &App{sessions: &memorySessionStore{}, tracking: &fakeTrackingStore{}}
+
+	request := httptest.NewRequest(http.MethodPut, "/api/tracking", bytes.NewReader([]byte(`{"mediaSource":"emby","mediaId":"42"}`)))
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestTrackingWatchlistReturnsEntries(t *testing.T) {
+	sessions := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	tracking := &fakeTrackingStore{watchlist: []store.MediaTracking{{MediaID: "42", Title: "Alien"}}}
+	app := &App{sessions: sessions, tracking: tracking}
+
+	request := httptest.NewRequest(http.MethodGet, "/api/tracking/watchlist", nil)
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "Alien") {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestTrackingRatingsReturnsEntries(t *testing.T) {
+	sessions := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	tracking := &fakeTrackingStore{ratings: []store.MediaTracking{{MediaID: "42", Title: "Alien", Rating: 5}}}
+	app := &App{sessions: sessions, tracking: tracking}
+
+	request := httptest.NewRequest(http.MethodGet, "/api/tracking/ratings", nil)
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "Alien") {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestSetFavoriteHandlerAddsFavorite(t *testing.T) {
+	sessions := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	favorites := &fakeFavoriteWriter{}
+	app := &App{sessions: sessions, favorites: favorites}
+
+	request := httptest.NewRequest(http.MethodPost, "/api/media/emby/favorite?itemId=42", nil)
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	if favorites.userID != "user-1" || favorites.itemID != "42" || !favorites.favorite {
+		t.Fatalf("userID = %q, itemID = %q, favorite = %v", favorites.userID, favorites.itemID, favorites.favorite)
+	}
+}
+
+func TestSetFavoriteHandlerRemovesFavorite(t *testing.T) {
+	sessions := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	favorites := &fakeFavoriteWriter{}
+	app := &App{sessions: sessions, favorites: favorites}
+
+	request := httptest.NewRequest(http.MethodDelete, "/api/media/emby/favorite?itemId=42", nil)
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	if favorites.favorite {
+		t.Fatal("expected favorite = false for DELETE")
+	}
+}
+
+func TestSetFavoriteHandlerRequiresItemID(t *testing.T) {
+	sessions := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	app := &App{sessions: sessions, favorites: &fakeFavoriteWriter{}}
+
+	request := httptest.NewRequest(http.MethodPost, "/api/media/emby/favorite", nil)
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestSetFavoriteHandlerRequiresSession(t *testing.T) {
+	app := &App{sessions: &memorySessionStore{}, favorites: &fakeFavoriteWriter{}}
+
+	request := httptest.NewRequest(http.MethodPost, "/api/media/emby/favorite?itemId=42", nil)
 	recorder := httptest.NewRecorder()
 	app.Handler().ServeHTTP(recorder, request)
 

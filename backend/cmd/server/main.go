@@ -12,11 +12,16 @@ import (
 
 	"github.com/mrt187/EmbyInsights/internal/config"
 	"github.com/mrt187/EmbyInsights/internal/server"
+	"github.com/mrt187/EmbyInsights/internal/store"
 )
 
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
+		log.Fatal(err)
+	}
+
+	if err := store.Migrate(context.Background(), cfg.DatabaseURL); err != nil {
 		log.Fatal(err)
 	}
 

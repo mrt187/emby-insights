@@ -27,12 +27,13 @@ type MediaDetail = {
   id: string; title: string; overview: string; posterUrl: string; backdropUrl: string;
   genres: string[]; communityRating: number; officialRating?: string; year: number; runtimeMinutes: number;
   cast: MediaPerson[]; crew: MediaPerson[];
-  isSeries?: boolean; watchedEpisodes?: number; totalEpisodes?: number; played?: boolean;
+  isSeries?: boolean; watchedEpisodes?: number; totalEpisodes?: number; played?: boolean; isFavorite?: boolean;
   currentSeasonNumber?: number; currentEpisodeNumber?: number;
   seasons?: MediaSeason[] | RequestableSeason[];
   mediaStatus?: number;
   status?: string; releaseDate?: string; studios?: string[];
 };
+type MediaTrackingEntry = { mediaSource: string; mediaId: string; mediaType: string; title: string; posterUrl: string; rating?: number; onWatchlist: boolean; rewatchCount: number };
 function isRequestableSeason(season: MediaSeason | RequestableSeason): season is RequestableSeason { return !("id" in season); }
 type IconName = "home" | "chart" | "sparkle" | "user" | "bell" | "arrow" | "close" | "clock" | "movie" | "series" | "genre";
 type Tone = "blue" | "peach" | "mint" | "lilac";
@@ -43,7 +44,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.21";
+const APP_VERSION = "0.8.22";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -206,7 +207,7 @@ export default function Home() {
       {page === "Heute" && <Today upcoming={upcomingItems} upcomingState={upcomingState} requests={requestItems} requestState={requestState} newForYou={newForYouItems} newForYouState={newForYouState} availableRequests={availableRequests} onSelectMedia={setSelectedMedia} />}
       {page === "Statistik" && <Stats onSelectMedia={setSelectedMedia} />}
       {page === "Anfragen" && <Requests onSelectMedia={setSelectedMedia} />}
-      {page === "Profil" && <Profile user={user} userProfile={userProfile} totalRequests={totalRequests} />}
+      {page === "Profil" && <Profile user={user} userProfile={userProfile} totalRequests={totalRequests} onSelectMedia={setSelectedMedia} />}
     </section>
 
     <nav className="bottom-nav" aria-label="Hauptnavigation (mobil)">{nav.map((item) => <button key={item.label} className={page === item.label ? "active" : ""} onClick={() => selectPage(item.label)} aria-current={page === item.label ? "page" : undefined}><Icon name={item.icon} /><span className="sr-only">{item.label}</span></button>)}</nav>
@@ -698,7 +699,56 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated }: { selection
   const [selectedSeasons, setSelectedSeasons] = useState<number[]>([]);
   const [requestState, setRequestState] = useState<"idle" | "submitting" | "done" | "error">("idle");
   const [requestModalOpen, setRequestModalOpen] = useState(false);
+  const [tracking, setTracking] = useState<{ rating: number; onWatchlist: boolean }>({ rating: 0, onWatchlist: false });
+  const [favorite, setFavorite] = useState(false);
+  const [favoriteBusy, setFavoriteBusy] = useState(false);
   const mediaType = selection.source === "seerr" ? selection.mediaType : undefined;
+
+  useEffect(() => {
+    let active = true;
+    fetch(`/api/tracking?source=${selection.source}&id=${encodeURIComponent(selection.id)}`, { credentials: "include" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("tracking unavailable");
+        const data: MediaTrackingEntry = await response.json();
+        if (active) setTracking({ rating: data.rating ?? 0, onWatchlist: data.onWatchlist });
+      })
+      .catch(() => null);
+    return () => { active = false; };
+  }, [selection.source, selection.id]);
+
+  const saveTracking = (next: { rating: number; onWatchlist: boolean }) => {
+    setTracking(next);
+    if (!detail) return;
+    fetch("/api/tracking", {
+      method: "PUT",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mediaSource: selection.source,
+        mediaId: selection.id,
+        mediaType: selection.source === "seerr" ? selection.mediaType : (detail.isSeries ? "series" : "movie"),
+        title: detail.title,
+        posterUrl: detail.posterUrl,
+        rating: next.rating,
+        onWatchlist: next.onWatchlist,
+      }),
+    }).catch(() => null);
+  };
+
+  const toggleFavorite = async () => {
+    if (selection.source !== "emby" || favoriteBusy) return;
+    setFavoriteBusy(true);
+    const next = !favorite;
+    setFavorite(next);
+    try {
+      const response = await fetch(`/api/media/emby/favorite?itemId=${encodeURIComponent(selection.id)}`, { method: next ? "POST" : "DELETE", credentials: "include" });
+      if (!response.ok) throw new Error("favorite update failed");
+    } catch {
+      setFavorite(!next);
+    } finally {
+      setFavoriteBusy(false);
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -711,6 +761,7 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated }: { selection
         const data: MediaDetail = await response.json();
         if (!active) return;
         setDetail(data);
+        setFavorite(data.isFavorite ?? false);
         setState("ready");
       })
       .catch(() => active && setState("error"));
@@ -776,6 +827,35 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated }: { selection
             </p>
             {detail.communityRating > 0 && <p className="media-detail-rating">★ {detail.communityRating.toFixed(1)}</p>}
           </div>
+        </div>
+        <div className="tracking-bar">
+          {selection.source === "emby" && <>
+            <div className="star-rating" role="radiogroup" aria-label="Deine Bewertung">
+              {[1, 2, 3, 4, 5].map((value) => <button
+                key={value}
+                type="button"
+                className={value <= tracking.rating ? "star-button filled" : "star-button"}
+                aria-pressed={value <= tracking.rating}
+                aria-label={`${value} von 5 Sternen`}
+                onClick={() => saveTracking({ ...tracking, rating: value === tracking.rating ? 0 : value })}
+              >★</button>)}
+            </div>
+            <button
+              type="button"
+              className={favorite ? "icon-toggle-button active" : "icon-toggle-button"}
+              onClick={toggleFavorite}
+              disabled={favoriteBusy}
+              aria-pressed={favorite}
+              aria-label={favorite ? "Aus Favoriten entfernen" : "Zu Favoriten hinzufügen"}
+            ><Icon name="sparkle" /></button>
+          </>}
+          <label className="watchlist-toggle">
+            <span>Merkliste</span>
+            <span className="toggle-switch">
+              <input type="checkbox" checked={tracking.onWatchlist} onChange={() => saveTracking({ ...tracking, onWatchlist: !tracking.onWatchlist })} />
+              <span className="toggle-track"><span className="toggle-thumb" /></span>
+            </span>
+          </label>
         </div>
         {canRequest && <div className="request-row">
           {requestState === "done"
@@ -857,8 +937,26 @@ function mediaStatus(detail: MediaDetail) {
   return null;
 }
 
-function Profile({ user, userProfile, totalRequests }: { user: { name: string }; userProfile: UserProfile | null; totalRequests: number | null }) {
+function useTrackingList(path: string) {
+  const [items, setItems] = useState<MediaTrackingEntry[]>([]);
+  const [state, setState] = useState<LoadState>("loading");
+  useEffect(() => {
+    let active = true;
+    fetch(path, { credentials: "include" })
+      .then(async (response) => { if (!response.ok) throw new Error("tracking list unavailable"); const data = await response.json(); if (active) { setItems(data); setState("ready"); } })
+      .catch(() => active && setState("error"));
+    return () => { active = false; };
+  }, [path]);
+  return [items, state] as const;
+}
+
+function Profile({ user, userProfile, totalRequests, onSelectMedia }: { user: { name: string }; userProfile: UserProfile | null; totalRequests: number | null; onSelectMedia: (selection: MediaSelection) => void }) {
   const [signingOut, setSigningOut] = useState(false);
+  const [watchlist, watchlistState] = useTrackingList("/api/tracking/watchlist");
+  const [ratings, ratingsState] = useTrackingList("/api/tracking/ratings");
+  const toSelection = (entry: MediaTrackingEntry): MediaSelection =>
+    entry.mediaSource === "seerr" ? { source: "seerr", id: entry.mediaId, mediaType: entry.mediaType } : { source: "emby", id: entry.mediaId };
+  const withId = (entries: readonly MediaTrackingEntry[]) => entries.map((entry) => ({ ...entry, id: entry.mediaId }));
   const logout = async () => {
     setSigningOut(true);
     try { await fetch("/api/auth/logout", { method: "POST", credentials: "include" }); } catch { /* reload clears the client session either way */ }
@@ -874,6 +972,8 @@ function Profile({ user, userProfile, totalRequests }: { user: { name: string };
         <div><dt>Anfragen insgesamt</dt><dd>{totalRequests !== null ? totalRequests : "—"}</dd></div>
       </dl>
     </section>
+    <PosterRow title="Meine Merkliste" eyebrow="MEINE LISTEN" items={withId(watchlist)} state={watchlistState} emptyLabel="Noch nichts auf der Merkliste." detail={() => "Merkliste"} onSelect={(item) => onSelectMedia(toSelection(item))} />
+    <PosterRow title="Meine Bewertungen" items={withId(ratings)} state={ratingsState} emptyLabel="Noch keine Bewertungen." detail={(item) => "★".repeat(item.rating ?? 0)} onSelect={(item) => onSelectMedia(toSelection(item))} />
     <button className="logout-button" onClick={logout} disabled={signingOut}>{signingOut ? "Abmeldung läuft …" : "Abmelden"}</button>
   </div>;
 }
