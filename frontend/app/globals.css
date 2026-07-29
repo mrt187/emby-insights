@@ -70,6 +70,14 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 }
 .skip-link:focus-visible { transform: translateY(0); outline: 3px solid var(--focus-ring); outline-offset: 3px; }
 
+/* Skip links exist for keyboard navigation; touchscreens have no tab order
+   to skip, and coarse-pointer WebKit has been seen treating a tap-scroll
+   near the top edge as focusing the first focusable element, leaving this
+   pinned in the corner while scrolling. */
+@media (pointer: coarse) {
+  .skip-link { display: none; }
+}
+
 .eyebrow {
   margin: 0 0 9px; font-size: 10px; line-height: 1;
   letter-spacing: 1.8px; color: #8ea79d; font-weight: 700;
@@ -318,6 +326,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   background: radial-gradient(circle, color-mix(in srgb, var(--tone, var(--mint-bright)) 12%, transparent), transparent 68%);
 }
 .metric-card:hover { transform: translateY(-2px); border-color: rgb(185 238 208 / 20%); }
+.metric-card-button { width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; }
 .metric-card strong {
   position: relative; z-index: 1; display: block; line-height: 1;
   font-size: clamp(20px, 2vw, 27px); letter-spacing: -1px; font-variant-numeric: tabular-nums;
@@ -549,6 +558,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   color: #f1f6f3; font-size: 13px;
 }
+.media-grid-entry small { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; }
 
 /* ---------------------------------------------------------- profile page */
 

@@ -8,6 +8,24 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.13] - 2026-07-29
+
+### Added
+
+- Every poster row now has a "view all" arrow by default, opening a
+  scrollable poster grid — previously only "Gesehene Filme"/"Gesehene
+  Serien" had this.
+- The "Filme abgeschlossen" and "Serien abgeschlossen" tiles on the
+  Statistics page are now clickable and open a poster overview of exactly
+  the titles completed in the selected period (new `/api/completed-movies`
+  and `/api/completed-series` endpoints, using the same period boundaries
+  as `/api/stats`).
+
+### Fixed
+
+- The "Zum Inhalt springen" skip link no longer appears pinned in the
+  corner while scrolling on mobile/touch devices.
+
 ## [0.8.12] - 2026-07-29
 
 ### Added

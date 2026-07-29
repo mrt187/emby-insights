@@ -46,7 +46,7 @@ func (client *Client) watchedItems(ctx context.Context, userID, itemType string,
 
 	var candidates []embyWatchedCandidate
 	for _, libraryID := range libraryIDs {
-		found, err := client.watchedItemsInLibrary(ctx, userID, itemType, libraryID)
+		found, err := client.watchedItemsInLibrary(ctx, userID, itemType, libraryID, watchedItemsLimit)
 		if err != nil {
 			return nil, err
 		}
@@ -94,7 +94,7 @@ type embyWatchedCandidate struct {
 	} `json:"ImageTags"`
 }
 
-func (client *Client) watchedItemsInLibrary(ctx context.Context, userID, itemType, libraryID string) ([]embyWatchedCandidate, error) {
+func (client *Client) watchedItemsInLibrary(ctx context.Context, userID, itemType, libraryID string, limit int) ([]embyWatchedCandidate, error) {
 	query := url.Values{
 		"ParentId":         {libraryID},
 		"Filters":          {"IsPlayed"},
@@ -102,7 +102,7 @@ func (client *Client) watchedItemsInLibrary(ctx context.Context, userID, itemTyp
 		"SortBy":           {"DatePlayed"},
 		"SortOrder":        {"Descending"},
 		"Fields":           {"Genres"},
-		"Limit":            {strconv.Itoa(watchedItemsLimit)},
+		"Limit":            {strconv.Itoa(limit)},
 		"Recursive":        {"true"},
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, client.baseURL+"/Users/"+userID+"/Items?"+query.Encode(), nil)

@@ -31,6 +31,7 @@ type App struct {
 	continueWatching     emby.ContinueWatchingReader
 	watched              emby.WatchedReader
 	watchedLibraryIDs    []string
+	completed            emby.CompletedReader
 	requests             seerr.RequestsReader
 	discover             seerr.DiscoverReader
 	embyMediaDetail      emby.MediaDetailReader
@@ -66,6 +67,7 @@ func New(cfg config.Config) (*App, error) {
 		continueWatching:     embyClient,
 		watched:              embyClient,
 		watchedLibraryIDs:    cfg.EmbyWatchedLibraryIDs,
+		completed:            embyClient,
 		requests:             seerrClient,
 		discover:             seerrClient,
 		embyMediaDetail:      embyClient,
@@ -93,6 +95,8 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/continue-watching", app.continueWatchingItems)
 	mux.HandleFunc("GET /api/watched-movies", app.watchedMovies)
 	mux.HandleFunc("GET /api/watched-series", app.watchedSeries)
+	mux.HandleFunc("GET /api/completed-movies", app.completedMovies)
+	mux.HandleFunc("GET /api/completed-series", app.completedSeries)
 	mux.HandleFunc("GET /api/discover/trending", app.discoverHandler(func(ctx context.Context, discover seerr.DiscoverReader) ([]seerr.DiscoverItem, error) {
 		return discover.Trending(ctx)
 	}))
@@ -354,6 +358,42 @@ func (app *App) watchedSeries(writer http.ResponseWriter, request *http.Request)
 	items, err := app.watched.WatchedSeries(request.Context(), identity.UserID, app.watchedLibraryIDs)
 	if err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "watched series are unavailable"})
+		return
+	}
+	respondJSON(writer, http.StatusOK, orEmpty(items))
+}
+
+func (app *App) completedMovies(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	period, ok := parsePeriod(writer, request)
+	if !ok {
+		return
+	}
+	from, to := emby.PeriodBounds(period, time.Now())
+	items, err := app.completed.CompletedMovies(request.Context(), identity.UserID, app.watchedLibraryIDs, from, to)
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "completed movies are unavailable"})
+		return
+	}
+	respondJSON(writer, http.StatusOK, orEmpty(items))
+}
+
+func (app *App) completedSeries(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	period, ok := parsePeriod(writer, request)
+	if !ok {
+		return
+	}
+	from, to := emby.PeriodBounds(period, time.Now())
+	items, err := app.completed.CompletedSeries(request.Context(), identity.UserID, app.watchedLibraryIDs, from, to)
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "completed series are unavailable"})
 		return
 	}
 	respondJSON(writer, http.StatusOK, orEmpty(items))

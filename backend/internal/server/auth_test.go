@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mrt187/EmbyInsights/internal/emby"
 	"github.com/mrt187/EmbyInsights/internal/seerr"
@@ -84,6 +85,27 @@ func (reader *fakeWatchedReader) WatchedMovies(_ context.Context, userID string,
 func (reader *fakeWatchedReader) WatchedSeries(_ context.Context, userID string, libraryIDs []string) ([]emby.WatchedItem, error) {
 	reader.seriesUser = userID
 	reader.seriesLibraryIDs = libraryIDs
+	return reader.series, nil
+}
+
+type fakeCompletedReader struct {
+	movies     []emby.WatchedItem
+	series     []emby.WatchedItem
+	moviesUser string
+	seriesUser string
+	moviesFrom time.Time
+	moviesTo   time.Time
+}
+
+func (reader *fakeCompletedReader) CompletedMovies(_ context.Context, userID string, _ []string, from, to time.Time) ([]emby.WatchedItem, error) {
+	reader.moviesUser = userID
+	reader.moviesFrom = from
+	reader.moviesTo = to
+	return reader.movies, nil
+}
+
+func (reader *fakeCompletedReader) CompletedSeries(_ context.Context, userID string, _ []string, _, _ time.Time) ([]emby.WatchedItem, error) {
+	reader.seriesUser = userID
 	return reader.series, nil
 }
 
@@ -334,6 +356,40 @@ func TestWatchedMoviesAndSeriesUseSessionIdentity(t *testing.T) {
 	app.Handler().ServeHTTP(seriesRecorder, seriesRequest)
 	if seriesRecorder.Code != http.StatusOK || !strings.Contains(seriesRecorder.Body.String(), "Severance") {
 		t.Fatalf("watched-series status = %d, body = %s", seriesRecorder.Code, seriesRecorder.Body.String())
+	}
+	if reader.seriesUser != "user-1" {
+		t.Fatalf("seriesUser = %q", reader.seriesUser)
+	}
+}
+
+func TestCompletedMoviesAndSeriesUsePeriodAndSessionIdentity(t *testing.T) {
+	store := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	reader := &fakeCompletedReader{
+		movies: []emby.WatchedItem{{ID: "1", Title: "Dune"}},
+		series: []emby.WatchedItem{{ID: "2", Title: "Severance"}},
+	}
+	app := &App{sessions: store, completed: reader, watchedLibraryIDs: []string{"3", "5"}}
+
+	moviesRequest := httptest.NewRequest(http.MethodGet, "/api/completed-movies?period=month", nil)
+	moviesRequest.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	moviesRecorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(moviesRecorder, moviesRequest)
+	if moviesRecorder.Code != http.StatusOK || !strings.Contains(moviesRecorder.Body.String(), "Dune") {
+		t.Fatalf("completed-movies status = %d, body = %s", moviesRecorder.Code, moviesRecorder.Body.String())
+	}
+	if reader.moviesUser != "user-1" {
+		t.Fatalf("moviesUser = %q", reader.moviesUser)
+	}
+	if reader.moviesFrom.IsZero() || reader.moviesTo.IsZero() || !reader.moviesFrom.Before(reader.moviesTo) {
+		t.Fatalf("moviesFrom/moviesTo = %v/%v, want a resolved period", reader.moviesFrom, reader.moviesTo)
+	}
+
+	seriesRequest := httptest.NewRequest(http.MethodGet, "/api/completed-series", nil)
+	seriesRequest.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	seriesRecorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(seriesRecorder, seriesRequest)
+	if seriesRecorder.Code != http.StatusOK || !strings.Contains(seriesRecorder.Body.String(), "Severance") {
+		t.Fatalf("completed-series status = %d, body = %s", seriesRecorder.Code, seriesRecorder.Body.String())
 	}
 	if reader.seriesUser != "user-1" {
 		t.Fatalf("seriesUser = %q", reader.seriesUser)

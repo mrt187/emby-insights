@@ -36,7 +36,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.12";
+const APP_VERSION = "0.8.13";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -312,17 +312,22 @@ function HighlightCarousel({ user, upcoming, upcomingState, requests, requestSta
   </div>;
 }
 
-function MetricCard({ icon, tone, value, label, detail, positive, genre = false }: { icon: IconName; tone: Tone; value: string | number; label: string; detail: string; positive?: boolean; genre?: boolean }) {
-  return <article className={`metric-card tone-${tone}${genre ? " genre-card" : ""}`}><span className="metric-icon"><Icon name={icon} /></span><strong>{value}</strong><p>{label}</p><small className={positive ? "up" : undefined}>{detail}</small></article>;
+function MetricCard({ icon, tone, value, label, detail, positive, genre = false, onClick }: { icon: IconName; tone: Tone; value: string | number; label: string; detail: string; positive?: boolean; genre?: boolean; onClick?: () => void }) {
+  const inner = <><span className="metric-icon"><Icon name={icon} /></span><strong>{value}</strong><p>{label}</p><small className={positive ? "up" : undefined}>{detail}</small></>;
+  return onClick
+    ? <button type="button" className={`metric-card metric-card-button tone-${tone}${genre ? " genre-card" : ""}`} onClick={onClick}>{inner}</button>
+    : <article className={`metric-card tone-${tone}${genre ? " genre-card" : ""}`}>{inner}</article>;
 }
 
-function PosterRow<T extends { id: string; title: string; posterUrl?: string }>({ title, eyebrow, items, detail, state, emptyLabel, progress, onSelect, onViewAll }: {
-  title?: string; eyebrow?: string; items: readonly T[]; detail: (item: T) => string; state?: LoadState; emptyLabel?: string; progress?: (item: T) => number; onSelect?: (item: T) => void; onViewAll?: () => void;
+function PosterRow<T extends { id: string; title: string; posterUrl?: string }>({ title, eyebrow, gridTitle, items, detail, state, emptyLabel, progress, onSelect }: {
+  title?: string; eyebrow?: string; gridTitle?: string; items: readonly T[]; detail: (item: T) => string; state?: LoadState; emptyLabel?: string; progress?: (item: T) => number; onSelect?: (item: T) => void;
 }) {
+  const [gridOpen, setGridOpen] = useState(false);
+  const resolvedGridTitle = gridTitle ?? title ?? "Übersicht";
   return <section className="poster-section">
     {(title || eyebrow) && <div className="section-heading">
       <div>{eyebrow && <p className="eyebrow">{eyebrow}</p>}{title && <h2>{title}</h2>}</div>
-      {onViewAll && <button type="button" className="text-button poster-view-all" onClick={onViewAll} aria-label={`Alle ${title ?? "Titel"} anzeigen`}><Icon name="arrow" /></button>}
+      {items.length > 0 && <button type="button" className="text-button poster-view-all" onClick={() => setGridOpen(true)} aria-label={`Alle ${resolvedGridTitle} anzeigen`}><Icon name="arrow" /></button>}
     </div>}
     {state === "loading" && <p className="poster-status" role="status">Wird geladen …</p>}
     {state === "error" && <p className="poster-status">Nicht verfügbar</p>}
@@ -339,6 +344,7 @@ function PosterRow<T extends { id: string; title: string; posterUrl?: string }>(
         ? <button type="button" className="poster-entry poster-entry-button" key={item.id} onClick={() => onSelect(item)}>{inner}</button>
         : <article className="poster-entry" key={item.id}>{inner}</article>;
     })}</div>}
+    {gridOpen && <MediaGridScreen title={resolvedGridTitle} items={items} detail={detail} onSelect={onSelect} onClose={() => setGridOpen(false)} />}
   </section>;
 }
 
@@ -389,7 +395,11 @@ function Stats({ onSelectMedia }: { onSelectMedia: (selection: MediaSelection) =
   const [watchedMoviesState, setWatchedMoviesState] = useState<LoadState>("loading");
   const [watchedSeries, setWatchedSeries] = useState<WatchedItem[]>([]);
   const [watchedSeriesState, setWatchedSeriesState] = useState<LoadState>("loading");
-  const [gridView, setGridView] = useState<{ title: string; items: WatchedItem[] } | null>(null);
+  const [completedMovies, setCompletedMovies] = useState<WatchedItem[]>([]);
+  const [completedMoviesState, setCompletedMoviesState] = useState<LoadState>("loading");
+  const [completedSeries, setCompletedSeries] = useState<WatchedItem[]>([]);
+  const [completedSeriesState, setCompletedSeriesState] = useState<LoadState>("loading");
+  const [completedGridView, setCompletedGridView] = useState<"movies" | "series" | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -423,30 +433,47 @@ function Stats({ onSelectMedia }: { onSelectMedia: (selection: MediaSelection) =
     return () => { active = false; };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    fetch(`/api/completed-movies?period=${apiPeriod[period]}`, { credentials: "include" })
+      .then(async (response) => { if (!response.ok) throw new Error("completed movies unavailable"); const data = await response.json(); if (active) { setCompletedMovies(data); setCompletedMoviesState("ready"); } })
+      .catch(() => active && setCompletedMoviesState("error"));
+    return () => { active = false; };
+  }, [period]);
+
+  useEffect(() => {
+    let active = true;
+    fetch(`/api/completed-series?period=${apiPeriod[period]}`, { credentials: "include" })
+      .then(async (response) => { if (!response.ok) throw new Error("completed series unavailable"); const data = await response.json(); if (active) { setCompletedSeries(data); setCompletedSeriesState("ready"); } })
+      .catch(() => active && setCompletedSeriesState("error"));
+    return () => { active = false; };
+  }, [period]);
+
   return <div className="content page-view">
-    <section className="period-tabs" aria-label="Zeitraum auswählen">{(["Woche", "Monat", "Jahr"] as Period[]).map((item) => <button className={period === item ? "selected" : ""} onClick={() => { setStatistics(null); setState("loading"); setPeriod(item); }} key={item} aria-pressed={period === item}>{item}</button>)}</section>
+    <section className="period-tabs" aria-label="Zeitraum auswählen">{(["Woche", "Monat", "Jahr"] as Period[]).map((item) => <button className={period === item ? "selected" : ""} onClick={() => { setStatistics(null); setState("loading"); setCompletedMoviesState("loading"); setCompletedSeriesState("loading"); setPeriod(item); }} key={item} aria-pressed={period === item}>{item}</button>)}</section>
     <section className="week-grid" aria-label={`Kennzahlen für ${period}`}>
       <MetricCard icon="clock" tone="blue" value={statistics ? formatDuration(statistics.watchSeconds) : "—"} label="Sehzeit" detail={statistics ? comparisonText(statistics) : loadingCopy(state)} />
-      <MetricCard icon="movie" tone="peach" value={statistics ? statistics.completedMovies : "—"} label="Filme abgeschlossen" detail={statistics ? period : loadingCopy(state)} />
-      <MetricCard icon="series" tone="mint" value={statistics ? statistics.completedSeries : "—"} label="Serien abgeschlossen" detail={statistics ? period : loadingCopy(state)} />
+      <MetricCard icon="movie" tone="peach" value={statistics ? statistics.completedMovies : "—"} label="Filme abgeschlossen" detail={statistics ? period : loadingCopy(state)} onClick={statistics && statistics.completedMovies > 0 && completedMoviesState === "ready" ? () => setCompletedGridView("movies") : undefined} />
+      <MetricCard icon="series" tone="mint" value={statistics ? statistics.completedSeries : "—"} label="Serien abgeschlossen" detail={statistics ? period : loadingCopy(state)} onClick={statistics && statistics.completedSeries > 0 && completedSeriesState === "ready" ? () => setCompletedGridView("series") : undefined} />
       <MetricCard icon="genre" tone="lilac" value={statistics?.favouriteGenre || "—"} label="Lieblingsgenre" detail={statistics ? "Nach Sehzeit" : loadingCopy(state)} genre />
     </section>
 
     <PosterRow title="Was ich gerade schaue" eyebrow="WEITERSCHAUEN" items={continueWatching} state={continueWatchingState} emptyLabel="Nichts in Bearbeitung." detail={(item) => `${item.progressPercent} % gesehen`} progress={(item) => item.progressPercent} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
-    <PosterRow title="Gesehene Filme" eyebrow="ALLE" items={watchedMovies} state={watchedMoviesState} emptyLabel="Noch keine Filme abgeschlossen." detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onViewAll={() => setGridView({ title: "Gesehene Filme", items: watchedMovies })} />
-    <PosterRow title="Gesehene Serien" eyebrow="ALLE" items={watchedSeries} state={watchedSeriesState} emptyLabel="Noch keine Serien abgeschlossen." detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onViewAll={() => setGridView({ title: "Gesehene Serien", items: watchedSeries })} />
+    <PosterRow title="Gesehene Filme" eyebrow="ALLE" items={watchedMovies} state={watchedMoviesState} emptyLabel="Noch keine Filme abgeschlossen." detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
+    <PosterRow title="Gesehene Serien" eyebrow="ALLE" items={watchedSeries} state={watchedSeriesState} emptyLabel="Noch keine Serien abgeschlossen." detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
 
     <section className="chart-grid">
       <BarChart title="Meistgesehene Genres" data={topGenres(watchedMovies, watchedSeries)} />
       <BarChart title="Aktivität nach Wochentag" data={weekdayActivity(watchedMovies, watchedSeries)} />
     </section>
 
-    {gridView && <MediaGridScreen title={gridView.title} items={gridView.items} onClose={() => setGridView(null)} onSelectMedia={onSelectMedia} />}
+    {completedGridView === "movies" && <MediaGridScreen title={`Filme abgeschlossen · ${period}`} items={completedMovies} detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setCompletedGridView(null)} />}
+    {completedGridView === "series" && <MediaGridScreen title={`Serien abgeschlossen · ${period}`} items={completedSeries} detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setCompletedGridView(null)} />}
   </div>;
 }
 
-function MediaGridScreen({ title, items, onClose, onSelectMedia }: {
-  title: string; items: readonly WatchedItem[]; onClose: () => void; onSelectMedia: (selection: MediaSelection) => void;
+function MediaGridScreen<T extends { id: string; title: string; posterUrl?: string }>({ title, items, detail, onSelect, onClose }: {
+  title: string; items: readonly T[]; detail?: (item: T) => string; onSelect?: (item: T) => void; onClose: () => void;
 }) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
@@ -460,11 +487,12 @@ function MediaGridScreen({ title, items, onClose, onSelectMedia }: {
       <h1 className="media-grid-title">{title}</h1>
       {items.length === 0
         ? <p className="poster-status">Nichts vorhanden.</p>
-        : <div className="media-grid">{items.map((item) => <button type="button" className="media-grid-entry" key={item.id} onClick={() => onSelectMedia({ source: "emby", id: item.id })}>
+        : <div className="media-grid">{items.map((item) => <button type="button" className="media-grid-entry" key={item.id} onClick={() => onSelect?.(item)}>
           <div className="poster wide" role="img" aria-label={item.title}>
             {item.posterUrl ? <img src={item.posterUrl} alt="" loading="lazy" /> : <span>{item.title}</span>}
           </div>
           <strong>{item.title}</strong>
+          {detail && <small>{detail(item)}</small>}
         </button>)}</div>}
     </div>
   </div>;
@@ -492,7 +520,7 @@ function Requests({ items, state, onSelectMedia }: { items: RequestItem[]; state
 
   return <div className="content page-view">
     <section className="section-heading"><div><p className="eyebrow">SEERR · OFFEN</p><h2>Meine Anfragen</h2></div></section>
-    <PosterRow title="" eyebrow="" items={items} state={state} emptyLabel="Keine offenen Anfragen." detail={(item) => item.status} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />
+    <PosterRow title="" eyebrow="" gridTitle="Meine Anfragen" items={items} state={state} emptyLabel="Keine offenen Anfragen." detail={(item) => item.status} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />
 
     <PosterRow title="Im Trend" eyebrow="SEERR · TMDB" items={trending} state={trendingState} emptyLabel="Nichts im Trend." detail={(item) => item.mediaType === "tv" ? "Serie" : "Film"} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />
     <PosterRow title="Beliebte Filme" eyebrow="SEERR · TMDB" items={popularMovies} state={popularMoviesState} emptyLabel="Keine Daten." detail={() => "Beliebt"} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />
