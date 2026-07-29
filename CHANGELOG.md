@@ -8,6 +8,14 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.6.0] - 2026-07-29
+
+### Added
+
+- The Home "Neu für dich" card now shows real unseen items added to Emby in
+  the last 14 days, via a new `GET /api/new-for-you` endpoint, instead of a
+  fixed placeholder list.
+
 ## [0.5.1] - 2026-07-29
 
 ### Fixed

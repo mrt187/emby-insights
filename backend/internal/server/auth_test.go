@@ -43,6 +43,16 @@ func (reader *fakeUpcomingReader) Upcoming(_ context.Context, libraryIDs []strin
 	return reader.items, nil
 }
 
+type fakeNewForYouReader struct {
+	items  []emby.NewForYouItem
+	userID string
+}
+
+func (reader *fakeNewForYouReader) NewForYou(_ context.Context, userID string) ([]emby.NewForYouItem, error) {
+	reader.userID = userID
+	return reader.items, nil
+}
+
 type fakeRequestsReader struct {
 	items      []seerr.Request
 	embyUserID string
@@ -157,6 +167,26 @@ func TestUpcomingUsesConfiguredLibraryIDs(t *testing.T) {
 		t.Fatalf("libraryIDs = %#v", reader.libraryIDs)
 	}
 	if !strings.Contains(recorder.Body.String(), "Alien: Earth") {
+		t.Fatalf("body = %s", recorder.Body.String())
+	}
+}
+
+func TestNewForYouUsesSessionIdentity(t *testing.T) {
+	store := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	reader := &fakeNewForYouReader{items: []emby.NewForYouItem{{ID: "1", Title: "Sinners"}}}
+	app := &App{sessions: store, newForYou: reader}
+	request := httptest.NewRequest(http.MethodGet, "/api/new-for-you", nil)
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	if reader.userID != "user-1" {
+		t.Fatalf("userID = %q", reader.userID)
+	}
+	if !strings.Contains(recorder.Body.String(), "Sinners") {
 		t.Fatalf("body = %s", recorder.Body.String())
 	}
 }

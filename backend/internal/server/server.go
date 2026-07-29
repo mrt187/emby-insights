@@ -25,6 +25,7 @@ type App struct {
 	avatars              emby.AvatarReader
 	upcoming             emby.UpcomingReader
 	comingSoonLibraryIDs []string
+	newForYou            emby.NewForYouReader
 	requests             seerr.RequestsReader
 	sessions             session.Store
 	cookieSecure         bool
@@ -50,6 +51,7 @@ func New(cfg config.Config) (*App, error) {
 		avatars:              embyClient,
 		upcoming:             embyClient,
 		comingSoonLibraryIDs: cfg.EmbyComingSoonLibraryIDs,
+		newForYou:            embyClient,
 		requests:             seerr.NewClient(cfg.SeerrBaseURL, cfg.SeerrAPIKey),
 		sessions:             session.NewRedisStore(cache),
 		cookieSecure:         cfg.CookieSecure,
@@ -69,6 +71,7 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/stats", app.stats)
 	mux.HandleFunc("GET /api/upcoming", app.upcomingItems)
 	mux.HandleFunc("GET /api/requests", app.myRequests)
+	mux.HandleFunc("GET /api/new-for-you", app.newForYouItems)
 	return mux
 }
 
@@ -167,6 +170,19 @@ func (app *App) myRequests(writer http.ResponseWriter, request *http.Request) {
 	items, err := app.requests.Requests(request.Context(), identity.UserID)
 	if err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "requests are unavailable"})
+		return
+	}
+	respondJSON(writer, http.StatusOK, orEmpty(items))
+}
+
+func (app *App) newForYouItems(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	items, err := app.newForYou.NewForYou(request.Context(), identity.UserID)
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "new items are unavailable"})
 		return
 	}
 	respondJSON(writer, http.StatusOK, orEmpty(items))

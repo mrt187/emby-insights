@@ -9,6 +9,7 @@ type StatisticsPeriod = "week" | "month" | "year";
 type PersonalStats = { watchSeconds: number; previousWatchSeconds: number; completedMovies: number; completedSeries: number; favouriteGenre: string; periodStartsAt: string; periodEndsAt: string };
 type UpcomingItem = { id: string; title: string; posterUrl: string; premiereDate: string };
 type RequestItem = { id: string; title: string; posterUrl: string; status: string };
+type NewForYouItem = { id: string; title: string; posterUrl: string };
 type IconName = "home" | "chart" | "sparkle" | "user" | "bell" | "arrow" | "clock" | "movie" | "series" | "genre";
 type Tone = "blue" | "peach" | "mint" | "lilac";
 type LoadState = "loading" | "ready" | "error";
@@ -18,21 +19,13 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.5.1";
+const APP_VERSION = "0.6.0";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "" : dateFormatter.format(date);
 }
-
-// Still a placeholder: "Neu für dich" is not wired to the Emby "latest
-// unseen items" endpoint yet.
-const newForYou = [
-  ["Sinners", "sinners"], ["The Studio", "studio"], ["Mickey 17", "mickey"], ["The Gorge", "gorge"], ["The Brutalist", "brutalist"],
-  ["Black Mirror", "mirror"], ["Companion", "companion"], ["Anora", "anora"], ["Flow", "flow"], ["The Monkey", "monkey"],
-  ["Wolfs", "wolfs"], ["Conclave", "conclave"], ["Nosferatu", "nosferatu"], ["Civil War", "civil"], ["The Wild Robot", "robot"],
-] as const;
 
 export default function Home() {
   const [page, setPage] = useState<Page>("Heute");
@@ -46,6 +39,8 @@ export default function Home() {
   const [upcomingState, setUpcomingState] = useState<LoadState>("loading");
   const [requestItems, setRequestItems] = useState<RequestItem[]>([]);
   const [requestState, setRequestState] = useState<LoadState>("loading");
+  const [newForYouItems, setNewForYouItems] = useState<NewForYouItem[]>([]);
+  const [newForYouState, setNewForYouState] = useState<LoadState>("loading");
   const noticeRef = useRef<HTMLDivElement>(null);
   const noticeButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -96,6 +91,19 @@ export default function Home() {
   }, [user]);
 
   useEffect(() => {
+    if (!user) return;
+    let active = true;
+    fetch("/api/new-for-you", { credentials: "include" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("new-for-you unavailable");
+        const data = await response.json();
+        if (active) { setNewForYouItems(data); setNewForYouState("ready"); }
+      })
+      .catch(() => active && setNewForYouState("error"));
+    return () => { active = false; };
+  }, [user]);
+
+  useEffect(() => {
     if (!noticeOpen) return;
     const close = (returnFocus: boolean) => { setNoticeOpen(false); if (returnFocus) noticeButtonRef.current?.focus(); };
     const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") close(true); };
@@ -134,7 +142,7 @@ export default function Home() {
           {noticeOpen && <div ref={noticeRef} className="notifications" id="notifications" role="dialog" aria-label="Benachrichtigungen"><strong>Benachrichtigungen</strong><p>Deine Anfrage „Severance“ wird bearbeitet.</p><p>Am Freitag erscheint Alien: Earth.</p></div>}
         </div>
       </header>
-      {page === "Heute" && <Today user={user} onStats={() => selectPage("Statistik")} statistics={weekStats} state={weekState} upcoming={upcomingItems} upcomingState={upcomingState} requests={requestItems} requestState={requestState} />}
+      {page === "Heute" && <Today user={user} onStats={() => selectPage("Statistik")} statistics={weekStats} state={weekState} upcoming={upcomingItems} upcomingState={upcomingState} requests={requestItems} requestState={requestState} newForYou={newForYouItems} newForYouState={newForYouState} />}
       {page === "Statistik" && <Stats />}
       {page === "Anfragen" && <Requests items={requestItems} state={requestState} />}
       {page === "Profil" && <Profile user={user} />}
@@ -165,9 +173,10 @@ function UserAvatar({ name }: { name: string }) {
   return <span className="user-avatar"><span className="avatar-initial">{initial}</span><img src="/api/me/avatar" alt="" width="44" height="44" onError={(event) => event.currentTarget.remove()} /></span>;
 }
 
-function Today({ user, onStats, statistics, state, upcoming, upcomingState, requests, requestState }: {
+function Today({ user, onStats, statistics, state, upcoming, upcomingState, requests, requestState, newForYou, newForYouState }: {
   user: { name: string }; onStats: () => void; statistics: PersonalStats | null; state: LoadState;
   upcoming: UpcomingItem[]; upcomingState: LoadState; requests: RequestItem[]; requestState: LoadState;
+  newForYou: NewForYouItem[]; newForYouState: LoadState;
 }) {
   const detail = state === "error" ? "Noch keine Statistik verfügbar" : statistics ? comparisonText(statistics) : "Wird geladen …";
   return <div className="content today-view">
@@ -175,7 +184,7 @@ function Today({ user, onStats, statistics, state, upcoming, upcomingState, requ
     <UserInsightCard user={user} statistics={statistics} state={state} detail={detail} />
     <PosterRow title="Demnächst" eyebrow="COMING SOON · NÄCHSTE 4 WOCHEN" items={upcoming} state={upcomingState} emptyLabel="Nichts Neues in den nächsten vier Wochen." detail={(item) => formatPremiereDate(item.premiereDate)} />
     <PosterRow title="Meine Anfragen" eyebrow="SEERR · OFFEN" items={requests} state={requestState} emptyLabel="Keine offenen Anfragen." detail={(item) => item.status} />
-    <PosterRow title="Neu für dich" eyebrow="IN DEN LETZTEN 14 TAGEN" items={newForYou.map(([title, art]) => ({ id: art, title, art }))} detail={() => "Ungesehen"} />
+    <PosterRow title="Neu für dich" eyebrow="IN DEN LETZTEN 14 TAGEN" items={newForYou} state={newForYouState} emptyLabel="Nichts Neues in den letzten 14 Tagen." detail={() => "Ungesehen"} />
   </div>;
 }
 
