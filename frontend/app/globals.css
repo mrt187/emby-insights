@@ -225,15 +225,6 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   border: 1px solid rgb(255 255 255 / 7%); border-radius: 22px; background: #24262d;
   box-shadow: 0 24px 52px rgb(0 0 0 / 22%), inset 0 1px 0 rgb(255 255 255 / 5%);
 }
-.profile-avatar {
-  position: relative; width: 84px; height: 84px; overflow: hidden;
-  border: 3px solid #4cd79a; border-radius: 50%;
-  background: linear-gradient(145deg, #b8f0d0, #478c69);
-  box-shadow: 0 0 0 7px rgb(76 215 154 / 10%), 0 14px 24px rgb(0 0 0 / 25%);
-}
-.profile-avatar .user-avatar { position: absolute; }
-.profile-avatar .user-avatar img { width: 100%; height: 100%; }
-
 /* ---------------------------------------------------- weekly value slider
 
    One panel that rotates through three different tiles: profile/member
@@ -267,10 +258,6 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   font-weight: 800; letter-spacing: -2px; line-height: 1; font-variant-numeric: tabular-nums;
 }
 .weekly-stat small { color: #74dca1; font-size: 11px; font-weight: 700; line-height: 1.35; text-align: center; }
-
-.weekly-slide-profile { display: flex; align-items: center; gap: 18px; text-align: left; }
-.weekly-slide-profile-info { display: grid; gap: 5px; min-width: 0; text-align: left; }
-.weekly-slide-profile-info small { text-align: left; }
 
 .weekly-slide-poster {
   position: relative; overflow: hidden; padding: 0; display: flex; align-items: flex-end;
@@ -573,6 +560,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 
 .media-grid-overlay { z-index: 90; }
 .media-grid-title { margin: 0 0 20px; font-size: 25px; font-weight: 800; letter-spacing: -1px; }
+.media-grid-search { margin-bottom: 24px; }
 .media-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 18px 16px;
 }
@@ -697,7 +685,6 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   .poster-entry { flex-basis: 143px; }
   .poster.wide { height: 206px; border-radius: 16px; }
 
-  .profile-avatar { width: 68px; height: 68px; }
   .weekly-stat { min-height: 124px; padding: 17px 18px; }
   .weekly-slide-poster { padding: 0; }
   .weekly-slide-poster-overlay { padding: 15px 18px; }

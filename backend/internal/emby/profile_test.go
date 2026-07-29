@@ -18,7 +18,8 @@ func TestUserProfileReadsMemberSinceAndLastActiveDate(t *testing.T) {
 		writer.Header().Set("Content-Type", "application/json")
 		_, _ = writer.Write([]byte(`{
 			"DateCreated":"2026-01-14T08:00:48.6590903Z",
-			"LastActivityDate":"2026-07-29T13:59:59.4594171Z"
+			"LastActivityDate":"2026-07-29T13:59:59.4594171Z",
+			"LastLoginDate":"2026-07-29T10:18:45.2115017Z"
 		}`))
 	}))
 	defer testServer.Close()
@@ -32,5 +33,8 @@ func TestUserProfileReadsMemberSinceAndLastActiveDate(t *testing.T) {
 	}
 	if profile.LastActiveDate != "2026-07-29T13:59:59.4594171Z" {
 		t.Fatalf("LastActiveDate = %q", profile.LastActiveDate)
+	}
+	if profile.LastLoginDate != "2026-07-29T10:18:45.2115017Z" {
+		t.Fatalf("LastLoginDate = %q", profile.LastLoginDate)
 	}
 }

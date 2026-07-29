@@ -8,6 +8,33 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.18] - 2026-07-29
+
+### Added
+
+- Statistics now shows a "Nach Gerät" chart (which device — TV, phone,
+  browser, ...) using watch time already collected by Playback Reporting
+  but never surfaced before. Requires the updated Emby Insights connector
+  plugin (v0.2.4.0).
+- The Profil page now shows account facts (Mitglied seit, Zuletzt aktiv,
+  Letzter Login, Anfragen insgesamt) — moved here from the Home carousel.
+
+### Changed
+
+- Search on the Anfragen tab now opens results in their own full-screen
+  poster overview instead of an inline row, with its own search field to
+  refine without leaving the screen.
+- The Home carousel dropped its personal-info tile entirely (now on the
+  Profil page); it's back to two tiles: next release and open
+  requests/new-for-you.
+
+### Fixed
+
+- Requesting a title found via search silently failed and the layout broke
+  on mobile after clearing the search field — both are resolved by moving
+  search results into the same full-screen overlay pattern already used
+  elsewhere in the app (proven to handle both correctly).
+
 ## [0.8.17] - 2026-07-29
 
 ### Changed

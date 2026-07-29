@@ -1,13 +1,14 @@
 "use client";
 
-import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { LoginScreen } from "./login-screen";
 
 type Page = "Heute" | "Statistik" | "Anfragen" | "Profil";
 type Period = "Woche" | "Monat" | "Jahr";
 type StatisticsPeriod = "week" | "month" | "year";
 type PersonalStats = { watchSeconds: number; previousWatchSeconds: number; completedMovies: number; completedSeries: number; favouriteGenre: string; periodStartsAt: string; periodEndsAt: string };
-type UserProfile = { memberSince: string; lastActiveDate: string };
+type DeviceWatchTime = { deviceName: string; watchSeconds: number };
+type UserProfile = { memberSince: string; lastActiveDate: string; lastLoginDate: string };
 type UpcomingItem = { id: string; title: string; posterUrl: string; premiereDate: string };
 type RequestItem = { id: string; title: string; posterUrl: string; status: string; tmdbId: string; mediaType: string };
 type NewForYouItem = { id: string; title: string; posterUrl: string };
@@ -38,7 +39,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.17";
+const APP_VERSION = "0.8.18";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -188,10 +189,10 @@ export default function Home() {
           {noticeOpen && <div ref={noticeRef} className="notifications" id="notifications" role="dialog" aria-label="Benachrichtigungen"><strong>Benachrichtigungen</strong><p>Deine Anfrage „Severance“ wird bearbeitet.</p><p>Am Freitag erscheint Alien: Earth.</p></div>}
         </div>
       </header>
-      {page === "Heute" && <Today user={user} onStats={() => selectPage("Statistik")} upcoming={upcomingItems} upcomingState={upcomingState} requests={requestItems} requestState={requestState} newForYou={newForYouItems} newForYouState={newForYouState} userProfile={userProfile} totalRequests={totalRequests} onSelectMedia={setSelectedMedia} />}
+      {page === "Heute" && <Today user={user} onStats={() => selectPage("Statistik")} upcoming={upcomingItems} upcomingState={upcomingState} requests={requestItems} requestState={requestState} newForYou={newForYouItems} newForYouState={newForYouState} onSelectMedia={setSelectedMedia} />}
       {page === "Statistik" && <Stats onSelectMedia={setSelectedMedia} />}
       {page === "Anfragen" && <Requests items={requestItems} state={requestState} onSelectMedia={setSelectedMedia} />}
-      {page === "Profil" && <Profile user={user} />}
+      {page === "Profil" && <Profile user={user} userProfile={userProfile} totalRequests={totalRequests} />}
     </section>
 
     <nav className="bottom-nav" aria-label="Hauptnavigation (mobil)">{nav.map((item) => <button key={item.label} className={page === item.label ? "active" : ""} onClick={() => selectPage(item.label)} aria-current={page === item.label ? "page" : undefined}><Icon name={item.icon} /><span className="sr-only">{item.label}</span></button>)}</nav>
@@ -220,56 +221,40 @@ function UserAvatar({ name }: { name: string }) {
   return <span className="user-avatar"><span className="avatar-initial">{initial}</span><img src="/api/me/avatar" alt="" width="44" height="44" onError={(event) => event.currentTarget.remove()} /></span>;
 }
 
-function Today({ user, onStats, upcoming, upcomingState, requests, requestState, newForYou, newForYouState, userProfile, totalRequests, onSelectMedia }: {
+function Today({ user, onStats, upcoming, upcomingState, requests, requestState, newForYou, newForYouState, onSelectMedia }: {
   user: { name: string }; onStats: () => void;
   upcoming: UpcomingItem[]; upcomingState: LoadState; requests: RequestItem[]; requestState: LoadState;
   newForYou: NewForYouItem[]; newForYouState: LoadState;
-  userProfile: UserProfile | null; totalRequests: number | null;
   onSelectMedia: (selection: MediaSelection) => void;
 }) {
   return <div className="content today-view">
     <section className="section-heading rhythm-heading"><div><p className="eyebrow">DEIN PROFIL</p><h2>Dein Rhythmus</h2></div><button className="text-button" onClick={onStats}>Alle Details <Icon name="arrow" /></button></section>
-    <UserInsightCard user={user} upcoming={upcoming} upcomingState={upcomingState} requests={requests} requestState={requestState} newForYou={newForYou} newForYouState={newForYouState} userProfile={userProfile} totalRequests={totalRequests} />
+    <UserInsightCard user={user} upcoming={upcoming} upcomingState={upcomingState} requests={requests} requestState={requestState} newForYou={newForYou} newForYouState={newForYouState} />
     <PosterRow title="Demnächst" eyebrow="COMING SOON · NÄCHSTE 4 WOCHEN" items={upcoming} state={upcomingState} emptyLabel="Nichts Neues in den nächsten vier Wochen." detail={(item) => formatPremiereDate(item.premiereDate)} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
     <PosterRow title="Meine Anfragen" eyebrow="SEERR · OFFEN" items={requests} state={requestState} emptyLabel="Keine offenen Anfragen." detail={(item) => item.status} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />
     <PosterRow title="Neu für dich" eyebrow="IN DEN LETZTEN 14 TAGEN" items={newForYou} state={newForYouState} emptyLabel="Nichts Neues in den letzten 14 Tagen." detail={() => "Ungesehen"} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
   </div>;
 }
 
-function UserInsightCard({ user, upcoming, upcomingState, requests, requestState, newForYou, newForYouState, userProfile, totalRequests }: {
+function UserInsightCard({ user, upcoming, upcomingState, requests, requestState, newForYou, newForYouState }: {
   user: { name: string };
   upcoming: UpcomingItem[]; upcomingState: LoadState; requests: RequestItem[]; requestState: LoadState;
   newForYou: NewForYouItem[]; newForYouState: LoadState;
-  userProfile: UserProfile | null; totalRequests: number | null;
 }) {
   return <section className="user-insight-card" aria-label={`Kurzüberblick von ${user.name}`}>
-    <HighlightCarousel user={user} upcoming={upcoming} upcomingState={upcomingState} requests={requests} requestState={requestState} newForYou={newForYou} newForYouState={newForYouState} userProfile={userProfile} totalRequests={totalRequests} />
+    <HighlightCarousel upcoming={upcoming} upcomingState={upcomingState} requests={requests} requestState={requestState} newForYou={newForYou} newForYouState={newForYouState} />
   </section>;
 }
 
 const SLIDE_INTERVAL = 5000;
 
-function HighlightCarousel({ user, upcoming, upcomingState, requests, requestState, newForYou, newForYouState, userProfile, totalRequests }: {
-  user: { name: string };
+function HighlightCarousel({ upcoming, upcomingState, requests, requestState, newForYou, newForYouState }: {
   upcoming: UpcomingItem[]; upcomingState: LoadState; requests: RequestItem[]; requestState: LoadState;
   newForYou: NewForYouItem[]; newForYouState: LoadState;
-  userProfile: UserProfile | null; totalRequests: number | null;
 }) {
   const nextRelease = upcoming[0];
 
   const slides: { key: string; label: string; content: ReactNode }[] = [
-    {
-      key: "profile",
-      label: "Mitglied seit",
-      content: <div className="weekly-stat tone-lilac weekly-slide-profile">
-        <div className="profile-avatar"><UserAvatar name={user.name} /></div>
-        <div className="weekly-slide-profile-info">
-          <span className="weekly-label">Mitglied seit</span>
-          <strong>{userProfile ? formatFullDate(userProfile.memberSince) : "—"}</strong>
-          <small>{userProfile && totalRequests !== null ? `Zuletzt aktiv ${formatFullDate(userProfile.lastActiveDate)} · ${totalRequests} Anfragen gesamt` : "Wird geladen …"}</small>
-        </div>
-      </div>,
-    },
     {
       key: "upcoming",
       label: "Nächste Veröffentlichung",
@@ -418,7 +403,7 @@ function weekdayActivity(movies: readonly WatchedItem[], series: readonly Watche
   return WEEKDAYS.map((label, index) => ({ label, value: counts[index] }));
 }
 
-function BarChart({ title, data }: { title: string; data: { label: string; value: number }[] }) {
+function BarChart({ title, data, formatValue }: { title: string; data: { label: string; value: number }[]; formatValue?: (value: number) => string }) {
   const max = Math.max(1, ...data.map((entry) => entry.value));
   const hasData = data.some((entry) => entry.value > 0);
   return <section className="chart-card">
@@ -428,7 +413,7 @@ function BarChart({ title, data }: { title: string; data: { label: string; value
         {data.map((entry) => <div className="bar-row" key={entry.label}>
           <span className="bar-label">{entry.label}</span>
           <div className="bar-track"><div className="bar-fill" style={{ width: `${(entry.value / max) * 100}%` }} /></div>
-          <span className="bar-value">{entry.value}</span>
+          <span className="bar-value">{formatValue ? formatValue(entry.value) : entry.value}</span>
         </div>)}
       </div>
       : <p className="poster-status">Noch keine Daten für diesen Zeitraum.</p>}
@@ -450,6 +435,8 @@ function Stats({ onSelectMedia }: { onSelectMedia: (selection: MediaSelection) =
   const [completedSeries, setCompletedSeries] = useState<WatchedItem[]>([]);
   const [completedSeriesState, setCompletedSeriesState] = useState<LoadState>("loading");
   const [completedGridView, setCompletedGridView] = useState<"movies" | "series" | null>(null);
+  const [deviceStats, setDeviceStats] = useState<DeviceWatchTime[]>([]);
+  const [deviceStatsState, setDeviceStatsState] = useState<LoadState>("loading");
 
   useEffect(() => {
     let active = true;
@@ -499,8 +486,16 @@ function Stats({ onSelectMedia }: { onSelectMedia: (selection: MediaSelection) =
     return () => { active = false; };
   }, [period]);
 
+  useEffect(() => {
+    let active = true;
+    fetch(`/api/stats/devices?period=${apiPeriod[period]}`, { credentials: "include" })
+      .then(async (response) => { if (!response.ok) throw new Error("device statistics unavailable"); const data = await response.json(); if (active) { setDeviceStats(data); setDeviceStatsState("ready"); } })
+      .catch(() => active && setDeviceStatsState("error"));
+    return () => { active = false; };
+  }, [period]);
+
   return <div className="content page-view">
-    <section className="period-tabs" aria-label="Zeitraum auswählen">{(["Woche", "Monat", "Jahr"] as Period[]).map((item) => <button className={period === item ? "selected" : ""} onClick={() => { setStatistics(null); setState("loading"); setCompletedMoviesState("loading"); setCompletedSeriesState("loading"); setPeriod(item); }} key={item} aria-pressed={period === item}>{item}</button>)}</section>
+    <section className="period-tabs" aria-label="Zeitraum auswählen">{(["Woche", "Monat", "Jahr"] as Period[]).map((item) => <button className={period === item ? "selected" : ""} onClick={() => { setStatistics(null); setState("loading"); setCompletedMoviesState("loading"); setCompletedSeriesState("loading"); setDeviceStatsState("loading"); setPeriod(item); }} key={item} aria-pressed={period === item}>{item}</button>)}</section>
     <section className="week-grid" aria-label={`Kennzahlen für ${period}`}>
       <MetricCard icon="clock" tone="blue" value={statistics ? formatDuration(statistics.watchSeconds) : "—"} label="Sehzeit" detail={statistics ? comparisonText(statistics) : loadingCopy(state)} />
       <MetricCard icon="movie" tone="peach" value={statistics ? statistics.completedMovies : "—"} label="Filme abgeschlossen" detail={statistics ? period : loadingCopy(state)} onClick={statistics && statistics.completedMovies > 0 && completedMoviesState === "ready" ? () => setCompletedGridView("movies") : undefined} />
@@ -515,6 +510,7 @@ function Stats({ onSelectMedia }: { onSelectMedia: (selection: MediaSelection) =
     <section className="chart-grid">
       <BarChart title="Meistgesehene Genres" data={topGenres(watchedMovies, watchedSeries)} />
       <BarChart title="Aktivität nach Wochentag" data={weekdayActivity(watchedMovies, watchedSeries)} />
+      <BarChart title="Nach Gerät" data={deviceStatsState === "ready" ? deviceStats.slice(0, 6).map((device) => ({ label: device.deviceName, value: device.watchSeconds })) : []} formatValue={formatDuration} />
     </section>
 
     {completedGridView === "movies" && <MediaGridScreen title={`Filme abgeschlossen · ${period}`} items={completedMovies} detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setCompletedGridView(null)} />}
@@ -522,8 +518,10 @@ function Stats({ onSelectMedia }: { onSelectMedia: (selection: MediaSelection) =
   </div>;
 }
 
-function MediaGridScreen<T extends { id: string; title: string; posterUrl?: string }>({ title, items, detail, progress, onSelect, onClose }: {
-  title: string; items: readonly T[]; detail?: (item: T) => string; progress?: (item: T) => number; onSelect?: (item: T) => void; onClose: () => void;
+function MediaGridScreen<T extends { id: string; title: string; posterUrl?: string }>({ title, items, detail, progress, state, emptyLabel, headerExtra, onSelect, onClose }: {
+  title: string; items: readonly T[]; detail?: (item: T) => string; progress?: (item: T) => number;
+  state?: LoadState; emptyLabel?: string; headerExtra?: ReactNode;
+  onSelect?: (item: T) => void; onClose: () => void;
 }) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
@@ -535,16 +533,18 @@ function MediaGridScreen<T extends { id: string; title: string; posterUrl?: stri
     <div className="media-detail-scroll">
       <button type="button" className="media-detail-close" onClick={onClose} aria-label="Schließen"><Icon name="close" /></button>
       <h1 className="media-grid-title">{title}</h1>
-      {items.length === 0
-        ? <p className="poster-status">Nichts vorhanden.</p>
-        : <div className="media-grid">{items.map((item) => <button type="button" className="media-grid-entry" key={item.id} onClick={() => onSelect?.(item)}>
-          <div className="poster wide" role="img" aria-label={item.title}>
-            {item.posterUrl ? <img src={item.posterUrl} alt="" loading="lazy" /> : <span>{item.title}</span>}
-            {progress && <div className="poster-progress"><div className="poster-progress-fill" style={{ width: `${progress(item)}%` }} /></div>}
-          </div>
-          <strong>{item.title}</strong>
-          {detail && <small>{detail(item)}</small>}
-        </button>)}</div>}
+      {headerExtra}
+      {state === "loading" && <p className="poster-status" role="status">Wird geladen …</p>}
+      {state === "error" && <p className="poster-status">Nicht verfügbar</p>}
+      {state !== "loading" && state !== "error" && items.length === 0 && <p className="poster-status">{emptyLabel ?? "Nichts vorhanden."}</p>}
+      {items.length > 0 && <div className="media-grid">{items.map((item) => <button type="button" className="media-grid-entry" key={item.id} onClick={() => onSelect?.(item)}>
+        <div className="poster wide" role="img" aria-label={item.title}>
+          {item.posterUrl ? <img src={item.posterUrl} alt="" loading="lazy" /> : <span>{item.title}</span>}
+          {progress && <div className="poster-progress"><div className="poster-progress-fill" style={{ width: `${progress(item)}%` }} /></div>}
+        </div>
+        <strong>{item.title}</strong>
+        {detail && <small>{detail(item)}</small>}
+      </button>)}</div>}
     </div>
   </div>;
 }
@@ -571,12 +571,13 @@ function Requests({ items, state, onSelectMedia }: { items: RequestItem[]; state
 
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<DiscoverItem[]>([]);
-  const [searchState, setSearchState] = useState<"idle" | LoadState>("idle");
+  const [searchState, setSearchState] = useState<LoadState>("loading");
+  const [searchScreenQuery, setSearchScreenQuery] = useState<string | null>(null);
 
-  const runSearch = (event: FormEvent) => {
-    event.preventDefault();
-    const trimmed = query.trim();
+  const runSearch = (searchQuery: string) => {
+    const trimmed = searchQuery.trim();
     if (!trimmed) return;
+    setSearchScreenQuery(trimmed);
     setSearchState("loading");
     fetch(`/api/discover/search?query=${encodeURIComponent(trimmed)}`, { credentials: "include" })
       .then(async (response) => {
@@ -589,22 +590,30 @@ function Requests({ items, state, onSelectMedia }: { items: RequestItem[]; state
   };
 
   return <div className="content page-view">
-    <form className="search-form" onSubmit={runSearch}>
+    <form className="search-form" onSubmit={(event) => { event.preventDefault(); runSearch(query); }}>
       <input
         type="search"
         className="search-input"
         placeholder="Filme oder Serien suchen …"
         value={query}
-        onChange={(event) => {
-          const value = event.target.value;
-          setQuery(value);
-          if (value.trim() === "") setSearchState("idle");
-        }}
+        onChange={(event) => setQuery(event.target.value)}
         aria-label="Bei Seerr suchen"
       />
-      <button type="submit" className="search-button" disabled={searchState === "loading" || query.trim() === ""}>{searchState === "loading" ? "Wird gesucht …" : "Suchen"}</button>
+      <button type="submit" className="search-button" disabled={query.trim() === ""}>Suchen</button>
     </form>
-    {searchState !== "idle" && <PosterRow title="Suchergebnisse" eyebrow="SEERR · TMDB" items={searchResults} state={searchState} emptyLabel="Keine Treffer." detail={(item) => item.mediaType === "tv" ? "Serie" : "Film"} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />}
+    {searchScreenQuery !== null && <MediaGridScreen
+      title={`Suchergebnisse für „${searchScreenQuery}“`}
+      items={searchResults}
+      state={searchState}
+      emptyLabel="Keine Treffer."
+      detail={(item) => item.mediaType === "tv" ? "Serie" : "Film"}
+      onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })}
+      onClose={() => setSearchScreenQuery(null)}
+      headerExtra={<form className="search-form media-grid-search" onSubmit={(event) => { event.preventDefault(); runSearch(query); }}>
+        <input type="search" className="search-input" placeholder="Filme oder Serien suchen …" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Bei Seerr suchen" />
+        <button type="submit" className="search-button" disabled={query.trim() === ""}>Suchen</button>
+      </form>}
+    />}
 
     <section className="section-heading"><div><p className="eyebrow">SEERR · OFFEN</p><h2>Bereits angefragt</h2></div></section>
     <PosterRow title="" eyebrow="" gridTitle="Bereits angefragt" items={items} state={state} emptyLabel="Keine offenen Anfragen." detail={(item) => item.status} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />
@@ -781,7 +790,7 @@ function mediaStatus(detail: MediaDetail) {
   return null;
 }
 
-function Profile({ user }: { user: { name: string } }) {
+function Profile({ user, userProfile, totalRequests }: { user: { name: string }; userProfile: UserProfile | null; totalRequests: number | null }) {
   const [signingOut, setSigningOut] = useState(false);
   const logout = async () => {
     setSigningOut(true);
@@ -790,6 +799,14 @@ function Profile({ user }: { user: { name: string } }) {
   };
   return <div className="content page-view profile">
     <section className="profile-head"><div className="avatar big"><UserAvatar name={user.name} /></div><div><p className="eyebrow">EMBY-PROFIL</p><h2>{user.name}</h2></div></section>
+    <section className="media-detail-facts profile-facts">
+      <dl>
+        <div><dt>Mitglied seit</dt><dd>{userProfile ? formatFullDate(userProfile.memberSince) : "—"}</dd></div>
+        <div><dt>Zuletzt aktiv</dt><dd>{userProfile ? formatFullDate(userProfile.lastActiveDate) : "—"}</dd></div>
+        <div><dt>Letzter Login</dt><dd>{userProfile ? formatFullDate(userProfile.lastLoginDate) : "—"}</dd></div>
+        <div><dt>Anfragen insgesamt</dt><dd>{totalRequests !== null ? totalRequests : "—"}</dd></div>
+      </dl>
+    </section>
     <button className="logout-button" onClick={logout} disabled={signingOut}>{signingOut ? "Abmeldung läuft …" : "Abmelden"}</button>
   </div>;
 }

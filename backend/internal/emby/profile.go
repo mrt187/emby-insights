@@ -10,6 +10,7 @@ import (
 type UserProfile struct {
 	MemberSince    string `json:"memberSince"`
 	LastActiveDate string `json:"lastActiveDate"`
+	LastLoginDate  string `json:"lastLoginDate"`
 }
 
 type ProfileReader interface {
@@ -37,9 +38,10 @@ func (client *Client) UserProfile(ctx context.Context, userID string) (UserProfi
 	var result struct {
 		DateCreated      string `json:"DateCreated"`
 		LastActivityDate string `json:"LastActivityDate"`
+		LastLoginDate    string `json:"LastLoginDate"`
 	}
 	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
 		return UserProfile{}, fmt.Errorf("decode Emby user profile: %w", err)
 	}
-	return UserProfile{MemberSince: result.DateCreated, LastActiveDate: result.LastActivityDate}, nil
+	return UserProfile{MemberSince: result.DateCreated, LastActiveDate: result.LastActivityDate, LastLoginDate: result.LastLoginDate}, nil
 }

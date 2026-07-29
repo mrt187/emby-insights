@@ -49,6 +49,18 @@ func (reader *fakeRequestStatsReader) RequestStats(_ context.Context, userID str
 	return reader.stats, nil
 }
 
+type fakeDeviceStatisticsReader struct {
+	devices []emby.DeviceWatchTime
+	userID  string
+	period  string
+}
+
+func (reader *fakeDeviceStatisticsReader) DeviceWatchTimes(_ context.Context, userID, period string) ([]emby.DeviceWatchTime, error) {
+	reader.userID = userID
+	reader.period = period
+	return reader.devices, nil
+}
+
 func (reader *fakeStatisticsReader) PersonalWatchTime(_ context.Context, userID, period string) (emby.PersonalWatchTime, error) {
 	reader.userID = userID
 	reader.period = period
@@ -280,6 +292,24 @@ func TestStatsUsesSessionIdentity(t *testing.T) {
 	}
 	if strings.Contains(recorder.Body.String(), "secret-token") {
 		t.Fatal("statistics response exposed Emby access token")
+	}
+}
+
+func TestDeviceStatsUsesSessionIdentity(t *testing.T) {
+	store := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	reader := &fakeDeviceStatisticsReader{devices: []emby.DeviceWatchTime{{DeviceName: "FireTV 4K", WatchSeconds: 3600}}}
+	app := &App{sessions: store, deviceStatistics: reader}
+
+	request := httptest.NewRequest(http.MethodGet, "/api/stats/devices?period=year", nil)
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "FireTV 4K") {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	if reader.userID != "user-1" || reader.period != "year" {
+		t.Fatalf("userID = %q, period = %q", reader.userID, reader.period)
 	}
 }
 

@@ -23,6 +23,7 @@ type App struct {
 	redis                *redis.Client
 	authenticator        emby.Authenticator
 	statistics           emby.PersonalStatisticsReader
+	deviceStatistics     emby.DeviceStatisticsReader
 	avatars              emby.AvatarReader
 	upcoming             emby.UpcomingReader
 	comingSoonLibraryIDs []string
@@ -61,6 +62,7 @@ func New(cfg config.Config) (*App, error) {
 		redis:                cache,
 		authenticator:        embyClient,
 		statistics:           embyClient,
+		deviceStatistics:     embyClient,
 		avatars:              embyClient,
 		upcoming:             embyClient,
 		comingSoonLibraryIDs: cfg.EmbyComingSoonLibraryIDs,
@@ -94,6 +96,7 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/me/avatar", app.avatar)
 	mux.HandleFunc("GET /api/me/profile", app.meProfile)
 	mux.HandleFunc("GET /api/stats", app.stats)
+	mux.HandleFunc("GET /api/stats/devices", app.deviceStats)
 	mux.HandleFunc("GET /api/upcoming", app.upcomingItems)
 	mux.HandleFunc("GET /api/requests", app.myRequests)
 	mux.HandleFunc("GET /api/requests/total", app.requestsTotal)
@@ -207,6 +210,23 @@ func (app *App) stats(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	respondJSON(writer, http.StatusOK, statistics)
+}
+
+func (app *App) deviceStats(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	period, ok := parsePeriod(writer, request)
+	if !ok {
+		return
+	}
+	devices, err := app.deviceStatistics.DeviceWatchTimes(request.Context(), identity.UserID, period)
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "device statistics are unavailable"})
+		return
+	}
+	respondJSON(writer, http.StatusOK, orEmpty(devices))
 }
 
 func parsePeriod(writer http.ResponseWriter, request *http.Request) (string, bool) {

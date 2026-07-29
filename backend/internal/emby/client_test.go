@@ -70,3 +70,28 @@ func TestPersonalWatchTimeUsesAdminAPIKey(t *testing.T) {
 		t.Fatalf("statistics = %#v", statistics)
 	}
 }
+
+func TestDeviceWatchTimesUsesAdminAPIKey(t *testing.T) {
+	testServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/emby/EmbyInsights/PersonalStats/Devices" {
+			t.Fatalf("path = %q", request.URL.Path)
+		}
+		if request.Header.Get("X-Emby-Token") != "admin-key" {
+			t.Fatalf("api key header = %q", request.Header.Get("X-Emby-Token"))
+		}
+		if request.URL.Query().Get("UserId") != "user-1" || request.URL.Query().Get("Period") != "month" {
+			t.Fatalf("query = %s", request.URL.RawQuery)
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`[{"deviceName":"FireTV 4K","watchSeconds":3600},{"deviceName":"iPhone","watchSeconds":1200}]`))
+	}))
+	defer testServer.Close()
+
+	devices, err := NewClient(testServer.URL+"/emby", "dashboard-device", "admin-key").DeviceWatchTimes(context.Background(), "user-1", "month")
+	if err != nil {
+		t.Fatalf("DeviceWatchTimes() error = %v", err)
+	}
+	if len(devices) != 2 || devices[0].DeviceName != "FireTV 4K" || devices[0].WatchSeconds != 3600 {
+		t.Fatalf("devices = %#v", devices)
+	}
+}
