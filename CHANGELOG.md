@@ -8,6 +8,16 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.10] - 2026-07-29
+
+### Changed
+
+- Redesigned the request flow to match the app's visual language: "Anfragen"
+  now sits top-right above the description, and clicking it opens a
+  centered, scrollable popup instead of an inline reveal. Movies show
+  "Jetzt anfragen" / "Abbrechen"; series additionally list their seasons
+  as a scrollable toggle-switch list styled to match the rest of the app.
+
 ## [0.8.9] - 2026-07-29
 
 ### Changed

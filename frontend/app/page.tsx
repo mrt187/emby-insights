@@ -35,7 +35,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.9";
+const APP_VERSION = "0.8.10";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -487,7 +487,8 @@ function MediaDetailScreen({ selection, onClose }: { selection: MediaSelection; 
   const [detail, setDetail] = useState<MediaDetail | null>(null);
   const [state, setState] = useState<LoadState>("loading");
   const [selectedSeasons, setSelectedSeasons] = useState<number[]>([]);
-  const [requestState, setRequestState] = useState<"idle" | "selecting" | "submitting" | "done" | "error">("idle");
+  const [requestState, setRequestState] = useState<"idle" | "submitting" | "done" | "error">("idle");
+  const [requestModalOpen, setRequestModalOpen] = useState(false);
   const mediaType = selection.source === "seerr" ? selection.mediaType : undefined;
 
   useEffect(() => {
@@ -509,10 +510,14 @@ function MediaDetailScreen({ selection, onClose }: { selection: MediaSelection; 
   }, [selection.source, selection.id, mediaType]);
 
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (requestModalOpen) { setRequestModalOpen(false); return; }
+      onClose();
+    };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  }, [onClose, requestModalOpen]);
 
   const status = detail ? mediaStatus(detail) : null;
   const crewAndCast = detail ? [...(detail.crew ?? []), ...(detail.cast ?? [])] : [];
@@ -522,11 +527,6 @@ function MediaDetailScreen({ selection, onClose }: { selection: MediaSelection; 
 
   const toggleSeason = (seasonNumber: number) => {
     setSelectedSeasons((current) => current.includes(seasonNumber) ? current.filter((value) => value !== seasonNumber) : [...current, seasonNumber]);
-  };
-
-  const handleRequestClick = () => {
-    if (requestableSeasons.length > 0) { setRequestState("selecting"); return; }
-    submitRequest();
   };
 
   const submitRequest = async () => {
@@ -541,6 +541,7 @@ function MediaDetailScreen({ selection, onClose }: { selection: MediaSelection; 
       });
       if (!response.ok) throw new Error("request failed");
       setRequestState("done");
+      setRequestModalOpen(false);
     } catch {
       setRequestState("error");
     }
@@ -566,41 +567,12 @@ function MediaDetailScreen({ selection, onClose }: { selection: MediaSelection; 
             {detail.communityRating > 0 && <p className="media-detail-rating">★ {detail.communityRating.toFixed(1)}</p>}
           </div>
         </div>
-        {detail.overview && <section className="media-detail-overview"><h2>Übersicht</h2><p>{detail.overview}</p></section>}
-        {canRequest && <section className="media-detail-request">
+        {canRequest && <div className="request-row">
           {requestState === "done"
             ? <p className="request-confirmation">Angefragt ✓</p>
-            : <>
-                {(requestableSeasons.length === 0 || requestState === "idle") && <button
-                  type="button"
-                  className="request-button"
-                  aria-expanded={requestableSeasons.length > 0 ? false : undefined}
-                  disabled={requestState === "submitting"}
-                  onClick={handleRequestClick}
-                >
-                  {requestState === "submitting" ? "Wird angefragt …" : "Anfragen"}
-                </button>}
-                {requestableSeasons.length > 0 && <div className={`season-reveal${requestState !== "idle" ? " open" : ""}`}>
-                  <div className="season-reveal-inner">
-                    <div className="season-checklist">
-                      {requestableSeasons.map((season) => <label className="season-checkbox" key={season.seasonNumber}>
-                        <input type="checkbox" checked={selectedSeasons.includes(season.seasonNumber)} onChange={() => toggleSeason(season.seasonNumber)} />
-                        Staffel {season.seasonNumber} <small>({season.episodeCount} Folgen)</small>
-                      </label>)}
-                    </div>
-                    <button
-                      type="button"
-                      className="request-button"
-                      disabled={requestState === "submitting" || selectedSeasons.length === 0}
-                      onClick={submitRequest}
-                    >
-                      {requestState === "submitting" ? "Wird angefragt …" : "Anfrage senden"}
-                    </button>
-                  </div>
-                </div>}
-              </>}
-          {requestState === "error" && <p className="request-error">Anfrage fehlgeschlagen. Bitte erneut versuchen.</p>}
-        </section>}
+            : <button type="button" className="request-button" onClick={() => setRequestModalOpen(true)}>Anfragen</button>}
+        </div>}
+        {detail.overview && <section className="media-detail-overview"><h2>Übersicht</h2><p>{detail.overview}</p></section>}
         {embySeasons.length > 0 && <section className="media-detail-seasons">
           <h2>Staffeln</h2>
           <div className="poster-scroller">{embySeasons.map((season) => {
@@ -626,6 +598,35 @@ function MediaDetailScreen({ selection, onClose }: { selection: MediaSelection; 
         </section>}
       </div>}
     </div>
+    {detail && requestModalOpen && <div className="request-modal-backdrop" role="presentation" onClick={() => requestState !== "submitting" && setRequestModalOpen(false)}>
+      <div className="request-modal" role="dialog" aria-modal="true" aria-label={`${detail.title} anfragen`} onClick={(event) => event.stopPropagation()}>
+        <div className="request-modal-head">
+          <div className="request-modal-poster">{detail.posterUrl && <img src={detail.posterUrl} alt="" />}</div>
+          <div><p className="eyebrow">ANFRAGE</p><h3>{detail.title}</h3></div>
+        </div>
+        {requestableSeasons.length > 0 && <div className="season-list">
+          {requestableSeasons.map((season) => <label className="season-toggle-row" key={season.seasonNumber}>
+            <span>Staffel {season.seasonNumber} <small>({season.episodeCount} Folgen)</small></span>
+            <span className="toggle-switch">
+              <input type="checkbox" checked={selectedSeasons.includes(season.seasonNumber)} onChange={() => toggleSeason(season.seasonNumber)} />
+              <span className="toggle-track"><span className="toggle-thumb" /></span>
+            </span>
+          </label>)}
+        </div>}
+        {requestState === "error" && <p className="request-error">Anfrage fehlgeschlagen. Bitte erneut versuchen.</p>}
+        <div className="request-modal-actions">
+          <button type="button" className="request-button secondary" disabled={requestState === "submitting"} onClick={() => setRequestModalOpen(false)}>Abbrechen</button>
+          <button
+            type="button"
+            className="request-button"
+            disabled={requestState === "submitting" || (requestableSeasons.length > 0 && selectedSeasons.length === 0)}
+            onClick={submitRequest}
+          >
+            {requestState === "submitting" ? "Wird angefragt …" : "Jetzt anfragen"}
+          </button>
+        </div>
+      </div>
+    </div>}
   </div>;
 }
 
