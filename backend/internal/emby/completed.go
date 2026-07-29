@@ -45,11 +45,13 @@ func (client *Client) completedItems(ctx context.Context, userID, itemType strin
 
 	items := make([]WatchedItem, 0, len(candidates))
 	for _, item := range candidates {
-		lastPlayedDate, err := client.itemLastPlayedDate(ctx, userID, item.Id)
+		lastPlayedDate, err := client.lastPlayedDateFor(ctx, userID, itemType, item.Id)
 		if err != nil {
 			return nil, err
 		}
-		played, err := time.Parse(time.RFC3339, lastPlayedDate)
+		// Emby's own LastPlayedDate carries fractional seconds (e.g.
+		// "2026-07-02T07:20:51.0000000Z"), which time.RFC3339 rejects.
+		played, err := time.Parse(time.RFC3339Nano, lastPlayedDate)
 		if err != nil || played.Before(from) || !played.Before(to) {
 			continue
 		}

@@ -59,7 +59,7 @@ func (client *Client) watchedItems(ctx context.Context, userID, itemType string,
 	// re-sorted by that date before capping it.
 	items := make([]WatchedItem, 0, len(candidates))
 	for _, item := range candidates {
-		lastPlayedDate, err := client.itemLastPlayedDate(ctx, userID, item.Id)
+		lastPlayedDate, err := client.lastPlayedDateFor(ctx, userID, itemType, item.Id)
 		if err != nil {
 			return nil, err
 		}
@@ -154,4 +154,53 @@ func (client *Client) itemLastPlayedDate(ctx context.Context, userID, itemID str
 		return "", fmt.Errorf("decode Emby item detail: %w", err)
 	}
 	return result.UserData.LastPlayedDate, nil
+}
+
+// lastPlayedDateFor resolves the "last played" date for an item, accounting
+// for a real Emby quirk: a series' own UserData never carries
+// LastPlayedDate (only Played and UnplayedItemCount roll up from its
+// episodes) — it has to be read off the most recently played episode
+// instead. Movies (and everything else) carry it directly.
+func (client *Client) lastPlayedDateFor(ctx context.Context, userID, itemType, itemID string) (string, error) {
+	if itemType == "Series" {
+		return client.seriesLastPlayedDate(ctx, userID, itemID)
+	}
+	return client.itemLastPlayedDate(ctx, userID, itemID)
+}
+
+func (client *Client) seriesLastPlayedDate(ctx context.Context, userID, seriesID string) (string, error) {
+	query := url.Values{
+		"UserId":    {userID},
+		"Filters":   {"IsPlayed"},
+		"SortBy":    {"DatePlayed"},
+		"SortOrder": {"Descending"},
+		"Limit":     {"1"},
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, client.baseURL+"/Shows/"+seriesID+"/Episodes?"+query.Encode(), nil)
+	if err != nil {
+		return "", err
+	}
+	request.Header.Set("X-Emby-Token", client.adminAPIKey)
+
+	response, err := client.httpClient.Do(request)
+	if err != nil {
+		return "", fmt.Errorf("call Emby series episodes: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("Emby series episodes returned %s", response.Status)
+	}
+
+	var result struct {
+		Items []struct {
+			Id string `json:"Id"`
+		} `json:"Items"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("decode Emby series episodes: %w", err)
+	}
+	if len(result.Items) == 0 {
+		return "", nil
+	}
+	return client.itemLastPlayedDate(ctx, userID, result.Items[0].Id)
 }

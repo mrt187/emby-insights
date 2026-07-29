@@ -42,6 +42,13 @@ type MediaDetail struct {
 	TotalEpisodes   int      `json:"totalEpisodes"`
 	Played          bool     `json:"played"`
 	Seasons         []Season `json:"seasons"`
+	// CurrentSeasonNumber/CurrentEpisodeNumber are set when this detail was
+	// opened for an in-progress episode (e.g. from "Weiterschauen") — Emby's
+	// Continue Watching list only returns the episode's own ID, so the
+	// detail is resolved up to its series, with these two carrying which
+	// episode is actually in progress.
+	CurrentSeasonNumber  int `json:"currentSeasonNumber,omitempty"`
+	CurrentEpisodeNumber int `json:"currentEpisodeNumber,omitempty"`
 }
 
 type MediaDetailReader interface {
@@ -81,6 +88,9 @@ func (client *Client) EmbyMediaDetail(ctx context.Context, userID, itemID string
 		ProductionYear     int      `json:"ProductionYear"`
 		RunTimeTicks       int64    `json:"RunTimeTicks"`
 		RecursiveItemCount int      `json:"RecursiveItemCount"`
+		SeriesId           string   `json:"SeriesId"`
+		ParentIndexNumber  int      `json:"ParentIndexNumber"`
+		IndexNumber        int      `json:"IndexNumber"`
 		ImageTags          struct {
 			Primary string `json:"Primary"`
 		} `json:"ImageTags"`
@@ -100,6 +110,19 @@ func (client *Client) EmbyMediaDetail(ctx context.Context, userID, itemID string
 	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
 		return MediaDetail{}, fmt.Errorf("decode Emby item detail: %w", err)
 	}
+
+	// Continue Watching only returns an episode's own ID; show its series
+	// instead, carrying the in-progress season/episode number along.
+	if result.Type == "Episode" && result.SeriesId != "" {
+		detail, err := client.EmbyMediaDetail(ctx, userID, result.SeriesId)
+		if err != nil {
+			return MediaDetail{}, err
+		}
+		detail.CurrentSeasonNumber = result.ParentIndexNumber
+		detail.CurrentEpisodeNumber = result.IndexNumber
+		return detail, nil
+	}
+
 	if result.Genres == nil {
 		result.Genres = []string{}
 	}

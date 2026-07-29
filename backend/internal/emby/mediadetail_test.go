@@ -103,6 +103,41 @@ func TestEmbyMediaDetailComputesSeriesProgressAndSeasons(t *testing.T) {
 	}
 }
 
+func TestEmbyMediaDetailResolvesEpisodeToItsSeries(t *testing.T) {
+	testServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch {
+		case request.URL.Path == "/emby/Users/user-1/Items/ep-9":
+			_, _ = writer.Write([]byte(`{
+				"Id":"ep-9","Name":"Semper I","Type":"Episode",
+				"SeriesId":"1","ParentIndexNumber":2,"IndexNumber":5
+			}`))
+		case request.URL.Path == "/emby/Users/user-1/Items/1":
+			_, _ = writer.Write([]byte(`{
+				"Id":"1","Name":"Severance","Type":"Series",
+				"RecursiveItemCount":18,
+				"UserData":{"Played":false,"UnplayedItemCount":3}
+			}`))
+		case request.URL.Path == "/emby/Shows/1/Seasons":
+			_, _ = writer.Write([]byte(`{"Items":[]}`))
+		default:
+			t.Fatalf("unexpected request %q", request.URL.String())
+		}
+	}))
+	defer testServer.Close()
+
+	detail, err := NewClient(testServer.URL+"/emby", "dashboard-device", "admin-key").EmbyMediaDetail(context.Background(), "user-1", "ep-9")
+	if err != nil {
+		t.Fatalf("EmbyMediaDetail() error = %v", err)
+	}
+	if detail.Title != "Severance" || !detail.IsSeries {
+		t.Fatalf("detail = %#v, want the series resolved instead of the episode", detail)
+	}
+	if detail.CurrentSeasonNumber != 2 || detail.CurrentEpisodeNumber != 5 {
+		t.Fatalf("CurrentSeasonNumber/CurrentEpisodeNumber = %d/%d, want 2/5", detail.CurrentSeasonNumber, detail.CurrentEpisodeNumber)
+	}
+}
+
 func TestEmbyMediaDetailMovieHasNoSeasons(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != "/emby/Users/user-1/Items/154950" {

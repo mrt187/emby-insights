@@ -22,6 +22,7 @@ type MediaDetail = {
   genres: string[]; communityRating: number; officialRating?: string; year: number; runtimeMinutes: number;
   cast: MediaPerson[]; crew: MediaPerson[];
   isSeries?: boolean; watchedEpisodes?: number; totalEpisodes?: number; played?: boolean;
+  currentSeasonNumber?: number; currentEpisodeNumber?: number;
   seasons?: MediaSeason[] | RequestableSeason[];
   mediaStatus?: number;
   status?: string; releaseDate?: string; studios?: string[];
@@ -36,7 +37,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.13";
+const APP_VERSION = "0.8.14";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -344,7 +345,7 @@ function PosterRow<T extends { id: string; title: string; posterUrl?: string }>(
         ? <button type="button" className="poster-entry poster-entry-button" key={item.id} onClick={() => onSelect(item)}>{inner}</button>
         : <article className="poster-entry" key={item.id}>{inner}</article>;
     })}</div>}
-    {gridOpen && <MediaGridScreen title={resolvedGridTitle} items={items} detail={detail} onSelect={onSelect} onClose={() => setGridOpen(false)} />}
+    {gridOpen && <MediaGridScreen title={resolvedGridTitle} items={items} detail={detail} progress={progress} onSelect={onSelect} onClose={() => setGridOpen(false)} />}
   </section>;
 }
 
@@ -472,8 +473,8 @@ function Stats({ onSelectMedia }: { onSelectMedia: (selection: MediaSelection) =
   </div>;
 }
 
-function MediaGridScreen<T extends { id: string; title: string; posterUrl?: string }>({ title, items, detail, onSelect, onClose }: {
-  title: string; items: readonly T[]; detail?: (item: T) => string; onSelect?: (item: T) => void; onClose: () => void;
+function MediaGridScreen<T extends { id: string; title: string; posterUrl?: string }>({ title, items, detail, progress, onSelect, onClose }: {
+  title: string; items: readonly T[]; detail?: (item: T) => string; progress?: (item: T) => number; onSelect?: (item: T) => void; onClose: () => void;
 }) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
@@ -490,6 +491,7 @@ function MediaGridScreen<T extends { id: string; title: string; posterUrl?: stri
         : <div className="media-grid">{items.map((item) => <button type="button" className="media-grid-entry" key={item.id} onClick={() => onSelect?.(item)}>
           <div className="poster wide" role="img" aria-label={item.title}>
             {item.posterUrl ? <img src={item.posterUrl} alt="" loading="lazy" /> : <span>{item.title}</span>}
+            {progress && <div className="poster-progress"><div className="poster-progress-fill" style={{ width: `${progress(item)}%` }} /></div>}
           </div>
           <strong>{item.title}</strong>
           {detail && <small>{detail(item)}</small>}
@@ -604,6 +606,7 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated }: { selection
           <div className="media-detail-poster">{detail.posterUrl ? <img src={detail.posterUrl} alt="" /> : <span>{detail.title}</span>}</div>
           <div className="media-detail-info">
             {status && <span className="media-status-badge">{status}</span>}
+            {detail.currentSeasonNumber !== undefined && detail.currentEpisodeNumber !== undefined && <span className="media-status-badge media-status-badge-progress">Staffel {detail.currentSeasonNumber} · Folge {detail.currentEpisodeNumber}</span>}
             <h1>{detail.title}{detail.year ? ` (${detail.year})` : ""}</h1>
             <p className="media-detail-meta">
               {detail.officialRating && <span>{detail.officialRating}</span>}

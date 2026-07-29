@@ -63,7 +63,9 @@ func TestWatchedSeriesUsesSeriesItemType(t *testing.T) {
 				t.Fatalf("ParentId = %q", request.URL.Query().Get("ParentId"))
 			}
 			_, _ = writer.Write([]byte(`{"Items":[{"Id":"1","Name":"Severance"}]}`))
-		case "/emby/Users/user-1/Items/1":
+		case "/emby/Shows/1/Episodes":
+			_, _ = writer.Write([]byte(`{"Items":[{"Id":"1-e9"}]}`))
+		case "/emby/Users/user-1/Items/1-e9":
 			_, _ = writer.Write([]byte(`{"UserData":{"LastPlayedDate":"` + now + `"}}`))
 		default:
 			t.Fatalf("unexpected path %q", request.URL.Path)

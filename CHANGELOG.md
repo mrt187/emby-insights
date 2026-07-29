@@ -8,6 +8,26 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.14] - 2026-07-29
+
+### Fixed
+
+- "Serien abgeschlossen" showed a count but an empty poster overview: Emby
+  never rolls a series' `LastPlayedDate` up from its episodes (only `Played`
+  and `UnplayedItemCount` do), so the period filter silently excluded every
+  series. Resolved via the most recently played episode instead. The same
+  fix applies to "Gesehene Serien" and the weekday activity chart, which
+  had the same latent gap.
+
+### Added
+
+- The "Weiterschauen" poster overview now shows a progress bar per title,
+  matching the Home/Statistics row.
+- Clicking a poster while an episode is in progress (e.g. from
+  "Weiterschauen") now shows the series' full detail screen plus which
+  season and episode you're currently on, instead of a bare, out-of-context
+  episode detail.
+
 ## [0.8.13] - 2026-07-29
 
 ### Added
