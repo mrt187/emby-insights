@@ -8,6 +8,17 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.37] - 2026-07-30
+
+### Changed
+
+- Separated the admin inbox header ("Posteingang", "Rundmail", "Admin
+  schreiben") from the thread list card — they no longer sit inside the
+  same tile. The header now wraps reliably on narrow phones instead of
+  overflowing past the screen edge, and the action buttons are pill-styled
+  for clearer affordance.
+- Renamed "Neuer Chat" to "Admin schreiben".
+
 ## [0.8.36] - 2026-07-30
 
 ### Fixed

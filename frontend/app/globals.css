@@ -666,7 +666,17 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   flex: 0 0 auto; min-width: 22px; height: 22px; padding: 0 6px; display: grid; place-items: center;
   border-radius: 999px; background: var(--mint-bright); color: #0e1a13; font-size: 11px; font-weight: 800;
 }
-.chat-inbox-actions { display: flex; gap: 8px; }
+.chat-inbox-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px 16px; }
+.chat-inbox-header h2 { margin: 0; font-size: 25px; font-weight: 800; letter-spacing: -1px; }
+.chat-inbox-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.chat-action-button {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px;
+  border: 1px solid var(--line); border-radius: 999px; background: rgb(255 255 255 / 4%);
+  color: var(--text-secondary); font-size: 12px; font-weight: 700; white-space: nowrap;
+  transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease;
+}
+.chat-action-button:hover { background: #2a312e; color: var(--text-primary); }
+.chat-action-button .icon { width: 15px; height: 15px; }
 .broadcast-textarea {
   width: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px;
   background: var(--ink-raised); color: var(--text-primary); font: inherit; font-size: 14px; line-height: 1.5;
@@ -773,6 +783,10 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   .relevant-head { padding: 10px 10px 2px; }
   .relevant-row { gap: 12px; padding: 12px 10px; }
   .relevant-icon { flex-basis: 34px; width: 34px; height: 34px; }
+
+  .chat-inbox-header h2 { font-size: 22px; }
+  .chat-inbox-actions { width: 100%; }
+  .chat-action-button { flex: 1 1 0; justify-content: center; padding: 0 10px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

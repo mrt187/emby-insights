@@ -52,7 +52,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Chats", icon: "chat" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.36";
+const APP_VERSION = "0.8.37";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -1043,14 +1043,14 @@ function AdminChats() {
   const startNewThread = (contact: Contact) => { setNewThreadContact(contact); setPickerOpen(false); };
 
   return <div className="content page-view chat-view">
-    <section className="chat-inbox" aria-label="Nachrichten-Posteingang">
-      <div className="section-heading">
-        <div><h2>Posteingang</h2></div>
-        <div className="chat-inbox-actions">
-          <button type="button" className="text-button" onClick={() => setBroadcastOpen(true)}>Rundmail <Icon name="bell" /></button>
-          <button type="button" className="text-button" onClick={() => setPickerOpen(true)}>Neuer Chat <Icon name="arrow" /></button>
-        </div>
+    <div className="chat-inbox-header">
+      <div><p className="eyebrow">NACHRICHTEN</p><h2>Posteingang</h2></div>
+      <div className="chat-inbox-actions">
+        <button type="button" className="chat-action-button" onClick={() => setBroadcastOpen(true)}><Icon name="bell" /> Rundmail</button>
+        <button type="button" className="chat-action-button" onClick={() => setPickerOpen(true)}><Icon name="arrow" /> Admin schreiben</button>
       </div>
+    </div>
+    <section className="chat-inbox" aria-label="Nachrichten-Posteingang">
       {threadsState === "loading" && <p className="poster-status" role="status">Wird geladen …</p>}
       {threadsState === "error" && <p className="poster-status">Nicht verfügbar</p>}
       {threadsState === "ready" && threads.length === 0 && <p className="chat-empty">Noch keine Nachrichten von Nutzern.</p>}
