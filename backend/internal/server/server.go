@@ -170,6 +170,7 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("POST /api/admin/messages/thread/read", app.adminMarkThreadRead)
 	mux.HandleFunc("GET /api/admin/users", app.adminUserDirectory)
 	mux.HandleFunc("GET /api/admin/users/avatar", app.adminUserAvatar)
+	mux.HandleFunc("POST /api/admin/messages/broadcast", app.adminBroadcastMessage)
 	return mux
 }
 
@@ -889,6 +890,40 @@ func (app *App) adminUserAvatar(writer http.ResponseWriter, request *http.Reques
 	writer.Header().Set("Cache-Control", "private, max-age=3600")
 	writer.WriteHeader(http.StatusOK)
 	_, _ = writer.Write(image.Data)
+}
+
+// adminBroadcastMessage sends one message to every Emby user's thread at
+// once (e.g. a maintenance notice) — the admin's only way to reach everyone
+// without visiting each thread individually.
+func (app *App) adminBroadcastMessage(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	if !app.requireAdmin(writer, identity) {
+		return
+	}
+	body, ok := decodeMessageBody(writer, request)
+	if !ok {
+		return
+	}
+	users, err := app.directory.Users(request.Context())
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "the user directory is unavailable"})
+		return
+	}
+	sent := 0
+	for _, user := range users {
+		if user.ID == app.adminUserID {
+			continue
+		}
+		if err := app.messages.Send(request.Context(), user.ID, user.Name, body, true); err != nil {
+			respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "sending the broadcast failed partway through"})
+			return
+		}
+		sent++
+	}
+	respondJSON(writer, http.StatusOK, map[string]int{"count": sent})
 }
 
 func (app *App) adminMarkThreadRead(writer http.ResponseWriter, request *http.Request) {

@@ -8,6 +8,16 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.35] - 2026-07-30
+
+### Added
+
+- A "Rundmail" button in the Chats inbox lets the admin send one message
+  to every Emby user's thread at once — e.g. a maintenance heads-up —
+  instead of writing to each thread individually. It reuses the normal
+  chat thread and notification bell, so recipients see it exactly like
+  a personal reply.
+
 ## [0.8.34] - 2026-07-30
 
 ### Added

@@ -666,6 +666,15 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   flex: 0 0 auto; min-width: 22px; height: 22px; padding: 0 6px; display: grid; place-items: center;
   border-radius: 999px; background: var(--mint-bright); color: #0e1a13; font-size: 11px; font-weight: 800;
 }
+.chat-inbox-actions { display: flex; gap: 8px; }
+.broadcast-textarea {
+  width: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px;
+  background: var(--ink-raised); color: var(--text-primary); font: inherit; font-size: 14px; line-height: 1.5;
+  resize: vertical;
+}
+.broadcast-textarea::placeholder { color: var(--muted); }
+.broadcast-textarea:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.request-modal form { display: grid; gap: 12px; }
 
 /* ------------------------------------------------------------ bottom nav */
 

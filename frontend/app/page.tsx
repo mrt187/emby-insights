@@ -52,7 +52,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Chats", icon: "chat" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.34";
+const APP_VERSION = "0.8.35";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -1030,6 +1030,7 @@ function AdminChats() {
   const [contacts] = useApiResource<Contact[]>("/api/admin/users", []);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [broadcastOpen, setBroadcastOpen] = useState(false);
   const [newThreadContact, setNewThreadContact] = useState<Contact | null>(null);
 
   const existingThread = threads.find((thread) => thread.userId === selectedUserId) ?? null;
@@ -1045,7 +1046,10 @@ function AdminChats() {
     <section className="chat-inbox" aria-label="Nachrichten-Posteingang">
       <div className="section-heading">
         <div><h2>Posteingang</h2></div>
-        <button type="button" className="text-button" onClick={() => setPickerOpen(true)}>Neuer Chat <Icon name="arrow" /></button>
+        <div className="chat-inbox-actions">
+          <button type="button" className="text-button" onClick={() => setBroadcastOpen(true)}>Rundmail <Icon name="bell" /></button>
+          <button type="button" className="text-button" onClick={() => setPickerOpen(true)}>Neuer Chat <Icon name="arrow" /></button>
+        </div>
       </div>
       {threadsState === "loading" && <p className="poster-status" role="status">Wird geladen …</p>}
       {threadsState === "error" && <p className="poster-status">Nicht verfügbar</p>}
@@ -1062,7 +1066,56 @@ function AdminChats() {
       </ul>
     </section>
     {pickerOpen && <ContactPickerScreen contacts={availableContacts} onSelect={startNewThread} onClose={() => setPickerOpen(false)} />}
+    {broadcastOpen && <BroadcastScreen onClose={() => setBroadcastOpen(false)} onSent={() => { setBroadcastOpen(false); refetchThreads(); }} />}
     {selectedThread && <AdminChatThreadScreen thread={selectedThread} onClose={closeThread} />}
+  </div>;
+}
+
+function BroadcastScreen({ onClose, onSent }: { onClose: () => void; onSent: () => void }) {
+  const [body, setBody] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState(false);
+  const [sentCount, setSentCount] = useState<number | null>(null);
+
+  const send = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const trimmed = body.trim();
+    if (!trimmed || sending) return;
+    setSending(true);
+    setError(false);
+    try {
+      const response = await fetch("/api/admin/messages/broadcast", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body: trimmed }),
+      });
+      if (!response.ok) throw new Error("broadcast failed");
+      const data: { count: number } = await response.json();
+      setSentCount(data.count);
+    } catch {
+      setError(true);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return <div className="request-modal-backdrop" role="presentation" onClick={() => !sending && (sentCount !== null ? onSent() : onClose())}>
+    <div className="request-modal" role="dialog" aria-modal="true" aria-label="Rundmail senden" onClick={(event) => event.stopPropagation()}>
+      <div><p className="eyebrow">RUNDMAIL</p><h3>An alle Nutzer senden</h3></div>
+      {sentCount !== null
+        ? <>
+          <p className="request-confirmation">An {sentCount} {sentCount === 1 ? "Nutzer" : "Nutzer"} gesendet ✓</p>
+          <div className="request-modal-actions"><button type="button" className="request-button" onClick={onSent}>Fertig</button></div>
+        </>
+        : <form onSubmit={send}>
+          <textarea className="broadcast-textarea" placeholder="Nachricht an alle Nutzer, z. B. eine Wartungsankündigung …" value={body} onChange={(event) => setBody(event.target.value)} maxLength={4000} rows={5} aria-label="Rundmail-Text" />
+          {error && <p className="request-error">Senden fehlgeschlagen. Bitte erneut versuchen.</p>}
+          <div className="request-modal-actions">
+            <button type="button" className="request-button secondary" disabled={sending} onClick={onClose}>Abbrechen</button>
+            <button type="submit" className="request-button" disabled={body.trim() === "" || sending}>{sending ? "Wird gesendet …" : "An alle senden"}</button>
+          </div>
+        </form>}
+    </div>
   </div>;
 }
 
