@@ -8,6 +8,17 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.26] - 2026-07-30
+
+### Fixed
+
+- Desktop poster lists remain a single scrollable row; the arrow continues to
+  open the complete overview.
+- The mobile web app now has a visible refresh button in the header, and the
+  mobile detail hero leaves clear space beneath its fixed close button.
+- The cinema feed keeps films currently in cinemas while limiting only future
+  cinema starts to the next 30 days.
+
 ## [0.8.25] - 2026-07-30
 
 ### Added

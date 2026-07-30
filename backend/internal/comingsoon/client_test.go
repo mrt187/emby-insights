@@ -56,12 +56,14 @@ func TestInCinemasUsesThirtyDayWindow(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		fmt.Fprintf(writer, `[
 			{"title":"Recent","tmdbId":1,"inCinemas":%q,"digitalRelease":%q},
-			{"title":"Too old","tmdbId":2,"inCinemas":%q,"digitalRelease":%q},
-			{"title":"Soon","tmdbId":3,"inCinemas":%q,"digitalRelease":%q}
+			{"title":"Running","tmdbId":2,"inCinemas":%q,"digitalRelease":%q},
+			{"title":"Soon","tmdbId":3,"inCinemas":%q,"digitalRelease":%q},
+			{"title":"Later","tmdbId":4,"inCinemas":%q,"digitalRelease":%q}
 		]`,
 			now.AddDate(0, 0, -29).Format(time.RFC3339), now.AddDate(0, 0, 10).Format(time.RFC3339),
 			now.AddDate(0, 0, -31).Format(time.RFC3339), now.AddDate(0, 0, 10).Format(time.RFC3339),
 			now.AddDate(0, 0, 29).Format(time.RFC3339), now.AddDate(0, 0, 40).Format(time.RFC3339),
+			now.AddDate(0, 0, 31).Format(time.RFC3339), now.AddDate(0, 0, 40).Format(time.RFC3339),
 		)
 	}))
 	defer server.Close()
@@ -70,7 +72,7 @@ func TestInCinemasUsesThirtyDayWindow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InCinemas() error = %v", err)
 	}
-	if len(items) != 2 || items[0].Title != "Recent" || items[1].Title != "Soon" {
+	if len(items) != 3 || items[0].Title != "Running" || items[1].Title != "Recent" || items[2].Title != "Soon" {
 		t.Fatalf("InCinemas() = %#v", items)
 	}
 }

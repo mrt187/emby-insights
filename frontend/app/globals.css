@@ -167,7 +167,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .topbar h1 { margin: 0; font-size: clamp(29px, 3vw, 42px); font-weight: 800; letter-spacing: -1.65px; }
 .header-actions { position: relative; display: flex; align-items: center; gap: 10px; }
 
-.notice-button, .avatar {
+.notice-button, .avatar, .refresh-button {
   width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%;
   background: rgb(255 255 255 / 5%); border: 1px solid var(--line);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 7%);
@@ -175,6 +175,8 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 }
 .notice-button { color: #b7c1bc; position: relative; }
 .notice-button:hover { background: #2a312e; color: var(--text-primary); }
+.refresh-button { display: none; color: #b7c1bc; }
+.refresh-button:hover { background: #2a312e; color: var(--text-primary); }
 .notice-button b {
   position: absolute; top: 10px; right: 11px;
   width: 7px; height: 7px; background: #ef776d; border-radius: 50%;
@@ -319,8 +321,11 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 /* --------------------------------------------------------- poster rows */
 
 .poster-section { display: grid; gap: 18px; }
-.poster-scroller { display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); gap: 16px; padding: 4px 3px 6px; }
-.poster-entry { min-width: 0; }
+.poster-scroller {
+  display: flex; gap: 16px; overflow-x: auto; padding: 4px 3px 18px;
+  scroll-snap-type: x proximity; scrollbar-width: thin; scrollbar-color: #405148 transparent;
+}
+.poster-entry { flex: 0 0 158px; min-width: 0; scroll-snap-align: start; }
 .poster-entry-button {
   display: block; box-sizing: border-box; width: 100%; padding: 0; border: 0; margin: 0;
   background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer;
@@ -548,6 +553,9 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 }
 
 @media (max-width: 560px) {
+  /* The close button is fixed at the viewport edge. Reserve a clear hero
+     zone beneath it so long titles and the poster never sit underneath it. */
+  .media-detail-scroll { padding-top: calc(env(safe-area-inset-top) + 92px); }
   .media-detail-hero { grid-template-columns: 120px 1fr; gap: 16px; align-items: start; }
   .media-detail-poster { border-radius: 12px; }
 }
@@ -644,11 +652,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   .side-nav { display: none; }
   .screen { margin-left: 0; padding: 22px 18px 108px; }
   .topbar { padding-bottom: 27px; }
-  .poster-scroller {
-    display: flex; gap: 16px; overflow-x: auto; padding: 4px 3px 18px;
-    scroll-snap-type: x proximity; scrollbar-width: thin; scrollbar-color: #405148 transparent;
-  }
-  .poster-entry { flex: 0 0 158px; scroll-snap-align: start; }
+  .refresh-button { display: grid; }
 
   .bottom-nav {
     position: fixed; z-index: var(--z-navigation); bottom: 0; left: 0; right: 0;

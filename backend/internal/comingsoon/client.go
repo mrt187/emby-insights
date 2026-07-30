@@ -114,12 +114,10 @@ func (client *Client) InCinemas(ctx context.Context) ([]Item, error) {
 		if err != nil {
 			return nil, err
 		}
-		// Cinema is its own, deliberately shorter window than the Radarr/Sonarr
-		// availability calendar. This keeps both imminent starts and films that
-		// only recently opened in the cinema visible without growing indefinitely.
-		windowStart := now.AddDate(0, 0, -cinemaWindowDays)
+		// Cinema has a 30-day preview window. Films that already opened remain
+		// visible for their full cinema run, until their digital release arrives.
 		windowEnd := now.AddDate(0, 0, cinemaWindowDays)
-		if !dates.cinema.IsZero() && !dates.cinema.Before(windowStart) && !dates.cinema.After(windowEnd) && dates.digital.After(now) {
+		if !dates.cinema.IsZero() && !dates.cinema.After(windowEnd) && dates.digital.After(now) {
 			items = append(items, movie.item(dates.cinema, dates.digital, "movie"))
 		}
 	}
