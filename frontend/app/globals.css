@@ -542,7 +542,11 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .icon-toggle-button:disabled { opacity: .5; cursor: not-allowed; }
 .watchlist-toggle { display: flex; align-items: center; gap: 10px; color: var(--text-secondary); font-size: 14px; font-weight: 600; }
 
-.request-row { display: flex; justify-content: flex-start; margin-top: -8px; }
+.request-row { display: flex; align-items: center; gap: 12px; justify-content: flex-start; margin-top: -8px; }
+.media-availability-badge {
+  display: inline-block; padding: 5px 12px; border-radius: 999px; font-size: 11px; font-weight: 800;
+  letter-spacing: .3px; color: var(--text-secondary); background: transparent; border: 1px solid var(--line);
+}
 .request-button {
   min-height: 44px; padding: 11px 24px; border: 0; border-radius: 999px; font-size: 14px; font-weight: 800;
   color: #0e1a13; background: var(--mint-bright); cursor: pointer; transition: opacity 160ms var(--ease-out), background-color 160ms var(--ease-out);

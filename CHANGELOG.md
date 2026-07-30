@@ -8,6 +8,32 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.57] - 2026-07-31
+
+### Fixed
+
+- Saving Verwaltung settings failed with "Speichern fehlgeschlagen" for
+  anyone running Seerr/Radarr/Sonarr on their own LAN — the SSRF guard
+  added in v0.8.52 rejected any private IP address (10.0.0.0/8,
+  172.16.0.0/12, 192.168.0.0/16), which is exactly where those services
+  run in the overwhelming majority of installs. Private LAN ranges are
+  allowed again; loopback and link-local addresses (including the
+  169.254.169.254 cloud metadata endpoint) stay blocked.
+- The "Verfügbar"/"Teilweise verfügbar" hint next to the request button
+  was styled as a second solid button, reading as two competing actions.
+  It's now a muted outlined pill, visually distinct from "Anfragen".
+
+### Added
+
+- New home row "Top Bewertet" (BELIEBT AUF EMBY): the highest
+  community-rated movies and series across the configured libraries.
+
+### Changed
+
+- "Heute erscheint"/"Morgen erscheint" reworded to "Erscheint
+  heute"/"Erscheint morgen", consistent with the existing "Erscheint
+  bald".
+
 ## [0.8.56] - 2026-07-31
 
 ### Added

@@ -11,6 +11,34 @@ import (
 	"github.com/mrt187/EmbyInsights/internal/emby"
 )
 
+// TestValidateServiceURLAllowsPrivateLAN guards against the SSRF check
+// blocking the primary use case: Seerr/Radarr/Sonarr running on the
+// operator's own home network. This regressed once already — see v0.8.57.
+func TestValidateServiceURLAllowsPrivateLAN(t *testing.T) {
+	for _, url := range []string{
+		"http://10.0.0.2:5055",
+		"http://192.168.1.50:7878",
+		"http://172.16.0.5:8989",
+	} {
+		if err := validateServiceURL(url); err != nil {
+			t.Fatalf("validateServiceURL(%q) error = %v, want nil (private LAN must be allowed)", url, err)
+		}
+	}
+}
+
+func TestValidateServiceURLRejectsLoopbackAndLinkLocal(t *testing.T) {
+	for _, url := range []string{
+		"http://localhost:5055",
+		"http://127.0.0.1:5055",
+		"http://[::1]:5055",
+		"http://169.254.169.254/latest/meta-data",
+	} {
+		if err := validateServiceURL(url); err == nil {
+			t.Fatalf("validateServiceURL(%q) error = nil, want rejection", url)
+		}
+	}
+}
+
 // fakeConfigStore is an in-memory stand-in for appconfig.Store, so admin
 // gating and the features matrix can be unit-tested without a real Postgres
 // instance — mirrors the atomic "first claim wins" contract the real store

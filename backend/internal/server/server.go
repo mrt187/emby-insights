@@ -61,6 +61,7 @@ type App struct {
 	newForYou           emby.NewForYouReader
 	continueWatching    emby.ContinueWatchingReader
 	watched             emby.WatchedReader
+	topRated            emby.TopRatedReader
 	seriesInProgress    emby.SeriesInProgressReader
 	completed           emby.CompletedReader
 	profile             emby.ProfileReader
@@ -152,6 +153,7 @@ func New(cfg config.Config) (*App, error) {
 		newForYou:           embyClient,
 		continueWatching:    embyClient,
 		watched:             embyClient,
+		topRated:            embyClient,
 		seriesInProgress:    embyClient,
 		completed:           embyClient,
 		profile:             embyClient,
@@ -260,6 +262,7 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/requests/total", app.requestsTotal)
 	mux.HandleFunc("GET /api/new-for-you", app.newForYouItems)
 	mux.HandleFunc("GET /api/continue-watching", app.continueWatchingItems)
+	mux.HandleFunc("GET /api/top-rated", app.topRatedHandler)
 	mux.HandleFunc("GET /api/watched-movies", app.watchedMovies)
 	mux.HandleFunc("GET /api/watched-series", app.watchedSeries)
 	mux.HandleFunc("GET /api/series-in-progress", app.seriesInProgressHandler)
@@ -1336,13 +1339,17 @@ func validateServiceURL(baseURL string) error {
 		return fmt.Errorf("localhost and loopback addresses not allowed")
 	}
 
-	if host == "169.254.169.254" {
-		return fmt.Errorf("metadata server not allowed")
-	}
-
+	// Private LAN ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) are
+	// deliberately allowed: Seerr/Radarr/Sonarr run on the operator's own
+	// home network in the overwhelming majority of installs, and this app
+	// itself typically runs there too — rejecting private IPs made it
+	// impossible to save Verwaltung settings for that setup at all. What
+	// actually needs blocking is loopback (the container reaching back into
+	// itself) and link-local addresses, which include the 169.254.169.254
+	// cloud metadata endpoint.
 	ip := net.ParseIP(host)
-	if ip != nil && ip.IsPrivate() {
-		return fmt.Errorf("private IP addresses not allowed: %s", host)
+	if ip != nil && (ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast()) {
+		return fmt.Errorf("loopback and link-local addresses not allowed: %s", host)
 	}
 
 	return nil
@@ -1461,6 +1468,7 @@ func (app *App) adminPutSettings(writer http.ResponseWriter, request *http.Reque
 	}
 
 	if err := app.applySettings(request.Context(), settings); err != nil {
+		log.Printf("saving Verwaltung settings failed: %v", err)
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "saving settings failed"})
 		return
 	}
@@ -1568,6 +1576,19 @@ func (app *App) continueWatchingItems(writer http.ResponseWriter, request *http.
 	items, err := app.continueWatching.ContinueWatching(request.Context(), identity.UserID)
 	if err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "continue watching is unavailable"})
+		return
+	}
+	respondJSON(writer, http.StatusOK, orEmpty(items))
+}
+
+func (app *App) topRatedHandler(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	items, err := app.topRated.TopRated(request.Context(), identity.UserID, app.live.watchedLibraries())
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "top rated titles are unavailable"})
 		return
 	}
 	respondJSON(writer, http.StatusOK, orEmpty(items))

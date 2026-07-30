@@ -19,6 +19,7 @@ type UserProfile = { memberSince: string; lastActiveDate: string; lastLoginDate:
 type UpcomingItem = { id: string; tmdbId: string; title: string; posterUrl: string; mediaType: string; availabilityDate: string; cinemaStartDate?: string; cinemaEndDate?: string; seasonNumber?: number; episodeNumber?: number; episodeTitle?: string };
 type RequestItem = { id: string; title: string; posterUrl: string; status: string; tmdbId: string; mediaType: string };
 type NewForYouItem = { id: string; title: string; posterUrl: string };
+type TopRatedItem = { id: string; title: string; posterUrl: string; communityRating: number };
 type ContinueWatchingItem = { id: string; title: string; posterUrl: string; progressPercent: number };
 type WatchedItem = { id: string; title: string; posterUrl: string; genres: string[]; lastPlayedDate: string };
 type SeriesProgress = { id: string; title: string; posterUrl: string; watchedEpisodes: number; totalEpisodes: number };
@@ -63,7 +64,7 @@ function visibleNav(user: CurrentUser): { label: Page; icon: IconName }[] {
   return items;
 }
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.56";
+const APP_VERSION = "0.8.57";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -160,6 +161,7 @@ export default function Home() {
   const [requestTotal, , refetchRequestTotal] = useApiResource<{ total: number } | null>(user?.features.requests ? "/api/requests/total" : null, null);
   const totalRequests = requestTotal?.total ?? null;
   const [newForYouItems, newForYouState] = useApiResource<NewForYouItem[]>(user ? "/api/new-for-you" : null, []);
+  const [topRatedItems, topRatedState] = useApiResource<TopRatedItem[]>(user ? "/api/top-rated" : null, []);
   const [seriesInProgress, seriesInProgressState, refetchSeriesInProgress] = useApiResource<SeriesProgress[]>(user ? "/api/series-in-progress" : null, []);
   const [availableRequests] = useApiResource<RequestItem[]>(user?.features.requests ? "/api/requests/available" : null, []);
   const [userProfile] = useApiResource<UserProfile | null>(user ? "/api/me/profile" : null, null);
@@ -220,7 +222,7 @@ export default function Home() {
           </div>}
         </div>
       </header>
-      {page === "Heute" && <Today upcoming={upcomingItems} upcomingState={upcomingState} cinema={cinemaItems} cinemaState={cinemaState} requests={requestItems} requestState={requestState} newForYou={newForYouItems} newForYouState={newForYouState} seriesInProgress={seriesInProgress} seriesInProgressState={seriesInProgressState} availableRequests={availableRequests} features={user.features} message={messagePreview} onSelectMedia={setSelectedMedia} onOpenChats={() => selectPage("Chats")} />}
+      {page === "Heute" && <Today upcoming={upcomingItems} upcomingState={upcomingState} cinema={cinemaItems} cinemaState={cinemaState} requests={requestItems} requestState={requestState} newForYou={newForYouItems} newForYouState={newForYouState} topRated={topRatedItems} topRatedState={topRatedState} seriesInProgress={seriesInProgress} seriesInProgressState={seriesInProgressState} availableRequests={availableRequests} features={user.features} message={messagePreview} onSelectMedia={setSelectedMedia} onOpenChats={() => selectPage("Chats")} />}
       {page === "Statistik" && user.features.statistics && <Stats user={user} onSelectMedia={setSelectedMedia} />}
       {page === "Anfragen" && user.features.requests && <Requests onSelectMedia={setSelectedMedia} />}
       {page === "Chats" && <Chats user={user} />}
@@ -267,10 +269,10 @@ function UserAvatar({ name, userId }: { name: string; userId: string }) {
   return <PersonAvatar name={name} src={`/api/me/avatar?u=${encodeURIComponent(userId)}`} />;
 }
 
-function Today({ upcoming, upcomingState, cinema, cinemaState, requests, requestState, newForYou, newForYouState, seriesInProgress, seriesInProgressState, availableRequests, features, message, onSelectMedia, onOpenChats }: {
+function Today({ upcoming, upcomingState, cinema, cinemaState, requests, requestState, newForYou, newForYouState, topRated, topRatedState, seriesInProgress, seriesInProgressState, availableRequests, features, message, onSelectMedia, onOpenChats }: {
 	upcoming: UpcomingItem[]; upcomingState: LoadState; requests: RequestItem[]; requestState: LoadState;
 	cinema: UpcomingItem[]; cinemaState: LoadState;
-  newForYou: NewForYouItem[]; newForYouState: LoadState; availableRequests: RequestItem[];
+  newForYou: NewForYouItem[]; newForYouState: LoadState; topRated: TopRatedItem[]; topRatedState: LoadState; availableRequests: RequestItem[];
   seriesInProgress: SeriesProgress[]; seriesInProgressState: LoadState;
   features: Features;
   message: { preview: string } | null;
@@ -301,6 +303,7 @@ function Today({ upcoming, upcomingState, cinema, cinemaState, requests, request
     <PosterRow title="Noch nicht fertig" eyebrow="TEILWEISE GESEHEN" items={seriesInProgress} state={seriesInProgressState} emptyLabel="Keine Serien mit offenen Folgen." detail={(item) => `${item.watchedEpisodes} von ${item.totalEpisodes} Folgen`} progress={(item) => Math.round((item.watchedEpisodes / item.totalEpisodes) * 100)} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
     {features.requests && <PosterRow title="Meine Anfragen" eyebrow="SEERR · OFFEN" items={requests} state={requestState} emptyLabel="Keine offenen Anfragen." detail={(item) => item.status} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />}
     <PosterRow title="Neu für dich" eyebrow="IN DEN LETZTEN 14 TAGEN" items={newForYou} state={newForYouState} emptyLabel="Nichts Neues in den letzten 14 Tagen." detail={() => "Ungesehen"} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
+    <PosterRow title="Top Bewertet" eyebrow="BELIEBT AUF EMBY" items={topRated} state={topRatedState} emptyLabel="Noch keine Bewertungen in deiner Bibliothek." detail={(item) => `★ ${item.communityRating.toFixed(1)}`} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
     {features.movieDates && <PosterRow title="Im Kino" eyebrow="KOMMENDE UND AKTUELLE KINOSTARTS" items={cinema} state={cinemaState} emptyLabel="Zurzeit keine Kinostarts." detail={cinemaWording} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />}
 
     {allEventsOpen && <RelevantAllScreen events={events} onClose={() => setAllEventsOpen(false)} />}
@@ -318,8 +321,8 @@ function releaseWording(premiereDate: string) {
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
   const days = Math.round((new Date(date).setHours(0, 0, 0, 0) - startOfToday.getTime()) / 86_400_000);
-  if (days <= 0) return "Heute erscheint";
-  if (days === 1) return "Morgen erscheint";
+  if (days <= 0) return "Erscheint heute";
+  if (days === 1) return "Erscheint morgen";
   return "Erscheint bald";
 }
 
@@ -932,7 +935,7 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated, onHiddenChang
           </button>
         </div>}
         {selection.source === "seerr" && (canRequest || seerrAvailabilityLabel) && <div className="request-row">
-          {seerrAvailabilityLabel && <span className="media-status-badge">{seerrAvailabilityLabel}</span>}
+          {seerrAvailabilityLabel && <span className="media-availability-badge">{seerrAvailabilityLabel}</span>}
           {canRequest && (requestState === "done"
             ? <p className="request-confirmation">Angefragt ✓</p>
             : <button type="button" className="request-button" onClick={() => setRequestModalOpen(true)}>Anfragen</button>)}
