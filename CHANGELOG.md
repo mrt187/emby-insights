@@ -8,6 +8,19 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.52] - 2026-07-30
+
+### Security
+
+- Move TMDB API key from URL query parameters to Authorization header
+  to prevent leakage in browser history and server logs.
+- Add URL validation for Seerr/Radarr/Sonarr service URLs to block
+  SSRF attacks via private IP addresses, localhost, and metadata servers.
+- Implement login rate-limiting (5 attempts per minute per client IP)
+  to mitigate brute-force attacks.
+- Add security headers (X-Content-Type-Options, X-Frame-Options, HSTS)
+  for defense-in-depth against browser-based attacks.
+
 ## [0.8.51] - 2026-07-30
 
 ### Added
