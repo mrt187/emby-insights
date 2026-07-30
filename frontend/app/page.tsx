@@ -45,7 +45,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.29";
+const APP_VERSION = "0.8.30";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -620,6 +620,17 @@ function Requests({ onSelectMedia }: { onSelectMedia: (selection: MediaSelection
     <PosterRow title="Demnächst erscheinende Serien" eyebrow="SEERR · TMDB" items={upcomingSeries} state={upcomingSeriesState} emptyLabel="Keine Daten." detail={() => "Demnächst"} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />
   </div>;
 }
+
+const OVERVIEW_CLAMP_THRESHOLD = 220;
+
+function OverviewText({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = text.length > OVERVIEW_CLAMP_THRESHOLD;
+  return <>
+    <p className={isLong && !expanded ? "media-detail-overview-text clamped" : "media-detail-overview-text"}>{text}</p>
+    {isLong && <button type="button" className="text-button overview-toggle" onClick={() => setExpanded((value) => !value)}>{expanded ? "Weniger anzeigen" : "Mehr anzeigen"}</button>}
+  </>;
+}
 function MediaDetailScreen({ selection, onClose, onRequestCreated }: { selection: MediaSelection; onClose: () => void; onRequestCreated: () => void }) {
   const [detail, setDetail] = useState<MediaDetail | null>(null);
   const [state, setState] = useState<LoadState>("loading");
@@ -735,12 +746,13 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated }: { selection
   };
 
   return <div className="media-detail-overlay" role="dialog" aria-modal="true" aria-label={detail?.title ?? "Details"}>
+    {detail && <div className="media-detail-backdrop" style={detail.backdropUrl ? { backgroundImage: `url(${detail.backdropUrl})` } : undefined} />}
     <div className="media-detail-scroll">
       <button type="button" className="media-detail-close" onClick={onClose} aria-label="Schließen"><Icon name="close" /></button>
       {state === "loading" && <p className="poster-status media-detail-status" role="status">Wird geladen …</p>}
       {state === "error" && <p className="poster-status media-detail-status">Details nicht verfügbar.</p>}
       {detail && <div className="media-detail">
-        {detail.backdropUrl && <div className="media-detail-backdrop" style={{ backgroundImage: `url(${detail.backdropUrl})` }} />}
+        <div className="media-detail-above-fold">
         <div className="media-detail-hero">
           <div className="media-detail-poster">{detail.posterUrl ? <img src={detail.posterUrl} alt="" /> : <span>{detail.title}</span>}</div>
           <div className="media-detail-info">
@@ -789,7 +801,8 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated }: { selection
             ? <p className="request-confirmation">Angefragt ✓</p>
             : <button type="button" className="request-button" onClick={() => setRequestModalOpen(true)}>Anfragen</button>}
         </div>}
-        {detail.overview && <section className="media-detail-overview"><h2>Übersicht</h2><p>{detail.overview}</p></section>}
+        {detail.overview && <section className="media-detail-overview"><h2>Übersicht</h2><OverviewText text={detail.overview} /></section>}
+        </div>
         {(detail.status || detail.releaseDate || (detail.studios && detail.studios.length > 0)) && <section className="media-detail-facts">
           <dl>
             {detail.status && <div><dt>Status</dt><dd>{detail.status}</dd></div>}

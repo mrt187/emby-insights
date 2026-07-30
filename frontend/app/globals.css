@@ -431,7 +431,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   position: fixed; inset: 0; z-index: 100; overflow-y: auto;
   background: #0b1017;
 }
-.media-detail-scroll { position: relative; max-width: 1100px; margin: 0 auto; padding: 24px clamp(18px, 4vw, 48px) 60px; }
+.media-detail-scroll { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 24px clamp(18px, 4vw, 48px) 60px; }
 .media-detail-close {
   position: fixed; top: 18px; right: clamp(18px, 4vw, 48px); z-index: 110; display: grid; place-items: center;
   width: 44px; height: 44px; border: 0; border-radius: 50%;
@@ -442,19 +442,29 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .media-detail-status { padding-top: 40px; }
 
 .media-detail { position: relative; display: grid; gap: 28px; }
+.media-detail-above-fold { display: grid; gap: 28px; }
+/* Anchored to the overlay itself (not the padded scroll column) so it always
+   reaches the true top of the screen, behind the status bar/close button —
+   and always renders, with a plain ambient fallback, so the hero looks the
+   same whether or not this title has a backdrop image. */
 .media-detail-backdrop {
-  position: absolute; top: -24px; left: 50%; width: 100vw; height: 320px; z-index: -1;
-  transform: translateX(-50%); background-position: center 20%; background-size: cover;
+  position: absolute; top: 0; left: 0; right: 0; z-index: 0; height: min(50vh, 440px);
+  background-color: var(--ink-raised);
+  background-image:
+    radial-gradient(120% 140% at 25% -10%, rgb(140 224 173 / 14%), transparent 60%),
+    radial-gradient(120% 120% at 90% 5%, rgb(119 184 255 / 12%), transparent 55%);
+  background-position: center 30%; background-size: cover;
   mask-image: linear-gradient(to bottom, black, transparent);
 }
-.media-detail-hero { display: grid; grid-template-columns: 200px 1fr; gap: 28px; align-items: end; }
+.media-detail-hero { display: grid; grid-template-columns: 224px 1fr; gap: 28px; align-items: end; }
 .media-detail-poster {
   position: relative; overflow: hidden; aspect-ratio: 2 / 3; border-radius: 16px;
   border: 1px solid rgb(255 255 255 / 10%); box-shadow: 0 20px 40px rgb(0 0 0 / 35%);
   background: linear-gradient(135deg, #24312c, #384a3f);
-  display: grid; place-items: center; color: #f7f4ea; font-weight: 700; padding: 10px;
+  display: grid; place-items: center; color: #f7f4ea; font-weight: 700;
 }
-.media-detail-poster img { width: 100%; height: 100%; object-fit: cover; }
+.media-detail-poster span { padding: 14px; text-align: center; }
+.media-detail-poster img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .media-detail-info h1 { margin: 8px 0 10px; font-size: clamp(24px, 3.4vw, 38px); font-weight: 800; letter-spacing: -1px; }
 .media-status-badge {
   display: inline-block; margin: 0 6px 6px 0; padding: 5px 12px; border-radius: 999px; font-size: 11px; font-weight: 800;
@@ -466,7 +476,9 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .media-detail-rating { margin-top: 10px; color: #f6cf6b; font-size: 15px; font-weight: 700; }
 
 .media-detail-overview h2, .media-detail-cast h2, .media-detail-seasons h2 { margin: 0 0 12px; font-size: 18px; font-weight: 800; letter-spacing: -.3px; }
-.media-detail-overview p { color: var(--text-secondary); line-height: 1.6; max-width: 74ch; }
+.media-detail-overview-text { margin: 0; color: var(--text-secondary); line-height: 1.6; max-width: 74ch; }
+.media-detail-overview-text.clamped { display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
+.overview-toggle { margin-top: 10px; padding-inline: 0; }
 
 .media-detail-facts dl { display: grid; gap: 10px; max-width: 480px; }
 .media-detail-facts dl > div { display: flex; justify-content: space-between; gap: 16px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
@@ -517,9 +529,9 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .icon-toggle-button::after { content: ""; position: absolute; inset: -4px; }
 .icon-toggle-button.active { color: var(--mint-bright); border-color: rgb(140 224 173 / 45%); }
 .icon-toggle-button:disabled { opacity: .5; cursor: not-allowed; }
-.watchlist-toggle { display: flex; align-items: center; gap: 10px; margin-left: auto; color: var(--text-secondary); font-size: 14px; font-weight: 600; }
+.watchlist-toggle { display: flex; align-items: center; gap: 10px; color: var(--text-secondary); font-size: 14px; font-weight: 600; }
 
-.request-row { display: flex; justify-content: flex-end; margin-top: -8px; }
+.request-row { display: flex; justify-content: flex-start; margin-top: -8px; }
 .request-button {
   min-height: 44px; padding: 11px 24px; border: 0; border-radius: 999px; font-size: 14px; font-weight: 800;
   color: #0e1a13; background: var(--mint-bright); cursor: pointer; transition: opacity 160ms var(--ease-out), background-color 160ms var(--ease-out);
@@ -584,8 +596,12 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   /* The close button is fixed at the viewport edge. Reserve a clear hero
      zone beneath it so long titles and the poster never sit underneath it. */
   .media-detail-scroll { padding-top: calc(env(safe-area-inset-top) + 92px); }
-  .media-detail-hero { grid-template-columns: 120px 1fr; gap: 16px; align-items: start; }
+  .media-detail-hero { grid-template-columns: 148px 1fr; gap: 16px; align-items: start; }
   .media-detail-poster { border-radius: 12px; }
+  /* Keeps the hero/overview block at least one screen tall so cast and other
+     secondary sections always sit below an initial scroll, regardless of how
+     short a title's overview happens to be. */
+  .media-detail-above-fold { min-height: calc(100svh - 40px); align-content: start; }
 }
 
 .media-grid-overlay { z-index: 90; }

@@ -8,6 +8,30 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.30] - 2026-07-30
+
+### Fixed
+
+- The mobile media detail screen left a plain black band above the backdrop
+  image, because the backdrop was anchored inside the padded scroll column
+  instead of the true top of the screen.
+- The detail poster showed a visible green fallback frame around loaded
+  posters: the image wasn't filling its container edge-to-edge like every
+  other poster surface in the app.
+
+### Changed
+
+- The backdrop now always renders (with a plain ambient fallback when a
+  title has no backdrop image), so the hero looks consistent across titles.
+- The detail poster is larger, and the watchlist toggle / request button now
+  align to the start of the layout instead of drifting to the right edge
+  disconnected from the title.
+- Long overviews are clamped to 6 lines with a "Mehr anzeigen" toggle instead
+  of running on indefinitely.
+- The hero/overview area on mobile keeps a minimum height of one screen, so
+  the cast section always sits behind an initial scroll rather than
+  appearing immediately for titles with a short overview.
+
 ## [0.8.29] - 2026-07-30
 
 ### Changed
