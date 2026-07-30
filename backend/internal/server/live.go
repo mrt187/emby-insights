@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/mrt187/EmbyInsights/internal/comingsoon"
+	"github.com/mrt187/EmbyInsights/internal/omdb"
 	"github.com/mrt187/EmbyInsights/internal/seerr"
 )
 
@@ -19,16 +20,18 @@ type liveConfig struct {
 	mu                  sync.RWMutex
 	seerr               *seerr.Client
 	comingSoon          *comingsoon.Client
+	omdb                *omdb.Client
 	region              string
 	newForYouLibraryIDs []string
 	watchedLibraryIDs   []string
 }
 
-func (live *liveConfig) set(seerrClient *seerr.Client, comingSoonClient *comingsoon.Client, region string, newForYouLibraryIDs, watchedLibraryIDs []string) {
+func (live *liveConfig) set(seerrClient *seerr.Client, comingSoonClient *comingsoon.Client, omdbClient *omdb.Client, region string, newForYouLibraryIDs, watchedLibraryIDs []string) {
 	live.mu.Lock()
 	defer live.mu.Unlock()
 	live.seerr = seerrClient
 	live.comingSoon = comingSoonClient
+	live.omdb = omdbClient
 	live.region = region
 	live.newForYouLibraryIDs = newForYouLibraryIDs
 	live.watchedLibraryIDs = watchedLibraryIDs
@@ -45,6 +48,15 @@ func (live *liveConfig) current() (*seerr.Client, *comingsoon.Client, string) {
 	live.mu.RLock()
 	defer live.mu.RUnlock()
 	return live.seerr, live.comingSoon, live.region
+}
+
+func (live *liveConfig) omdbClient() *omdb.Client {
+	if live == nil {
+		return nil
+	}
+	live.mu.RLock()
+	defer live.mu.RUnlock()
+	return live.omdb
 }
 
 func (live *liveConfig) discoverRegion() string {

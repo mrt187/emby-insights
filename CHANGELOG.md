@@ -8,6 +8,29 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.56] - 2026-07-31
+
+### Added
+
+- OMDb as a new optional integration (Verwaltung → Optionale Dienste):
+  adds IMDb and Rotten Tomatoes ratings to the media-detail screen, which
+  TMDB's own API doesn't expose (only its own community score). Keyed by
+  the IMDb id Seerr already carries in its TMDB proxy response; enrichment
+  failures (not configured, no IMDb id, OMDb down) never affect the rest
+  of the detail screen.
+
+### Changed
+
+- "Verfügbar in Emby" / "Teilweise verfügbar in Emby" shortened to
+  "Verfügbar" / "Teilweise verfügbar"; added a fourth state, "Bereits
+  angefragt", for titles Seerr reports as pending or processing (previously
+  showed nothing at all).
+- "Jetzt relevant": release/cinema rows now lead with the title in bold and
+  the timing wording ("Heute erscheint", "Jetzt im Kino", …) below it,
+  reversed from before. Their icon tone moved from the warm/orange "peach"
+  to "lilac" — peach stays reserved for an actual warning state, which
+  doesn't exist among today's event types.
+
 ## [0.8.55] - 2026-07-31
 
 ### Added

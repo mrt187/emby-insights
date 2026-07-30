@@ -36,6 +36,7 @@ type MediaDetail = {
   seasons?: MediaSeason[] | RequestableSeason[];
   mediaStatus?: number;
   status?: string; releaseDate?: string; studios?: string[];
+  imdbRating?: string; rottenTomatoesRating?: string;
 };
 type MediaTrackingEntry = { mediaSource: string; mediaId: string; mediaType: string; title: string; posterUrl: string; rating?: number; onWatchlist: boolean; rewatchCount: number; hiddenInProgress?: boolean };
 function isRequestableSeason(season: MediaSeason | RequestableSeason): season is RequestableSeason { return !("id" in season); }
@@ -62,7 +63,7 @@ function visibleNav(user: CurrentUser): { label: Page; icon: IconName }[] {
   return items;
 }
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.55";
+const APP_VERSION = "0.8.56";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -352,8 +353,8 @@ function relevantEvents({ availableRequests, upcoming, cinema, newForYou, messag
     const premiere = new Date(item.availabilityDate).getTime();
     if (Number.isNaN(premiere) || premiere > horizon) continue;
     events.push({
-      key: `release-${item.id}`, tone: "peach", icon: "clock", status: releaseWording(item.availabilityDate),
-      detail: upcomingTitle(item),
+      key: `release-${item.id}`, tone: "lilac", icon: "clock", status: upcomingTitle(item),
+      detail: releaseWording(item.availabilityDate),
       onOpen: () => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType }),
     });
   }
@@ -362,8 +363,8 @@ function relevantEvents({ availableRequests, upcoming, cinema, newForYou, messag
     const premiere = new Date(item.cinemaStartDate ?? item.availabilityDate).getTime();
     if (Number.isNaN(premiere) || premiere > horizon || premiere < Date.now() - 24 * 60 * 60 * 1000) continue;
     events.push({
-      key: `cinema-${item.id}`, tone: "peach", icon: "movie", status: premiere <= Date.now() ? "Jetzt im Kino" : "Bald im Kino",
-      detail: item.title,
+      key: `cinema-${item.id}`, tone: "lilac", icon: "movie", status: item.title,
+      detail: premiere <= Date.now() ? "Jetzt im Kino" : "Bald im Kino",
       onOpen: () => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType }),
     });
   }
@@ -830,9 +831,15 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated, onHiddenChang
   // any other non-zero status (pending, processing, fully available, ...)
   // means there is nothing left to request.
   const requestableSeasons = (detail?.seasons?.filter(isRequestableSeason) ?? []).filter((season) => !season.available);
+  const seerrStatusPending = 2;
+  const seerrStatusProcessing = 3;
   const seerrStatusPartiallyAvailable = 4;
   const seerrStatusAvailable = 5;
   const canRequest = selection.source === "seerr" && (!detail?.mediaStatus || (detail.mediaStatus === seerrStatusPartiallyAvailable && mediaType === "tv" && requestableSeasons.length > 0));
+  const seerrAvailabilityLabel = detail?.mediaStatus === seerrStatusAvailable ? "Verfügbar"
+    : detail?.mediaStatus === seerrStatusPartiallyAvailable ? "Teilweise verfügbar"
+    : detail?.mediaStatus === seerrStatusPending || detail?.mediaStatus === seerrStatusProcessing ? "Bereits angefragt"
+    : null;
 
   const toggleSeason = (seasonNumber: number) => {
     setSelectedSeasons((current) => current.includes(seasonNumber) ? current.filter((value) => value !== seasonNumber) : [...current, seasonNumber]);
@@ -876,7 +883,11 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated, onHiddenChang
               {detail.runtimeMinutes > 0 && <span>{detail.runtimeMinutes} Minuten</span>}
               {detail.genres?.length > 0 && <span>{detail.genres.join(", ")}</span>}
             </p>
-            {detail.communityRating > 0 && <p className="media-detail-rating">★ {detail.communityRating.toFixed(1)}</p>}
+            {(detail.communityRating > 0 || detail.imdbRating || detail.rottenTomatoesRating) && <div className="media-detail-ratings">
+              {detail.communityRating > 0 && <span className="media-detail-rating">★ {detail.communityRating.toFixed(1)}</span>}
+              {detail.imdbRating && <span className="media-detail-rating">IMDb {detail.imdbRating}</span>}
+              {detail.rottenTomatoesRating && <span className="media-detail-rating">RT {detail.rottenTomatoesRating}</span>}
+            </div>}
           </div>
         </div>
         {(detail.status || detail.releaseDate || (detail.studios && detail.studios.length > 0)) && <section className="media-detail-facts">
@@ -920,9 +931,8 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated, onHiddenChang
             {tracking.hiddenInProgress ? "Wieder in „Noch nicht fertig“ zeigen" : "Aus „Noch nicht fertig“ ausblenden"}
           </button>
         </div>}
-        {selection.source === "seerr" && (canRequest || detail.mediaStatus === seerrStatusAvailable || detail.mediaStatus === seerrStatusPartiallyAvailable) && <div className="request-row">
-          {detail.mediaStatus === seerrStatusAvailable && <span className="media-status-badge">Verfügbar in Emby</span>}
-          {detail.mediaStatus === seerrStatusPartiallyAvailable && <span className="media-status-badge">Teilweise verfügbar in Emby</span>}
+        {selection.source === "seerr" && (canRequest || seerrAvailabilityLabel) && <div className="request-row">
+          {seerrAvailabilityLabel && <span className="media-status-badge">{seerrAvailabilityLabel}</span>}
           {canRequest && (requestState === "done"
             ? <p className="request-confirmation">Angefragt ✓</p>
             : <button type="button" className="request-button" onClick={() => setRequestModalOpen(true)}>Anfragen</button>)}
@@ -1042,7 +1052,7 @@ type EmbyLibrary = { id: string; name: string };
 type ServiceView = { enabled: boolean; baseUrl?: string; apiKeySet: boolean; apiKeyPreview?: string };
 type AdminSettingsView = {
   newForYouLibraryIds: string[]; watchedLibraryIds: string[];
-  seerr: ServiceView; radarr: ServiceView; sonarr: ServiceView; tmdb: ServiceView;
+  seerr: ServiceView; radarr: ServiceView; sonarr: ServiceView; tmdb: ServiceView; omdb: ServiceView;
   comingSoonRegion: string; comingSoonDaysAhead: number;
 };
 type DailyActivity = { date: string; requestCount: number; activeUsers: number };
@@ -1118,6 +1128,7 @@ function AdminSettings() {
   const [radarr, setRadarr] = useState<ServiceDraft>({ enabled: false, baseUrl: "", apiKey: "" });
   const [sonarr, setSonarr] = useState<ServiceDraft>({ enabled: false, baseUrl: "", apiKey: "" });
   const [tmdb, setTmdb] = useState<ServiceDraft>({ enabled: false, baseUrl: "", apiKey: "" });
+  const [omdb, setOmdb] = useState<ServiceDraft>({ enabled: false, baseUrl: "", apiKey: "" });
 
   useEffect(() => {
     if (!settings) return;
@@ -1127,6 +1138,7 @@ function AdminSettings() {
     setRadarr({ enabled: settings.radarr.enabled, baseUrl: settings.radarr.baseUrl ?? "", apiKey: "" });
     setSonarr({ enabled: settings.sonarr.enabled, baseUrl: settings.sonarr.baseUrl ?? "", apiKey: "" });
     setTmdb({ enabled: settings.tmdb.enabled, baseUrl: "", apiKey: "" });
+    setOmdb({ enabled: settings.omdb.enabled, baseUrl: "", apiKey: "" });
   }, [settings]);
 
   const dismissIntro = () => {
@@ -1151,6 +1163,7 @@ function AdminSettings() {
           watchedLibraryIds: watchedIds,
           seerr, radarr, sonarr,
           tmdb: { enabled: tmdb.enabled, apiKey: tmdb.apiKey },
+          omdb: { enabled: omdb.enabled, apiKey: omdb.apiKey },
           comingSoonRegion: settings?.comingSoonRegion ?? "DE",
           comingSoonDaysAhead: settings?.comingSoonDaysAhead ?? 28,
         }),
@@ -1225,6 +1238,11 @@ function AdminSettings() {
           title="TMDB" description="Für genauere regionale Filmtermine."
           shows="Ohne TMDB bleiben Termine aus Radarr/Sonarr nutzbar, nur etwas ungenauer."
           draft={tmdb} onChange={setTmdb} existing={settings.tmdb} showsBaseUrl={false}
+        />
+        <ServiceCard
+          title="OMDB" description="Für IMDb- und Rotten-Tomatoes-Bewertungen im Detailscreen."
+          shows="Ohne OMDb bleibt nur die TMDB-eigene Bewertung sichtbar."
+          draft={omdb} onChange={setOmdb} existing={settings.omdb} showsBaseUrl={false}
         />
       </div>
     </section>

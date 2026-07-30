@@ -21,6 +21,7 @@ import (
 	"github.com/mrt187/EmbyInsights/internal/comingsoon"
 	"github.com/mrt187/EmbyInsights/internal/config"
 	"github.com/mrt187/EmbyInsights/internal/emby"
+	"github.com/mrt187/EmbyInsights/internal/omdb"
 	"github.com/mrt187/EmbyInsights/internal/secretbox"
 	"github.com/mrt187/EmbyInsights/internal/seerr"
 	"github.com/mrt187/EmbyInsights/internal/session"
@@ -130,6 +131,7 @@ func New(cfg config.Config) (*App, error) {
 	live.set(
 		seerr.NewClient(settings.Seerr.EnabledBaseURL(), settings.Seerr.EnabledAPIKey()),
 		comingsoon.NewClient(settings.Radarr.EnabledBaseURL(), settings.Radarr.EnabledAPIKey(), settings.Sonarr.EnabledBaseURL(), settings.Sonarr.EnabledAPIKey(), settings.TMDB.EnabledAPIKey(), settings.ComingSoonRegion, settings.ComingSoonDaysAhead),
+		omdb.NewClient(settings.OMDB.EnabledAPIKey()),
 		settings.ComingSoonRegion,
 		settings.NewForYouLibraryIDs,
 		settings.WatchedLibraryIDs,
@@ -197,6 +199,7 @@ func (app *App) applySettings(ctx context.Context, settings appconfig.Settings) 
 	app.live.set(
 		seerr.NewClient(persisted.Seerr.EnabledBaseURL(), persisted.Seerr.EnabledAPIKey()),
 		comingsoon.NewClient(persisted.Radarr.EnabledBaseURL(), persisted.Radarr.EnabledAPIKey(), persisted.Sonarr.EnabledBaseURL(), persisted.Sonarr.EnabledAPIKey(), persisted.TMDB.EnabledAPIKey(), persisted.ComingSoonRegion, persisted.ComingSoonDaysAhead),
+		omdb.NewClient(persisted.OMDB.EnabledAPIKey()),
 		persisted.ComingSoonRegion,
 		persisted.NewForYouLibraryIDs,
 		persisted.WatchedLibraryIDs,
@@ -768,6 +771,15 @@ func (app *App) seerrMediaDetailHandler(writer http.ResponseWriter, request *htt
 	if err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "media detail is unavailable"})
 		return
+	}
+	// OMDb ratings are decoration, not core data — a lookup failure (not
+	// configured, no IMDb id, OMDb down) must never turn an otherwise-fine
+	// media-detail response into a 502, so this ignores the error.
+	if omdbClient := app.live.omdbClient(); omdbClient != nil && detail.ImdbID != "" {
+		if ratings, err := omdbClient.Ratings(request.Context(), detail.ImdbID); err == nil {
+			detail.ImdbRating = ratings.ImdbRating
+			detail.RottenTomatoesRating = ratings.RottenTomatoesRating
+		}
 	}
 	respondJSON(writer, http.StatusOK, detail)
 }
@@ -1356,6 +1368,7 @@ func (app *App) adminGetSettings(writer http.ResponseWriter, request *http.Reque
 		"radarr":              viewOfService(settings.Radarr),
 		"sonarr":              viewOfService(settings.Sonarr),
 		"tmdb":                viewOfService(settings.TMDB),
+		"omdb":                viewOfService(settings.OMDB),
 		"comingSoonRegion":    settings.ComingSoonRegion,
 		"comingSoonDaysAhead": settings.ComingSoonDaysAhead,
 	})
@@ -1396,6 +1409,10 @@ func (app *App) adminPutSettings(writer http.ResponseWriter, request *http.Reque
 			Enabled bool   `json:"enabled"`
 			APIKey  string `json:"apiKey"`
 		} `json:"tmdb"`
+		OMDB struct {
+			Enabled bool   `json:"enabled"`
+			APIKey  string `json:"apiKey"`
+		} `json:"omdb"`
 		ComingSoonRegion    string `json:"comingSoonRegion"`
 		ComingSoonDaysAhead int    `json:"comingSoonDaysAhead"`
 	}
@@ -1438,6 +1455,7 @@ func (app *App) adminPutSettings(writer http.ResponseWriter, request *http.Reque
 		Radarr:              appconfig.ServiceSetting{Enabled: input.Radarr.Enabled, BaseURL: radarrURL, APIKey: input.Radarr.APIKey},
 		Sonarr:              appconfig.ServiceSetting{Enabled: input.Sonarr.Enabled, BaseURL: sonarrURL, APIKey: input.Sonarr.APIKey},
 		TMDB:                appconfig.ServiceSetting{Enabled: input.TMDB.Enabled, APIKey: input.TMDB.APIKey},
+		OMDB:                appconfig.ServiceSetting{Enabled: input.OMDB.Enabled, APIKey: input.OMDB.APIKey},
 		ComingSoonRegion:    region,
 		ComingSoonDaysAhead: daysAhead,
 	}
@@ -1466,6 +1484,7 @@ func (app *App) adminDebugLive(writer http.ResponseWriter, request *http.Request
 	respondJSON(writer, http.StatusOK, map[string]any{
 		"seerrConfigured":      seerrClient != nil,
 		"comingSoonConfigured": comingSoonClient != nil,
+		"omdbConfigured":       app.live.omdbClient() != nil,
 		"comingSoonRegion":     region,
 		"newForYouLibraryIds":  orEmpty(app.live.newForYouLibraries()),
 		"watchedLibraryIds":    orEmpty(app.live.watchedLibraries()),

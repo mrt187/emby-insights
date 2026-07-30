@@ -46,6 +46,17 @@ type MediaDetail struct {
 	// frontend shows a request button only then. Non-zero values mirror
 	// Seerr's own MediaStatus enum (5 = available).
 	MediaStatus int `json:"mediaStatus"`
+	// ImdbID is Seerr's own externalIds passthrough — never sent to the
+	// frontend (json:"-"), only used server-side by server.go to enrich the
+	// response with OMDb ratings before it goes out, since OMDb is keyed by
+	// IMDb id rather than TMDB id.
+	ImdbID string `json:"-"`
+	// ImdbRating / RottenTomatoesRating come from OMDb (optional
+	// integration), not TMDB — TMDB only exposes its own community score,
+	// already carried above as CommunityRating. Both stay empty when OMDb
+	// isn't configured or has no data for this title.
+	ImdbRating           string `json:"imdbRating,omitempty"`
+	RottenTomatoesRating string `json:"rottenTomatoesRating,omitempty"`
 }
 
 type MediaDetailReader interface {
@@ -102,6 +113,9 @@ func (client *Client) MediaDetail(ctx context.Context, mediaType string, tmdbID 
 				Status       int `json:"status"`
 			} `json:"seasons"`
 		} `json:"mediaInfo"`
+		ExternalIDs *struct {
+			ImdbID string `json:"imdbId"`
+		} `json:"externalIds"`
 	}
 
 	path := fmt.Sprintf("/api/v1/%s/%d", mediaType, tmdbID)
@@ -137,6 +151,10 @@ func (client *Client) MediaDetail(ctx context.Context, mediaType string, tmdbID 
 		Crew:            []Person{},
 		Seasons:         []RequestableSeason{},
 	}
+	if result.ExternalIDs != nil {
+		detail.ImdbID = result.ExternalIDs.ImdbID
+	}
+
 	seasonAvailability := map[int]int{}
 	if result.MediaInfo != nil {
 		detail.MediaStatus = result.MediaInfo.Status
