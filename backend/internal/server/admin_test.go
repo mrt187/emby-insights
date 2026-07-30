@@ -23,7 +23,25 @@ type fakeConfigStore struct {
 func (store *fakeConfigStore) Get(context.Context) (appconfig.Settings, error) {
 	return store.settings, nil
 }
+
+// Update mirrors appconfig.Store.Update's real merge behavior (an empty
+// APIKey keeps the previously stored one) so tests here can catch bugs in
+// how callers use the result — the real regression this guards against is
+// applySettings rebuilding the live Seerr/Radarr/Sonarr/TMDB clients from
+// its own unmerged input instead of re-reading what was actually persisted.
 func (store *fakeConfigStore) Update(_ context.Context, settings appconfig.Settings) error {
+	if settings.Seerr.APIKey == "" {
+		settings.Seerr.APIKey = store.settings.Seerr.APIKey
+	}
+	if settings.Radarr.APIKey == "" {
+		settings.Radarr.APIKey = store.settings.Radarr.APIKey
+	}
+	if settings.Sonarr.APIKey == "" {
+		settings.Sonarr.APIKey = store.settings.Sonarr.APIKey
+	}
+	if settings.TMDB.APIKey == "" {
+		settings.TMDB.APIKey = store.settings.TMDB.APIKey
+	}
 	store.settings = settings
 	return nil
 }
@@ -179,5 +197,38 @@ func TestLoginDoesNotReclaimAdminForALaterUser(t *testing.T) {
 	}
 	if configStore.ownerID != "user-1" {
 		t.Fatalf("ownerID = %q, want the original owner %q to be kept", configStore.ownerID, "user-1")
+	}
+}
+
+// TestApplySettingsKeepsLiveSeerrClientAfterResavingWithoutTheAPIKey guards
+// against a real production bug: applySettings used to rebuild the live
+// Seerr client from its own (possibly still-empty) input instead of what
+// Update actually persisted. Saving Verwaltung settings a second time
+// without retyping the API key — the normal flow, since the field always
+// starts blank — silently disabled Seerr at runtime while the database and
+// the admin GET view still showed it fully configured.
+func TestApplySettingsKeepsLiveSeerrClientAfterResavingWithoutTheAPIKey(t *testing.T) {
+	configStore := &fakeConfigStore{}
+	app := &App{appconfig: configStore, live: &liveConfig{}}
+	ctx := context.Background()
+
+	if err := app.applySettings(ctx, appconfig.Settings{
+		Seerr: appconfig.ServiceSetting{Enabled: true, BaseURL: "http://seerr.local", APIKey: "real-key"},
+	}); err != nil {
+		t.Fatalf("applySettings() first save error = %v", err)
+	}
+	if seerrClient, _, _ := app.live.current(); seerrClient == nil {
+		t.Fatal("live Seerr client is nil after the first save with a real key")
+	}
+
+	// Simulates clicking "Speichern" again without retyping the key — the
+	// field is empty because the GET response never returns the plaintext.
+	if err := app.applySettings(ctx, appconfig.Settings{
+		Seerr: appconfig.ServiceSetting{Enabled: true, BaseURL: "http://seerr.local", APIKey: ""},
+	}); err != nil {
+		t.Fatalf("applySettings() second save error = %v", err)
+	}
+	if seerrClient, _, _ := app.live.current(); seerrClient == nil {
+		t.Fatal("live Seerr client became nil after resaving without retyping the API key")
 	}
 }

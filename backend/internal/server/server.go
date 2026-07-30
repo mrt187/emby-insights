@@ -169,12 +169,24 @@ func (app *App) applySettings(ctx context.Context, settings appconfig.Settings) 
 	if err := app.appconfig.Update(ctx, settings); err != nil {
 		return err
 	}
+	// Update() merges an empty APIKey field with the previously stored key
+	// before persisting (so "save without retyping the key" keeps it) — but
+	// that merge happens on Update's own local copy and never modifies the
+	// settings variable here. Re-reading what was actually persisted, rather
+	// than reusing the possibly-still-empty input, is what the live clients
+	// must be built from; otherwise saving without retyping the key silently
+	// disables the integration at runtime even though the database (and the
+	// admin GET view) still show it fully configured.
+	persisted, err := app.appconfig.Get(ctx)
+	if err != nil {
+		return err
+	}
 	app.live.set(
-		seerr.NewClient(settings.Seerr.EnabledBaseURL(), settings.Seerr.EnabledAPIKey()),
-		comingsoon.NewClient(settings.Radarr.EnabledBaseURL(), settings.Radarr.EnabledAPIKey(), settings.Sonarr.EnabledBaseURL(), settings.Sonarr.EnabledAPIKey(), settings.TMDB.EnabledAPIKey(), settings.ComingSoonRegion, settings.ComingSoonDaysAhead),
-		settings.ComingSoonRegion,
-		settings.NewForYouLibraryIDs,
-		settings.WatchedLibraryIDs,
+		seerr.NewClient(persisted.Seerr.EnabledBaseURL(), persisted.Seerr.EnabledAPIKey()),
+		comingsoon.NewClient(persisted.Radarr.EnabledBaseURL(), persisted.Radarr.EnabledAPIKey(), persisted.Sonarr.EnabledBaseURL(), persisted.Sonarr.EnabledAPIKey(), persisted.TMDB.EnabledAPIKey(), persisted.ComingSoonRegion, persisted.ComingSoonDaysAhead),
+		persisted.ComingSoonRegion,
+		persisted.NewForYouLibraryIDs,
+		persisted.WatchedLibraryIDs,
 	)
 	// Requests/discover/comingsoon responses cached before this change (e.g.
 	// an empty result cached while Seerr was misconfigured) would otherwise
@@ -573,6 +585,7 @@ func (app *App) myRequests(writer http.ResponseWriter, request *http.Request) {
 		return app.requests.Requests(ctx, identity.UserID)
 	})
 	if err != nil {
+		log.Printf("requests unavailable for user %s: %v", identity.UserID, err)
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "requests are unavailable"})
 		return
 	}

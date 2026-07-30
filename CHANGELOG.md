@@ -8,6 +8,21 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.50] - 2026-07-30
+
+### Fixed
+
+- Saving Verwaltung settings without retyping an already-configured API key
+  (the normal flow — the field always starts blank) silently disabled that
+  integration at runtime, even though the database and the admin GET view
+  still showed it fully configured. `applySettings` rebuilt the live
+  Seerr/Radarr/Sonarr/TMDB clients from its own unmerged input instead of
+  re-reading what `Update` actually persisted; it now re-reads the
+  persisted settings first. Root cause of the recurring empty "Meine
+  Anfragen" / "Nichts im Trend" reports after 0.8.45–0.8.49.
+- Added a log line when `/api/requests` fails, so future issues show up in
+  `docker logs` instead of only as an empty list in the UI.
+
 ## [0.8.49] - 2026-07-30
 
 ### Fixed
