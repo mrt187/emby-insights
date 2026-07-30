@@ -8,6 +8,22 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.55] - 2026-07-31
+
+### Added
+
+- Verwaltung now opens with an activity chart: active users and Seerr
+  requests actually triggered by Emby Insights, per day, for the last 7
+  days. Backed by two new tables (`seerr_request_log`, `daily_activity`) —
+  daily activity is deduplicated through Redis so it costs one Postgres
+  write per user per day, not one per request.
+
+### Changed
+
+- The media-detail screen now shows "Verfügbar in Emby" / "Teilweise
+  verfügbar in Emby" next to the request area for Seerr-sourced titles,
+  so it's clear why the request button is (or isn't) there.
+
 ## [0.8.54] - 2026-07-31
 
 ### Fixed

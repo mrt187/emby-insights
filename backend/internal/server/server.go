@@ -71,6 +71,7 @@ type App struct {
 	seerrMediaDetail    seerr.MediaDetailReader
 	seerrRequestCreator seerr.RequestCreator
 	tracking            store.TrackingStore
+	activity            store.ActivityStore
 	favorites           emby.FavoriteWriter
 	sessions            session.Store
 	cookieSecure        bool
@@ -160,6 +161,7 @@ func New(cfg config.Config) (*App, error) {
 		seerrMediaDetail:    seerrFacade,
 		seerrRequestCreator: seerrFacade,
 		tracking:            store.NewPostgresTrackingStore(database),
+		activity:            store.NewPostgresActivityStore(database),
 		favorites:           embyClient,
 		sessions:            session.NewRedisStore(cache),
 		cookieSecure:        cfg.CookieSecure,
@@ -303,6 +305,7 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/admin/settings", app.adminGetSettings)
 	mux.HandleFunc("PUT /api/admin/settings", app.adminPutSettings)
 	mux.HandleFunc("GET /api/admin/debug/live", app.adminDebugLive)
+	mux.HandleFunc("GET /api/admin/activity", app.adminActivity)
 	return securityHeaders(mux)
 }
 
@@ -797,6 +800,11 @@ func (app *App) createSeerrRequestHandler(writer http.ResponseWriter, request *h
 	if err := app.seerrRequestCreator.CreateRequest(request.Context(), identity.UserID, input.MediaType, input.TmdbID, input.Seasons); err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "creating the Seerr request failed"})
 		return
+	}
+	if app.activity != nil {
+		if err := app.activity.RecordSeerrRequest(request.Context(), identity.UserID, input.MediaType, input.TmdbID); err != nil {
+			log.Printf("recording seerr request for activity chart failed: %v", err)
+		}
 	}
 	if app.redis != nil {
 		_ = app.redis.Del(request.Context(), "requests:"+identity.UserID).Err()
@@ -1464,6 +1472,31 @@ func (app *App) adminDebugLive(writer http.ResponseWriter, request *http.Request
 	})
 }
 
+const activityChartDays = 7
+
+// adminActivity backs the Verwaltung activity chart: how many Seerr
+// requests Emby Insights actually triggered, and how many distinct users
+// were active, per day, for the last week.
+func (app *App) adminActivity(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	if !app.requireAdmin(writer, request, identity) {
+		return
+	}
+	if app.activity == nil {
+		respondJSON(writer, http.StatusOK, []store.DailyActivity{})
+		return
+	}
+	days, err := app.activity.WeeklyActivity(request.Context(), activityChartDays)
+	if err != nil {
+		respondJSON(writer, http.StatusInternalServerError, map[string]string{"error": "activity data is unavailable"})
+		return
+	}
+	respondJSON(writer, http.StatusOK, orEmpty(days))
+}
+
 // validEmbyItemID matches the shapes Emby actually uses for item IDs — hex
 // GUIDs (with or without dashes) and numeric IDs. Anything else is rejected
 // before it can reach SetFavorite, which interpolates the ID into a URL sent
@@ -1635,7 +1668,34 @@ func (app *App) identityFromRequest(writer http.ResponseWriter, request *http.Re
 		respondJSON(writer, http.StatusUnauthorized, map[string]string{"error": "authentication required"})
 		return emby.Identity{}, false
 	}
+	app.recordActivity(identity.UserID)
 	return identity, true
+}
+
+// recordActivity marks a user active for today's Verwaltung activity chart.
+// It is fire-and-forget and must never add latency or a failure mode to the
+// request that triggered it — every authenticated endpoint runs through
+// identityFromRequest, so this fires on nearly every API call. A Redis
+// SETNX gates the (much rarer) Postgres write to once per user per day;
+// if Redis is unavailable, activity for that request is simply not
+// recorded rather than falling back to writing Postgres on every call.
+func (app *App) recordActivity(embyUserID string) {
+	if app.redis == nil || app.activity == nil {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		today := time.Now().UTC()
+		key := "activity:" + today.Format("2006-01-02") + ":" + embyUserID
+		first, err := app.redis.SetNX(ctx, key, "1", 26*time.Hour).Result()
+		if err != nil || !first {
+			return
+		}
+		if err := app.activity.RecordActive(ctx, embyUserID, today); err != nil {
+			log.Printf("recording daily activity failed: %v", err)
+		}
+	}()
 }
 
 func (app *App) identityProfile(ctx context.Context, identity emby.Identity) map[string]any {

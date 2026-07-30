@@ -62,7 +62,7 @@ function visibleNav(user: CurrentUser): { label: Page; icon: IconName }[] {
   return items;
 }
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.54";
+const APP_VERSION = "0.8.55";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -831,6 +831,7 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated, onHiddenChang
   // means there is nothing left to request.
   const requestableSeasons = (detail?.seasons?.filter(isRequestableSeason) ?? []).filter((season) => !season.available);
   const seerrStatusPartiallyAvailable = 4;
+  const seerrStatusAvailable = 5;
   const canRequest = selection.source === "seerr" && (!detail?.mediaStatus || (detail.mediaStatus === seerrStatusPartiallyAvailable && mediaType === "tv" && requestableSeasons.length > 0));
 
   const toggleSeason = (seasonNumber: number) => {
@@ -919,10 +920,12 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated, onHiddenChang
             {tracking.hiddenInProgress ? "Wieder in „Noch nicht fertig“ zeigen" : "Aus „Noch nicht fertig“ ausblenden"}
           </button>
         </div>}
-        {canRequest && <div className="request-row">
-          {requestState === "done"
+        {selection.source === "seerr" && (canRequest || detail.mediaStatus === seerrStatusAvailable || detail.mediaStatus === seerrStatusPartiallyAvailable) && <div className="request-row">
+          {detail.mediaStatus === seerrStatusAvailable && <span className="media-status-badge">Verfügbar in Emby</span>}
+          {detail.mediaStatus === seerrStatusPartiallyAvailable && <span className="media-status-badge">Teilweise verfügbar in Emby</span>}
+          {canRequest && (requestState === "done"
             ? <p className="request-confirmation">Angefragt ✓</p>
-            : <button type="button" className="request-button" onClick={() => setRequestModalOpen(true)}>Anfragen</button>}
+            : <button type="button" className="request-button" onClick={() => setRequestModalOpen(true)}>Anfragen</button>)}
         </div>}
         {detail.overview && <section className="media-detail-overview"><h2>Übersicht</h2><OverviewText text={detail.overview} /></section>}
         </div>
@@ -1042,14 +1045,65 @@ type AdminSettingsView = {
   seerr: ServiceView; radarr: ServiceView; sonarr: ServiceView; tmdb: ServiceView;
   comingSoonRegion: string; comingSoonDaysAhead: number;
 };
+type DailyActivity = { date: string; requestCount: number; activeUsers: number };
 type ServiceDraft = { enabled: boolean; baseUrl: string; apiKey: string };
 const SETUP_INTRO_SEEN_KEY = "emby-insights-setup-intro-seen";
+
+const activityDayFormatter = new Intl.DateTimeFormat("de-DE", { weekday: "short" });
+
+// ActivityChart answers "is Emby Insights actually being used?" — grouped
+// columns, one shared count axis (never two y-scales for two count series
+// of the same unit), oldest day first. A <details> table covers the
+// non-visual/accessible path since a hand-rolled SVG-free bar chart has no
+// other way to expose exact values to a screen reader.
+function ActivityChart({ data, state }: { data: DailyActivity[]; state: LoadState }) {
+  const max = Math.max(1, ...data.flatMap((day) => [day.activeUsers, day.requestCount]));
+  const hasData = data.some((day) => day.activeUsers > 0 || day.requestCount > 0);
+  return <section className="admin-section activity-chart-card" aria-label="Aktivität">
+    <div className="section-heading"><div><p className="eyebrow">AKTIVITÄT</p><h2>Aktive Nutzer &amp; Seerr-Anfragen (letzte 7 Tage)</h2></div></div>
+    {state === "loading" && <div className="activity-chart" aria-hidden="true">
+      <p className="sr-only" role="status">Wird geladen …</p>
+      <div className="activity-chart-columns">{Array.from({ length: 7 }, (_, index) => <div className="activity-chart-column" key={index}>
+        <div className="activity-chart-bars"><span className="skeleton activity-chart-bar-skeleton" /><span className="skeleton activity-chart-bar-skeleton" /></div>
+        <span className="skeleton skeleton-line-xs" />
+      </div>)}</div>
+    </div>}
+    {state === "error" && <p className="poster-status">Aktivitätsdaten nicht verfügbar.</p>}
+    {state === "ready" && !hasData && <p className="poster-status">Noch keine Aktivität in den letzten 7 Tagen.</p>}
+    {state === "ready" && hasData && <>
+      <div className="activity-chart-legend">
+        <span className="activity-legend-item"><span className="activity-legend-swatch activity-swatch-users" /> Aktive Nutzer</span>
+        <span className="activity-legend-item"><span className="activity-legend-swatch activity-swatch-requests" /> Seerr-Anfragen</span>
+      </div>
+      <div className="activity-chart-columns" role="img" aria-label="Balkendiagramm: aktive Nutzer und ausgelöste Seerr-Anfragen pro Tag über die letzten 7 Tage">
+        {data.map((day) => {
+          const weekday = activityDayFormatter.format(new Date(`${day.date}T00:00:00`));
+          return <div className="activity-chart-column" key={day.date}>
+            <div className="activity-chart-bars">
+              <div className="activity-chart-bar activity-bar-users" style={{ height: `${(day.activeUsers / max) * 100}%` }} title={`${weekday}: ${day.activeUsers} aktive Nutzer`} />
+              <div className="activity-chart-bar activity-bar-requests" style={{ height: `${(day.requestCount / max) * 100}%` }} title={`${weekday}: ${day.requestCount} Seerr-Anfragen`} />
+            </div>
+            <span className="activity-chart-day-label">{weekday}</span>
+          </div>;
+        })}
+      </div>
+      <details className="activity-chart-table-details">
+        <summary>Als Tabelle anzeigen</summary>
+        <table className="activity-chart-table">
+          <thead><tr><th scope="col">Tag</th><th scope="col">Aktive Nutzer</th><th scope="col">Seerr-Anfragen</th></tr></thead>
+          <tbody>{data.map((day) => <tr key={day.date}><th scope="row">{formatFullDate(day.date)}</th><td>{day.activeUsers}</td><td>{day.requestCount}</td></tr>)}</tbody>
+        </table>
+      </details>
+    </>}
+  </section>;
+}
 
 // AdminSettings is the Verwaltung page: it replaces manually editing .env
 // with a GUI for library selection and the four optional integrations.
 // Nothing here is enforced client-side only — every /api/admin/* call is
 // re-checked server-side (see requireAdmin in the backend).
 function AdminSettings() {
+  const [activity, activityState] = useApiResource<DailyActivity[]>("/api/admin/activity", []);
   const [settings, settingsState, refetchSettings] = useApiResource<AdminSettingsView | null>("/api/admin/settings", null);
   const [libraries, librariesState] = useApiResource<EmbyLibrary[]>("/api/admin/libraries", []);
   const [saving, setSaving] = useState(false);
@@ -1121,6 +1175,8 @@ function AdminSettings() {
       <p>Richte hier ein, welche Bibliotheken genutzt werden und welche optionalen Dienste (Seerr, Radarr, Sonarr, TMDB) angebunden sind. Alles ist optional — ohne Einrichtung bleiben die zugehörigen Bereiche einfach ausgeblendet.</p>
       <button type="button" className="request-button" onClick={dismissIntro}>Verstanden</button>
     </section>}
+
+    <ActivityChart data={activity} state={activityState} />
 
     <section className="admin-section" aria-label="Bibliotheken">
       <div className="section-heading"><div><p className="eyebrow">BIBLIOTHEKEN</p><h2>Welche Bibliotheken sollen genutzt werden?</h2></div></div>
