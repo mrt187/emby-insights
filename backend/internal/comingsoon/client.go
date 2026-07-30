@@ -240,7 +240,7 @@ func (client *Client) movieDates(ctx context.Context, tmdbID int, fallback movie
 			} `json:"release_dates"`
 		} `json:"results"`
 	}
-	path := fmt.Sprintf("https://api.themoviedb.org/3/movie/%d/release_dates?api_key=%s", tmdbID, url.QueryEscape(client.tmdbKey))
+	path := fmt.Sprintf("https://api.themoviedb.org/3/movie/%d/release_dates", tmdbID)
 	if err := client.get(ctx, path, client.tmdbKey, &response); err != nil {
 		// A calendar remains useful during a temporary TMDB outage. Radarr's
 		// dates are less reliably regional, but are safer than hiding every
@@ -287,7 +287,7 @@ func (client *Client) findTMDBTV(ctx context.Context, tvdbID int) (string, error
 			ID int `json:"id"`
 		} `json:"tv_results"`
 	}
-	path := fmt.Sprintf("https://api.themoviedb.org/3/find/%d?external_source=tvdb_id&api_key=%s", tvdbID, url.QueryEscape(client.tmdbKey))
+	path := fmt.Sprintf("https://api.themoviedb.org/3/find/%d?external_source=tvdb_id", tvdbID)
 	if err := client.get(ctx, path, client.tmdbKey, &response); err != nil {
 		return "", nil
 	}
@@ -302,7 +302,9 @@ func (client *Client) get(ctx context.Context, endpoint, apiKey string, target a
 	if err != nil {
 		return err
 	}
-	if !strings.Contains(endpoint, "themoviedb.org") {
+	if strings.Contains(endpoint, "themoviedb.org") {
+		request.Header.Set("Authorization", "Bearer "+apiKey)
+	} else {
 		request.Header.Set("X-Api-Key", apiKey)
 	}
 	response, err := client.httpClient.Do(request)

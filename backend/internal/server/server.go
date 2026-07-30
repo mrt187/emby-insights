@@ -4,12 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -76,6 +80,12 @@ type App struct {
 	embyClient          *emby.Client
 	appconfig           ConfigStore
 	live                *liveConfig
+	loginLimiters       map[string]*ipRateLimiter
+	loginLimitersMu     sync.RWMutex
+}
+
+type ipRateLimiter struct {
+	attempts []time.Time
 }
 
 func New(cfg config.Config) (*App, error) {
@@ -159,6 +169,7 @@ func New(cfg config.Config) (*App, error) {
 		embyClient:          embyClient,
 		appconfig:           appconfigStore,
 		live:                live,
+		loginLimiters:       make(map[string]*ipRateLimiter),
 	}, nil
 }
 
@@ -210,6 +221,16 @@ func (app *App) invalidateIntegrationCaches(ctx context.Context) {
 }
 
 func (app *App) Close() { app.redis.Close(); app.database.Close() }
+
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("X-XSS-Protection", "1; mode=block")
+		w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		next.ServeHTTP(w, r)
+	})
+}
 
 func (app *App) Handler() http.Handler {
 	mux := http.NewServeMux()
@@ -282,7 +303,7 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/admin/settings", app.adminGetSettings)
 	mux.HandleFunc("PUT /api/admin/settings", app.adminPutSettings)
 	mux.HandleFunc("GET /api/admin/debug/live", app.adminDebugLive)
-	return mux
+	return securityHeaders(mux)
 }
 
 func health(writer http.ResponseWriter, _ *http.Request) {
@@ -303,7 +324,42 @@ func (app *App) ready(writer http.ResponseWriter, request *http.Request) {
 	respondJSON(writer, http.StatusOK, map[string]string{"status": "ready"})
 }
 
+func (app *App) isLoginAllowed(clientIP string) bool {
+	app.loginLimitersMu.Lock()
+	limiter, exists := app.loginLimiters[clientIP]
+	if !exists {
+		limiter = &ipRateLimiter{}
+		app.loginLimiters[clientIP] = limiter
+	}
+	app.loginLimitersMu.Unlock()
+
+	now := time.Now()
+	var valid []time.Time
+	for _, t := range limiter.attempts {
+		if now.Sub(t) < time.Minute {
+			valid = append(valid, t)
+		}
+	}
+
+	if len(valid) >= 5 {
+		return false
+	}
+
+	limiter.attempts = append(valid, now)
+	return true
+}
+
 func (app *App) login(writer http.ResponseWriter, request *http.Request) {
+	clientIP := request.Header.Get("X-Forwarded-For")
+	if clientIP == "" {
+		clientIP = request.RemoteAddr
+	}
+
+	if !app.isLoginAllowed(clientIP) {
+		respondJSON(writer, http.StatusTooManyRequests, map[string]string{"error": "too many login attempts, try again later"})
+		return
+	}
+
 	var input struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
@@ -1237,6 +1293,41 @@ func viewOfService(setting appconfig.ServiceSetting) serviceSettingView {
 	}
 }
 
+func validateServiceURL(baseURL string) error {
+	if baseURL == "" {
+		return nil
+	}
+
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("only http and https schemes allowed")
+	}
+
+	host := u.Hostname()
+	if host == "" {
+		return fmt.Errorf("URL has no hostname")
+	}
+
+	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+		return fmt.Errorf("localhost and loopback addresses not allowed")
+	}
+
+	if host == "169.254.169.254" {
+		return fmt.Errorf("metadata server not allowed")
+	}
+
+	ip := net.ParseIP(host)
+	if ip != nil && ip.IsPrivate() {
+		return fmt.Errorf("private IP addresses not allowed: %s", host)
+	}
+
+	return nil
+}
+
 func (app *App) adminGetSettings(writer http.ResponseWriter, request *http.Request) {
 	identity, ok := app.identityFromRequest(writer, request)
 	if !ok {
@@ -1315,12 +1406,29 @@ func (app *App) adminPutSettings(writer http.ResponseWriter, request *http.Reque
 		daysAhead = 28
 	}
 
+	seerrURL := strings.TrimSpace(input.Seerr.BaseURL)
+	radarrURL := strings.TrimSpace(input.Radarr.BaseURL)
+	sonarrURL := strings.TrimSpace(input.Sonarr.BaseURL)
+
+	if err := validateServiceURL(seerrURL); err != nil {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("Invalid Seerr URL: %v", err)})
+		return
+	}
+	if err := validateServiceURL(radarrURL); err != nil {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("Invalid Radarr URL: %v", err)})
+		return
+	}
+	if err := validateServiceURL(sonarrURL); err != nil {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("Invalid Sonarr URL: %v", err)})
+		return
+	}
+
 	settings := appconfig.Settings{
 		NewForYouLibraryIDs: input.NewForYouLibraryIDs,
 		WatchedLibraryIDs:   input.WatchedLibraryIDs,
-		Seerr:               appconfig.ServiceSetting{Enabled: input.Seerr.Enabled, BaseURL: strings.TrimSpace(input.Seerr.BaseURL), APIKey: input.Seerr.APIKey},
-		Radarr:              appconfig.ServiceSetting{Enabled: input.Radarr.Enabled, BaseURL: strings.TrimSpace(input.Radarr.BaseURL), APIKey: input.Radarr.APIKey},
-		Sonarr:              appconfig.ServiceSetting{Enabled: input.Sonarr.Enabled, BaseURL: strings.TrimSpace(input.Sonarr.BaseURL), APIKey: input.Sonarr.APIKey},
+		Seerr:               appconfig.ServiceSetting{Enabled: input.Seerr.Enabled, BaseURL: seerrURL, APIKey: input.Seerr.APIKey},
+		Radarr:              appconfig.ServiceSetting{Enabled: input.Radarr.Enabled, BaseURL: radarrURL, APIKey: input.Radarr.APIKey},
+		Sonarr:              appconfig.ServiceSetting{Enabled: input.Sonarr.Enabled, BaseURL: sonarrURL, APIKey: input.Sonarr.APIKey},
 		TMDB:                appconfig.ServiceSetting{Enabled: input.TMDB.Enabled, APIKey: input.TMDB.APIKey},
 		ComingSoonRegion:    region,
 		ComingSoonDaysAhead: daysAhead,
