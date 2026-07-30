@@ -8,6 +8,19 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.28] - 2026-07-30
+
+### Fixed
+
+- The mobile refresh icon next to the notification bell was drawn
+  asymmetrically and sat visually off-center; replaced with a balanced,
+  rotationally symmetric refresh icon.
+
+### Added
+
+- The app version is now shown on the profile page as well, so it stays
+  visible on mobile where the sidebar (and its version line) is hidden.
+
 ## [0.8.27] - 2026-07-30
 
 ### Changed
