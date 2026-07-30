@@ -176,7 +176,25 @@ func (app *App) applySettings(ctx context.Context, settings appconfig.Settings) 
 		settings.NewForYouLibraryIDs,
 		settings.WatchedLibraryIDs,
 	)
+	// Requests/discover/comingsoon responses cached before this change (e.g.
+	// an empty result cached while Seerr was misconfigured) would otherwise
+	// keep being served for up to their full TTL — a Verwaltung change must
+	// take effect immediately, not "eventually".
+	app.invalidateIntegrationCaches(ctx)
 	return nil
+}
+
+func (app *App) invalidateIntegrationCaches(ctx context.Context) {
+	if app.redis == nil {
+		return
+	}
+	for _, pattern := range []string{"requests:*", "discover:*", "comingsoon:*"} {
+		keys, err := app.redis.Keys(ctx, pattern).Result()
+		if err != nil || len(keys) == 0 {
+			continue
+		}
+		_ = app.redis.Del(ctx, keys...).Err()
+	}
 }
 
 func (app *App) Close() { app.redis.Close(); app.database.Close() }

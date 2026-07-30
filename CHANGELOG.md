@@ -8,6 +8,21 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.49] - 2026-07-30
+
+### Fixed
+
+- Saving Verwaltung settings now invalidates the requests/discover/comingsoon
+  Redis caches immediately. Previously a result cached while an integration
+  was misconfigured (e.g. an empty Seerr requests list) could keep being
+  served for up to its full TTL after fixing the configuration.
+
+### Changed
+
+- Moved the "Ausblenden" action for a series in "Noch nicht fertig" off the
+  poster row and onto the media detail screen (opens by tapping the
+  poster), instead of a button on every poster tile.
+
 ## [0.8.48] - 2026-07-30
 
 ### Added
