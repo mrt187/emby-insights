@@ -8,6 +8,18 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.53] - 2026-07-30
+
+### Fixed
+
+- TMDB requests failed with 401 for accounts using a legacy v3 API key,
+  since the previous release switched TMDB auth to a Bearer header, which
+  only v4 Read Access Tokens support. This silently broke the "Demnächst"
+  TV-episode TMDB lookup (`findTMDBTV` swallowed the error and returned an
+  empty TMDB ID), so clicking those posters showed "Details nicht
+  verfügbar." The client now detects the key format and uses Bearer auth
+  for v4 tokens, falling back to the query-parameter auth v3 keys require.
+
 ## [0.8.52] - 2026-07-30
 
 ### Security

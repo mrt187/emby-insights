@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -296,13 +297,32 @@ func (client *Client) findTMDBTV(ctx context.Context, tvdbID int) (string, error
 	return fmt.Sprintf("%d", response.Results[0].ID), nil
 }
 
+// isTMDBv4Token distinguishes a v4 "API Read Access Token" (a JWT: three
+// base64 segments joined by dots) from a legacy v3 API key (a 32-char hex
+// string). Only v4 tokens work with Bearer auth; v3 keys must go in the
+// query string, which is TMDB's only auth method for that key type.
+func isTMDBv4Token(key string) bool {
+	return strings.Count(key, ".") == 2 && len(key) > 40
+}
+
 func (client *Client) get(ctx context.Context, endpoint, apiKey string, target any) error {
+	isTMDB := strings.Contains(endpoint, "themoviedb.org")
+	v4 := isTMDB && isTMDBv4Token(apiKey)
+	if isTMDB && !v4 {
+		separator := "?"
+		if strings.Contains(endpoint, "?") {
+			separator = "&"
+		}
+		endpoint += separator + "api_key=" + url.QueryEscape(apiKey)
+	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return err
 	}
-	if strings.Contains(endpoint, "themoviedb.org") {
-		request.Header.Set("Authorization", "Bearer "+apiKey)
+	if isTMDB {
+		if v4 {
+			request.Header.Set("Authorization", "Bearer "+apiKey)
+		}
 	} else {
 		request.Header.Set("X-Api-Key", apiKey)
 	}

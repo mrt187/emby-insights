@@ -1,6 +1,6 @@
 {
   "name": "emby-insights-frontend",
-  "version": "0.8.52",
+  "version": "0.8.53",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
