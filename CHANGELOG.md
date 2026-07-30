@@ -8,6 +8,21 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.27] - 2026-07-30
+
+### Changed
+
+- Touch targets for the star rating and favorite/watchlist toggles now meet
+  the 44px minimum without changing their visible size.
+- Poster rows, media grids, and statistics cards/charts show a skeleton
+  placeholder instead of plain loading text.
+
+### Internal
+
+- Deduplicated ~12 near-identical fetch effects in the dashboard and
+  statistics views behind a shared `useApiResource` hook, and extracted a
+  shared `useEscapeKey` hook for overlay screens.
+
 ## [0.8.26] - 2026-07-30
 
 ### Fixed

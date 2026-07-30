@@ -4,6 +4,13 @@
 > If that file exists, its rules **override** this Master file.
 > If not, strictly follow the rules below.
 
+> ⚠️ **SUPERSEDED FOR THIS PRODUCT:** The palette, fonts, and page pattern
+> below are the generic tool output from the initial `--design-system` run
+> and were never implemented. The shipped app uses the dark palette and
+> component rules documented in `pages/today-dashboard.md` (`--ink`,
+> `--mint-bright`, `--cobalt`, `--ember`, `--violet`, Geist fonts) — treat
+> that file as the actual source of truth, not the rose/Inter palette here.
+
 ---
 
 **Project:** Emby Insights

@@ -45,7 +45,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.26";
+const APP_VERSION = "0.8.27";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -80,23 +80,45 @@ function formatFullDate(value: string) {
   return Number.isNaN(date.getTime()) ? "" : fullDateFormatter.format(date);
 }
 
+function useApiResource<T>(path: string | null, initialValue: T): [T, LoadState, () => void] {
+  const [data, setData] = useState<T>(initialValue);
+  const [result, setResult] = useState<{ path: string | null; state: LoadState }>({ path: null, state: "loading" });
+  const [reloadToken, setReloadToken] = useState(0);
+
+  useEffect(() => {
+    if (!path) return;
+    let active = true;
+    fetch(path, { credentials: "include" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`${path} unavailable`);
+        const json = await response.json();
+        if (active) { setData(json); setResult({ path, state: "ready" }); }
+      })
+      .catch(() => active && setResult({ path, state: "error" }));
+    return () => { active = false; };
+  }, [path, reloadToken]);
+
+  // Derived rather than set eagerly in the effect above: a path change (e.g.
+  // switching the stats period) should read as "loading" immediately, without
+  // an extra synchronous setState at the top of the effect.
+  const state: LoadState = !path || result.path !== path ? "loading" : result.state;
+  return [data, state, () => setReloadToken((token) => token + 1)];
+}
+
+function useEscapeKey(onEscape: () => void) {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onEscape(); };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onEscape]);
+}
+
 export default function Home() {
   const [page, setPage] = useState<Page>("Heute");
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [unread, setUnread] = useState(2);
   const [user, setUser] = useState<{ id: string; name: string } | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
-  const [upcomingItems, setUpcomingItems] = useState<UpcomingItem[]>([]);
-  const [upcomingState, setUpcomingState] = useState<LoadState>("loading");
-  const [cinemaItems, setCinemaItems] = useState<UpcomingItem[]>([]);
-  const [cinemaState, setCinemaState] = useState<LoadState>("loading");
-  const [requestItems, setRequestItems] = useState<RequestItem[]>([]);
-  const [requestState, setRequestState] = useState<LoadState>("loading");
-  const [newForYouItems, setNewForYouItems] = useState<NewForYouItem[]>([]);
-  const [newForYouState, setNewForYouState] = useState<LoadState>("loading");
-  const [availableRequests, setAvailableRequests] = useState<RequestItem[]>([]);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [totalRequests, setTotalRequests] = useState<number | null>(null);
   const [selectedMedia, setSelectedMedia] = useState<MediaSelection | null>(null);
   const noticeRef = useRef<HTMLDivElement>(null);
   const noticeButtonRef = useRef<HTMLButtonElement>(null);
@@ -108,99 +130,16 @@ export default function Home() {
       .finally(() => setCheckingSession(false));
   }, []);
 
-  useEffect(() => {
-    if (!user) return;
-    let active = true;
-    fetch("/api/upcoming", { credentials: "include" })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("upcoming unavailable");
-        const data = await response.json();
-        if (active) { setUpcomingItems(data); setUpcomingState("ready"); }
-      })
-      .catch(() => active && setUpcomingState("error"));
-    return () => { active = false; };
-  }, [user]);
+  const [upcomingItems, upcomingState] = useApiResource<UpcomingItem[]>(user ? "/api/upcoming" : null, []);
+  const [cinemaItems, cinemaState] = useApiResource<UpcomingItem[]>(user ? "/api/in-cinemas" : null, []);
+  const [requestItems, requestState, refetchRequestItems] = useApiResource<RequestItem[]>(user ? "/api/requests" : null, []);
+  const [requestTotal, , refetchRequestTotal] = useApiResource<{ total: number } | null>(user ? "/api/requests/total" : null, null);
+  const totalRequests = requestTotal?.total ?? null;
+  const [newForYouItems, newForYouState] = useApiResource<NewForYouItem[]>(user ? "/api/new-for-you" : null, []);
+  const [availableRequests] = useApiResource<RequestItem[]>(user ? "/api/requests/available" : null, []);
+  const [userProfile] = useApiResource<UserProfile | null>(user ? "/api/me/profile" : null, null);
 
-  useEffect(() => {
-    if (!user) return;
-    let active = true;
-    fetch("/api/in-cinemas", { credentials: "include" })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("cinema releases unavailable");
-        const data = await response.json();
-        if (active) { setCinemaItems(data); setCinemaState("ready"); }
-      })
-      .catch(() => active && setCinemaState("error"));
-    return () => { active = false; };
-  }, [user]);
-
-  const refetchRequests = () => {
-    if (!user) return;
-    fetch("/api/requests", { credentials: "include" })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("requests unavailable");
-        const data = await response.json();
-        setRequestItems(data);
-        setRequestState("ready");
-      })
-      .catch(() => setRequestState("error"));
-    fetch("/api/requests/total", { credentials: "include" })
-      .then(async (response) => { if (!response.ok) throw new Error("request total unavailable"); const data = await response.json(); setTotalRequests(data.total); })
-      .catch(() => null);
-  };
-
-  useEffect(() => {
-    if (!user) return;
-    let active = true;
-    fetch("/api/me/profile", { credentials: "include" })
-      .then(async (response) => { if (!response.ok) throw new Error("profile unavailable"); const data = await response.json(); if (active) setUserProfile(data); })
-      .catch(() => null);
-    return () => { active = false; };
-  }, [user]);
-
-  useEffect(() => {
-    if (!user) return;
-    let active = true;
-    fetch("/api/requests/total", { credentials: "include" })
-      .then(async (response) => { if (!response.ok) throw new Error("request total unavailable"); const data = await response.json(); if (active) setTotalRequests(data.total); })
-      .catch(() => null);
-    return () => { active = false; };
-  }, [user]);
-
-  useEffect(() => {
-    if (!user) return;
-    let active = true;
-    fetch("/api/requests", { credentials: "include" })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("requests unavailable");
-        const data = await response.json();
-        if (active) { setRequestItems(data); setRequestState("ready"); }
-      })
-      .catch(() => active && setRequestState("error"));
-    return () => { active = false; };
-  }, [user]);
-
-  useEffect(() => {
-    if (!user) return;
-    let active = true;
-    fetch("/api/requests/available", { credentials: "include" })
-      .then(async (response) => { if (!response.ok) throw new Error("available requests unavailable"); const data = await response.json(); if (active) setAvailableRequests(data); })
-      .catch(() => null);
-    return () => { active = false; };
-  }, [user]);
-
-  useEffect(() => {
-    if (!user) return;
-    let active = true;
-    fetch("/api/new-for-you", { credentials: "include" })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("new-for-you unavailable");
-        const data = await response.json();
-        if (active) { setNewForYouItems(data); setNewForYouState("ready"); }
-      })
-      .catch(() => active && setNewForYouState("error"));
-    return () => { active = false; };
-  }, [user]);
+  const refetchRequests = () => { refetchRequestItems(); refetchRequestTotal(); };
 
   useEffect(() => {
     if (!noticeOpen) return;
@@ -393,11 +332,7 @@ function RelevantRow({ event, onOpen }: { event: RelevantEvent; onOpen?: () => v
 }
 
 function RelevantAllScreen({ events, onClose }: { events: RelevantEvent[]; onClose: () => void }) {
-  useEffect(() => {
-    const onKeyDown = (keyboardEvent: KeyboardEvent) => { if (keyboardEvent.key === "Escape") onClose(); };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  useEscapeKey(onClose);
 
   return <div className="media-detail-overlay media-grid-overlay" role="dialog" aria-modal="true" aria-label="Jetzt relevant">
     <div className="media-detail-scroll">
@@ -408,8 +343,10 @@ function RelevantAllScreen({ events, onClose }: { events: RelevantEvent[]; onClo
   </div>;
 }
 
-function MetricCard({ icon, tone, value, label, detail, positive, genre = false, onClick }: { icon: IconName; tone: Tone; value: string | number; label: string; detail: string; positive?: boolean; genre?: boolean; onClick?: () => void }) {
-  const inner = <><span className="metric-icon"><Icon name={icon} /></span><strong>{value}</strong><p>{label}</p><small className={positive ? "up" : undefined}>{detail}</small></>;
+function MetricCard({ icon, tone, value, label, detail, positive, genre = false, loading, onClick }: { icon: IconName; tone: Tone; value: string | number; label: string; detail: string; positive?: boolean; genre?: boolean; loading?: boolean; onClick?: () => void }) {
+  const inner = loading
+    ? <><span className="metric-icon"><Icon name={icon} /></span><span className="skeleton skeleton-value" aria-hidden="true" /><p>{label}</p><span className="skeleton skeleton-detail" aria-hidden="true" /><span className="sr-only" role="status">Wird geladen …</span></>
+    : <><span className="metric-icon"><Icon name={icon} /></span><strong>{value}</strong><p>{label}</p><small className={positive ? "up" : undefined}>{detail}</small></>;
   return onClick
     ? <button type="button" className={`metric-card metric-card-button tone-${tone}${genre ? " genre-card" : ""}`} onClick={onClick}>{inner}</button>
     : <article className={`metric-card tone-${tone}${genre ? " genre-card" : ""}`}>{inner}</article>;
@@ -435,7 +372,7 @@ function PosterRow<T extends { id: string; title: string; posterUrl?: string }>(
       <div>{eyebrow && <p className="eyebrow">{eyebrow}</p>}{title && <h2>{title}</h2>}</div>
       {items.length > 0 && <button type="button" className="text-button poster-view-all" onClick={() => setGridOpen(true)} aria-label={`Alle ${resolvedGridTitle} anzeigen`}><Icon name="arrow" /></button>}
     </div>}
-    {state === "loading" && <p className="poster-status" role="status">Wird geladen …</p>}
+    {state === "loading" && <PosterSkeletonRow />}
     {state === "error" && <p className="poster-status">Nicht verfügbar</p>}
     {state !== "loading" && state !== "error" && items.length === 0 && <p className="poster-status">{emptyLabel ?? "Nichts vorhanden."}</p>}
     {items.length > 0 && <div className="poster-scroller">{items.map((item) => {
@@ -452,6 +389,18 @@ function PosterRow<T extends { id: string; title: string; posterUrl?: string }>(
     })}</div>}
     {gridOpen && <MediaGridScreen title={resolvedGridTitle} items={items} detail={detail} progress={progress} onSelect={onSelect} onClose={() => setGridOpen(false)} />}
   </section>;
+}
+
+function PosterSkeletonRow({ count = 4 }: { count?: number }) {
+  return <>
+    <p className="poster-status sr-only" role="status">Wird geladen …</p>
+    <div className="poster-scroller" aria-hidden="true">
+      {Array.from({ length: count }, (_, index) => <div className="poster-entry" key={index}>
+        <div className="poster wide skeleton" />
+        <span className="skeleton skeleton-line" /><span className="skeleton skeleton-line" />
+      </div>)}
+    </div>
+  </>;
 }
 
 function topGenres(movies: readonly WatchedItem[], series: readonly WatchedItem[]) {
@@ -483,12 +432,21 @@ function daypartChartData(hours: readonly HourWatchTime[]) {
   return DAYPARTS.map((daypart) => ({ label: daypart.label, value: daypart.hours.reduce((sum, hour) => sum + secondsByHour[hour], 0) }));
 }
 
-function BarChart({ title, data, formatValue }: { title: string; data: { label: string; value: number }[]; formatValue?: (value: number) => string }) {
+function BarChart({ title, data, formatValue, loading }: { title: string; data: { label: string; value: number }[]; formatValue?: (value: number) => string; loading?: boolean }) {
   const max = Math.max(1, ...data.map((entry) => entry.value));
   const hasData = data.some((entry) => entry.value > 0);
   return <section className="chart-card">
     <h3>{title}</h3>
-    {hasData
+    {loading
+      ? <div className="bar-chart" aria-hidden="true">
+        <p className="sr-only" role="status">Wird geladen …</p>
+        {Array.from({ length: 4 }, (_, index) => <div className="bar-row" key={index}>
+          <span className="skeleton skeleton-line-xs" />
+          <div className="bar-track"><div className="skeleton bar-fill-skeleton" /></div>
+          <span className="skeleton skeleton-line-xs" />
+        </div>)}
+      </div>
+      : hasData
       ? <div className="bar-chart" role="img" aria-label={title}>
         {data.map((entry) => <div className="bar-row" key={entry.label}>
           <span className="bar-label">{entry.label}</span>
@@ -502,133 +460,28 @@ function BarChart({ title, data, formatValue }: { title: string; data: { label: 
 
 function Stats({ user, onSelectMedia }: { user: { name: string }; onSelectMedia: (selection: MediaSelection) => void }) {
   const [period, setPeriod] = useState<Period>("Woche");
-  const [statistics, setStatistics] = useState<PersonalStats | null>(null);
-  const [state, setState] = useState<LoadState>("loading");
-  const [continueWatching, setContinueWatching] = useState<ContinueWatchingItem[]>([]);
-  const [continueWatchingState, setContinueWatchingState] = useState<LoadState>("loading");
-  const [watchedMovies, setWatchedMovies] = useState<WatchedItem[]>([]);
-  const [watchedMoviesState, setWatchedMoviesState] = useState<LoadState>("loading");
-  const [watchedSeries, setWatchedSeries] = useState<WatchedItem[]>([]);
-  const [watchedSeriesState, setWatchedSeriesState] = useState<LoadState>("loading");
-  const [completedMovies, setCompletedMovies] = useState<WatchedItem[]>([]);
-  const [completedMoviesState, setCompletedMoviesState] = useState<LoadState>("loading");
-  const [completedSeries, setCompletedSeries] = useState<WatchedItem[]>([]);
-  const [completedSeriesState, setCompletedSeriesState] = useState<LoadState>("loading");
   const [completedGridView, setCompletedGridView] = useState<"movies" | "series" | null>(null);
-  const [deviceStats, setDeviceStats] = useState<DeviceWatchTime[]>([]);
-  const [deviceStatsState, setDeviceStatsState] = useState<LoadState>("loading");
-  const [hourStats, setHourStats] = useState<HourWatchTime[]>([]);
-  const [hourStatsState, setHourStatsState] = useState<LoadState>("loading");
-  const [weekdayStats, setWeekdayStats] = useState<WeekdayWatchTime[]>([]);
-  const [weekdayStatsState, setWeekdayStatsState] = useState<LoadState>("loading");
-  const [longestSession, setLongestSession] = useState<LongestSession | null>(null);
-  const [longestSessionState, setLongestSessionState] = useState<LoadState>("loading");
-  const [mostActiveDay, setMostActiveDay] = useState<MostActiveDay | null>(null);
-  const [mostActiveDayState, setMostActiveDayState] = useState<LoadState>("loading");
-  const [watchTimeRank, setWatchTimeRank] = useState<number | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    fetch(`/api/stats?period=${apiPeriod[period]}`, { credentials: "include" })
-      .then(async (response) => { if (!response.ok) throw new Error("statistics unavailable"); const data = await response.json(); if (active) { setStatistics(data); setState("ready"); } })
-      .catch(() => active && setState("error"));
-    return () => { active = false; };
-  }, [period]);
-
-  useEffect(() => {
-    let active = true;
-    fetch("/api/stats/rank", { credentials: "include" })
-      .then(async (response) => { if (!response.ok) throw new Error("watch-time rank unavailable"); const data: WatchTimeRank = await response.json(); if (active) setWatchTimeRank(data.rank); })
-      .catch(() => active && setWatchTimeRank(null));
-    return () => { active = false; };
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    fetch("/api/continue-watching", { credentials: "include" })
-      .then(async (response) => { if (!response.ok) throw new Error("continue watching unavailable"); const data = await response.json(); if (active) { setContinueWatching(data); setContinueWatchingState("ready"); } })
-      .catch(() => active && setContinueWatchingState("error"));
-    return () => { active = false; };
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    fetch("/api/watched-movies", { credentials: "include" })
-      .then(async (response) => { if (!response.ok) throw new Error("watched movies unavailable"); const data = await response.json(); if (active) { setWatchedMovies(data); setWatchedMoviesState("ready"); } })
-      .catch(() => active && setWatchedMoviesState("error"));
-    return () => { active = false; };
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    fetch("/api/watched-series", { credentials: "include" })
-      .then(async (response) => { if (!response.ok) throw new Error("watched series unavailable"); const data = await response.json(); if (active) { setWatchedSeries(data); setWatchedSeriesState("ready"); } })
-      .catch(() => active && setWatchedSeriesState("error"));
-    return () => { active = false; };
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    fetch(`/api/completed-movies?period=${apiPeriod[period]}`, { credentials: "include" })
-      .then(async (response) => { if (!response.ok) throw new Error("completed movies unavailable"); const data = await response.json(); if (active) { setCompletedMovies(data); setCompletedMoviesState("ready"); } })
-      .catch(() => active && setCompletedMoviesState("error"));
-    return () => { active = false; };
-  }, [period]);
-
-  useEffect(() => {
-    let active = true;
-    fetch(`/api/completed-series?period=${apiPeriod[period]}`, { credentials: "include" })
-      .then(async (response) => { if (!response.ok) throw new Error("completed series unavailable"); const data = await response.json(); if (active) { setCompletedSeries(data); setCompletedSeriesState("ready"); } })
-      .catch(() => active && setCompletedSeriesState("error"));
-    return () => { active = false; };
-  }, [period]);
-
-  useEffect(() => {
-    let active = true;
-    fetch(`/api/stats/devices?period=${apiPeriod[period]}`, { credentials: "include" })
-      .then(async (response) => { if (!response.ok) throw new Error("device statistics unavailable"); const data = await response.json(); if (active) { setDeviceStats(data); setDeviceStatsState("ready"); } })
-      .catch(() => active && setDeviceStatsState("error"));
-    return () => { active = false; };
-  }, [period]);
-
-  useEffect(() => {
-    let active = true;
-    fetch(`/api/stats/hours?period=${apiPeriod[period]}`, { credentials: "include" })
-      .then(async (response) => { if (!response.ok) throw new Error("hour statistics unavailable"); const data = await response.json(); if (active) { setHourStats(data); setHourStatsState("ready"); } })
-      .catch(() => active && setHourStatsState("error"));
-    return () => { active = false; };
-  }, [period]);
-
-  useEffect(() => {
-    let active = true;
-    fetch(`/api/stats/weekdays?period=${apiPeriod[period]}`, { credentials: "include" })
-      .then(async (response) => { if (!response.ok) throw new Error("weekday statistics unavailable"); const data = await response.json(); if (active) { setWeekdayStats(data); setWeekdayStatsState("ready"); } })
-      .catch(() => active && setWeekdayStatsState("error"));
-    return () => { active = false; };
-  }, [period]);
-
-  useEffect(() => {
-    let active = true;
-    fetch(`/api/stats/longest-session?period=${apiPeriod[period]}`, { credentials: "include" })
-      .then(async (response) => { if (!response.ok) throw new Error("longest session unavailable"); const data = await response.json(); if (active) { setLongestSession(data); setLongestSessionState("ready"); } })
-      .catch(() => active && setLongestSessionState("error"));
-    return () => { active = false; };
-  }, [period]);
-
-  useEffect(() => {
-    let active = true;
-    fetch(`/api/stats/most-active-day?period=${apiPeriod[period]}`, { credentials: "include" })
-      .then(async (response) => { if (!response.ok) throw new Error("most active day unavailable"); const data = await response.json(); if (active) { setMostActiveDay(data); setMostActiveDayState("ready"); } })
-      .catch(() => active && setMostActiveDayState("error"));
-    return () => { active = false; };
-  }, [period]);
+  const [statistics, state] = useApiResource<PersonalStats | null>(`/api/stats?period=${apiPeriod[period]}`, null);
+  const [watchTimeRankData] = useApiResource<WatchTimeRank | null>("/api/stats/rank", null);
+  const watchTimeRank = watchTimeRankData?.rank ?? null;
+  const [continueWatching, continueWatchingState] = useApiResource<ContinueWatchingItem[]>("/api/continue-watching", []);
+  const [watchedMovies, watchedMoviesState] = useApiResource<WatchedItem[]>("/api/watched-movies", []);
+  const [watchedSeries, watchedSeriesState] = useApiResource<WatchedItem[]>("/api/watched-series", []);
+  const [completedMovies, completedMoviesState] = useApiResource<WatchedItem[]>(`/api/completed-movies?period=${apiPeriod[period]}`, []);
+  const [completedSeries, completedSeriesState] = useApiResource<WatchedItem[]>(`/api/completed-series?period=${apiPeriod[period]}`, []);
+  const [deviceStats, deviceStatsState] = useApiResource<DeviceWatchTime[]>(`/api/stats/devices?period=${apiPeriod[period]}`, []);
+  const [hourStats, hourStatsState] = useApiResource<HourWatchTime[]>(`/api/stats/hours?period=${apiPeriod[period]}`, []);
+  const [weekdayStats, weekdayStatsState] = useApiResource<WeekdayWatchTime[]>(`/api/stats/weekdays?period=${apiPeriod[period]}`, []);
+  const [longestSession, longestSessionState] = useApiResource<LongestSession | null>(`/api/stats/longest-session?period=${apiPeriod[period]}`, null);
+  const [mostActiveDay, mostActiveDayState] = useApiResource<MostActiveDay | null>(`/api/stats/most-active-day?period=${apiPeriod[period]}`, null);
 
   return <div className="content page-view">
-    <section className="period-tabs" aria-label="Zeitraum auswählen">{(["Woche", "Monat", "Jahr"] as Period[]).map((item) => <button className={period === item ? "selected" : ""} onClick={() => { setStatistics(null); setState("loading"); setCompletedMoviesState("loading"); setCompletedSeriesState("loading"); setDeviceStatsState("loading"); setHourStatsState("loading"); setWeekdayStatsState("loading"); setLongestSessionState("loading"); setMostActiveDayState("loading"); setPeriod(item); }} key={item} aria-pressed={period === item}>{item}</button>)}</section>
+    <section className="period-tabs" aria-label="Zeitraum auswählen">{(["Woche", "Monat", "Jahr"] as Period[]).map((item) => <button className={period === item ? "selected" : ""} onClick={() => setPeriod(item)} key={item} aria-pressed={period === item}>{item}</button>)}</section>
     <section className="week-grid" aria-label={`Kennzahlen für ${period}`}>
-      <MetricCard icon="clock" tone="blue" value={statistics ? formatDuration(statistics.watchSeconds) : "—"} label="Sehzeit" detail={statistics ? comparisonText(statistics) : loadingCopy(state)} />
-      <MetricCard icon="movie" tone="peach" value={statistics ? statistics.completedMovies : "—"} label="Filme abgeschlossen" detail={statistics ? period : loadingCopy(state)} onClick={statistics && statistics.completedMovies > 0 && completedMoviesState === "ready" ? () => setCompletedGridView("movies") : undefined} />
-      <MetricCard icon="series" tone="mint" value={statistics ? statistics.completedSeries : "—"} label="Serien abgeschlossen" detail={statistics ? period : loadingCopy(state)} onClick={statistics && statistics.completedSeries > 0 && completedSeriesState === "ready" ? () => setCompletedGridView("series") : undefined} />
+      <MetricCard icon="clock" tone="blue" value={statistics ? formatDuration(statistics.watchSeconds) : "—"} label="Sehzeit" detail={statistics ? comparisonText(statistics) : loadingCopy(state)} loading={state === "loading"} />
+      <MetricCard icon="movie" tone="peach" value={statistics ? statistics.completedMovies : "—"} label="Filme abgeschlossen" detail={statistics ? period : loadingCopy(state)} loading={state === "loading"} onClick={statistics && statistics.completedMovies > 0 && completedMoviesState === "ready" ? () => setCompletedGridView("movies") : undefined} />
+      <MetricCard icon="series" tone="mint" value={statistics ? statistics.completedSeries : "—"} label="Serien abgeschlossen" detail={statistics ? period : loadingCopy(state)} loading={state === "loading"} onClick={statistics && statistics.completedSeries > 0 && completedSeriesState === "ready" ? () => setCompletedGridView("series") : undefined} />
       <RankCard rank={watchTimeRank} name={user.name} />
     </section>
 
@@ -637,15 +490,15 @@ function Stats({ user, onSelectMedia }: { user: { name: string }; onSelectMedia:
     <PosterRow title="Gesehene Serien" eyebrow="ALLE" items={watchedSeries} state={watchedSeriesState} emptyLabel="Noch keine Serien abgeschlossen." detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
 
     <section className="chart-grid">
-      <BarChart title="Meistgesehene Genres" data={topGenres(watchedMovies, watchedSeries)} />
-      <BarChart title="Aktivität nach Wochentag" data={weekdayStatsState === "ready" ? weekdayChartData(weekdayStats) : []} formatValue={formatDuration} />
-      <BarChart title="Aktivität nach Uhrzeit" data={hourStatsState === "ready" ? daypartChartData(hourStats) : []} formatValue={formatDuration} />
-      <BarChart title="Nach Gerät" data={deviceStatsState === "ready" ? deviceStats.slice(0, 6).map((device) => ({ label: device.deviceName, value: device.watchSeconds })) : []} formatValue={formatDuration} />
+      <BarChart title="Meistgesehene Genres" data={topGenres(watchedMovies, watchedSeries)} loading={watchedMoviesState === "loading" || watchedSeriesState === "loading"} />
+      <BarChart title="Aktivität nach Wochentag" data={weekdayStatsState === "ready" ? weekdayChartData(weekdayStats) : []} formatValue={formatDuration} loading={weekdayStatsState === "loading"} />
+      <BarChart title="Aktivität nach Uhrzeit" data={hourStatsState === "ready" ? daypartChartData(hourStats) : []} formatValue={formatDuration} loading={hourStatsState === "loading"} />
+      <BarChart title="Nach Gerät" data={deviceStatsState === "ready" ? deviceStats.slice(0, 6).map((device) => ({ label: device.deviceName, value: device.watchSeconds })) : []} formatValue={formatDuration} loading={deviceStatsState === "loading"} />
     </section>
 
     <section className="records-grid" aria-label="Rekorde">
-      <MetricCard icon="clock" tone="lilac" value={longestSessionState === "ready" && longestSession ? formatDuration(longestSession.watchSeconds) : "—"} label="Längste Session" detail={longestSessionState === "ready" ? (longestSession?.itemName ?? "Keine Daten für diesen Zeitraum") : loadingCopy(longestSessionState)} />
-      <MetricCard icon="genre" tone="peach" value={mostActiveDayState === "ready" && mostActiveDay ? formatFullDate(mostActiveDay.date) : "—"} label="Aktivster Tag" detail={mostActiveDayState === "ready" ? (mostActiveDay ? formatDuration(mostActiveDay.watchSeconds) : "Keine Daten für diesen Zeitraum") : loadingCopy(mostActiveDayState)} />
+      <MetricCard icon="clock" tone="lilac" value={longestSessionState === "ready" && longestSession ? formatDuration(longestSession.watchSeconds) : "—"} label="Längste Session" detail={longestSessionState === "ready" ? (longestSession?.itemName ?? "Keine Daten für diesen Zeitraum") : loadingCopy(longestSessionState)} loading={longestSessionState === "loading"} />
+      <MetricCard icon="genre" tone="peach" value={mostActiveDayState === "ready" && mostActiveDay ? formatFullDate(mostActiveDay.date) : "—"} label="Aktivster Tag" detail={mostActiveDayState === "ready" ? (mostActiveDay ? formatDuration(mostActiveDay.watchSeconds) : "Keine Daten für diesen Zeitraum") : loadingCopy(mostActiveDayState)} loading={mostActiveDayState === "loading"} />
     </section>
 
     {completedGridView === "movies" && <MediaGridScreen title={`Filme abgeschlossen · ${period}`} items={completedMovies} detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setCompletedGridView(null)} />}
@@ -658,18 +511,22 @@ function MediaGridScreen<T extends { id: string; title: string; posterUrl?: stri
   state?: LoadState; emptyLabel?: string; headerExtra?: ReactNode;
   onSelect?: (item: T) => void; onClose: () => void;
 }) {
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  useEscapeKey(onClose);
 
   return <div className="media-detail-overlay media-grid-overlay" role="dialog" aria-modal="true" aria-label={title}>
     <div className="media-detail-scroll">
       <button type="button" className="media-detail-close" onClick={onClose} aria-label="Schließen"><Icon name="close" /></button>
       <h1 className="media-grid-title">{title}</h1>
       {headerExtra}
-      {state === "loading" && <p className="poster-status" role="status">Wird geladen …</p>}
+      {state === "loading" && <>
+        <p className="poster-status sr-only" role="status">Wird geladen …</p>
+        <div className="media-grid" aria-hidden="true">
+          {Array.from({ length: 8 }, (_, index) => <div className="media-grid-entry" key={index}>
+            <div className="poster wide skeleton" />
+            <span className="skeleton skeleton-line" /><span className="skeleton skeleton-line" />
+          </div>)}
+        </div>
+      </>}
       {state === "error" && <p className="poster-status">Nicht verfügbar</p>}
       {state !== "loading" && state !== "error" && items.length === 0 && <p className="poster-status">{emptyLabel ?? "Nichts vorhanden."}</p>}
       {items.length > 0 && <div className="media-grid">{items.map((item) => <button type="button" className="media-grid-entry" key={item.id} onClick={() => onSelect?.(item)}>

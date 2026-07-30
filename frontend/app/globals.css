@@ -304,6 +304,8 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .metric-card p { position: relative; z-index: 1; margin: 6px 0 4px; color: var(--text-secondary); font-size: 12px; }
 .metric-card small { position: relative; z-index: 1; color: var(--muted); font-size: 10px; }
 .metric-card .up { color: #6edba5; }
+.metric-card .skeleton-value { display: block; width: 46%; height: 22px; margin: 2px 0 10px; }
+.metric-card .skeleton-detail { display: block; width: 70%; height: 10px; }
 .genre-card strong { font-size: 15px; line-height: 1.15; overflow-wrap: anywhere; }
 .genre-card .metric-icon { position: absolute; right: 14px; top: 14px; }
 .rank-card { display: grid; grid-template-columns: auto 1fr; grid-template-rows: 1fr auto; align-items: center; column-gap: 12px; }
@@ -358,6 +360,23 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .poster-entry .rating-stars { color: #f6cf6b; letter-spacing: 1px; }
 .poster-status { color: #9db3a7; font-size: 13px; padding: 4px 2px; }
 
+/* -------------------------------------------------------------- skeletons
+   Shown for state === "loading" instead of a plain status line, so async
+   sections above 300ms give visual feedback instead of a frozen layout. */
+@keyframes skeleton-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+.skeleton {
+  border-radius: 8px; background-color: rgb(255 255 255 / 6%);
+  background-image: linear-gradient(90deg, transparent, rgb(255 255 255 / 9%), transparent);
+  background-size: 200% 100%; animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+.skeleton-line { display: block; height: 10px; border-radius: 5px; }
+.skeleton-line + .skeleton-line { margin-top: 8px; }
+.skeleton-line-sm { width: 60%; }
+.skeleton-line-xs { width: 32px; height: 10px; }
+.bar-row .skeleton-line-xs:first-child { width: 56px; }
+.poster-entry .skeleton-line, .media-grid-entry .skeleton-line { width: 88%; }
+.poster-entry .skeleton-line + .skeleton-line, .media-grid-entry .skeleton-line + .skeleton-line { width: 55%; }
+
 .poster-progress {
   position: absolute; left: 9px; right: 9px; bottom: 9px; z-index: 1;
   height: 4px; border-radius: 2px; overflow: hidden; background: rgb(255 255 255 / 22%);
@@ -396,6 +415,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 }
 .bar-track { height: 10px; border-radius: 5px; background: rgb(255 255 255 / 6%); overflow: hidden; }
 .bar-fill { height: 100%; min-width: 4px; border-radius: 5px; background: var(--mint-bright); transition: width 260ms var(--ease-out); }
+.bar-fill-skeleton { width: 100%; height: 100%; border-radius: 5px; }
 .bar-value {
   text-align: right; color: var(--muted); font-size: 12px; font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -479,14 +499,18 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .tracking-bar { display: flex; align-items: center; gap: 16px; margin-top: -8px; }
 .star-rating { display: flex; gap: 4px; }
 .star-button {
-  min-width: 32px; min-height: 32px; padding: 0; border: 0; background: none; cursor: pointer;
+  position: relative; min-width: 32px; min-height: 32px; padding: 0; border: 0; background: none; cursor: pointer;
   font-size: 20px; line-height: 1; color: var(--muted); transition: color 160ms var(--ease-out);
 }
+/* Expands the tappable area to 44px without growing the visible glyph or layout. */
+.star-button::after { content: ""; position: absolute; inset: -6px; }
 .star-button.filled { color: #f6cf6b; }
 .icon-toggle-button {
+  position: relative;
   display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid var(--line); border-radius: 999px;
   background: transparent; color: var(--muted); cursor: pointer; transition: color 160ms var(--ease-out), border-color 160ms var(--ease-out);
 }
+.icon-toggle-button::after { content: ""; position: absolute; inset: -4px; }
 .icon-toggle-button.active { color: var(--mint-bright); border-color: rgb(140 224 173 / 45%); }
 .icon-toggle-button:disabled { opacity: .5; cursor: not-allowed; }
 .watchlist-toggle { display: flex; align-items: center; gap: 10px; margin-left: auto; color: var(--text-secondary); font-size: 14px; font-weight: 600; }
