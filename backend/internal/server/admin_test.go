@@ -160,6 +160,7 @@ func TestLoginClaimsFirstAdminAtomically(t *testing.T) {
 		authenticator: fakeAuthenticator{identity: emby.Identity{UserID: "user-1", DisplayName: "Alice"}},
 		sessions:      &memorySessionStore{},
 		appconfig:     configStore,
+		loginLimiters: make(map[string]*ipRateLimiter),
 	}
 
 	request := httptest.NewRequest(http.MethodPost, "/api/auth/emby/login", strings.NewReader(`{"username":"alice","password":"password"}`))
@@ -183,6 +184,7 @@ func TestLoginDoesNotReclaimAdminForALaterUser(t *testing.T) {
 		authenticator: fakeAuthenticator{identity: emby.Identity{UserID: "user-2", DisplayName: "Bob"}},
 		sessions:      &memorySessionStore{},
 		appconfig:     configStore,
+		loginLimiters: make(map[string]*ipRateLimiter),
 	}
 
 	request := httptest.NewRequest(http.MethodPost, "/api/auth/emby/login", strings.NewReader(`{"username":"bob","password":"password"}`))

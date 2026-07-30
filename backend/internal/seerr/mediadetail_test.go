@@ -99,6 +99,37 @@ func TestMediaDetailReadsMediaStatusWhenPresent(t *testing.T) {
 	}
 }
 
+func TestMediaDetailMarksAvailableSeasonsFromMediaInfo(t *testing.T) {
+	testServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"name":"The Sopranos","firstAirDate":"1999-01-10","seasons":[
+			{"seasonNumber":1,"episodeCount":13},
+			{"seasonNumber":2,"episodeCount":13}
+		],"mediaInfo":{"status":4,"seasons":[
+			{"seasonNumber":1,"status":5},
+			{"seasonNumber":2,"status":2}
+		]}}`))
+	}))
+	defer testServer.Close()
+
+	detail, err := NewClient(testServer.URL, "api-key").MediaDetail(context.Background(), "tv", 12345)
+	if err != nil {
+		t.Fatalf("MediaDetail() error = %v", err)
+	}
+	if detail.MediaStatus != 4 {
+		t.Fatalf("MediaStatus = %d, want 4 (partially available)", detail.MediaStatus)
+	}
+	if len(detail.Seasons) != 2 {
+		t.Fatalf("Seasons = %#v", detail.Seasons)
+	}
+	if !detail.Seasons[0].Available {
+		t.Fatalf("season 1 = %#v, want Available (status 5 in mediaInfo)", detail.Seasons[0])
+	}
+	if detail.Seasons[1].Available {
+		t.Fatalf("season 2 = %#v, want not Available (status 2 in mediaInfo)", detail.Seasons[1])
+	}
+}
+
 func TestMediaDetailReturnsErrorWhenClientIsNil(t *testing.T) {
 	var client *Client
 	if _, err := client.MediaDetail(context.Background(), "movie", 1); err == nil {

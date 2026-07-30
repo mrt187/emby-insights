@@ -8,6 +8,22 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.54] - 2026-07-31
+
+### Fixed
+
+- Series already partially available in the library (Seerr status 4) never
+  showed the "Anfragen" button, even when whole seasons were still missing —
+  any non-zero Seerr media status hid the button entirely, regardless of
+  cause. The media-detail response now carries per-season availability from
+  Seerr's `mediaInfo.seasons`, and the request button/season picker for
+  partially-available series only offers the seasons that are actually
+  missing.
+- Fixed a pre-existing (untriggered by real traffic — real requests always
+  go through the constructor) nil-map panic in three login-endpoint tests
+  that built an `App{}` by hand without initializing `loginLimiters`,
+  introduced when rate-limiting was added in v0.8.52.
+
 ## [0.8.53] - 2026-07-30
 
 ### Fixed

@@ -26,7 +26,7 @@ type DiscoverItem = { id: string; title: string; posterUrl: string; mediaType: s
 type MediaSelection = { source: "emby"; id: string } | { source: "seerr"; id: string; mediaType: string };
 type MediaPerson = { name: string; role: string; imageUrl: string };
 type MediaSeason = { id: string; title: string; posterUrl: string; indexNumber: number; watchedEpisodes: number; totalEpisodes: number; played: boolean };
-type RequestableSeason = { seasonNumber: number; episodeCount: number };
+type RequestableSeason = { seasonNumber: number; episodeCount: number; available?: boolean };
 type MediaDetail = {
   id: string; title: string; overview: string; posterUrl: string; backdropUrl: string;
   genres: string[]; communityRating: number; officialRating?: string; year: number; runtimeMinutes: number;
@@ -62,7 +62,7 @@ function visibleNav(user: CurrentUser): { label: Page; icon: IconName }[] {
   return items;
 }
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.53";
+const APP_VERSION = "0.8.54";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -825,8 +825,13 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated, onHiddenChang
   const status = detail ? mediaStatus(detail) : null;
   const crewAndCast = detail ? [...(detail.crew ?? []), ...(detail.cast ?? [])] : [];
   const embySeasons = detail?.seasons?.filter((season): season is MediaSeason => !isRequestableSeason(season)) ?? [];
-  const requestableSeasons = detail?.seasons?.filter(isRequestableSeason) ?? [];
-  const canRequest = selection.source === "seerr" && !detail?.mediaStatus;
+  // Seerr's own MediaStatus enum: 4 = partially available. Only for that
+  // status (and only for series) do missing seasons remain requestable —
+  // any other non-zero status (pending, processing, fully available, ...)
+  // means there is nothing left to request.
+  const requestableSeasons = (detail?.seasons?.filter(isRequestableSeason) ?? []).filter((season) => !season.available);
+  const seerrStatusPartiallyAvailable = 4;
+  const canRequest = selection.source === "seerr" && (!detail?.mediaStatus || (detail.mediaStatus === seerrStatusPartiallyAvailable && mediaType === "tv" && requestableSeasons.length > 0));
 
   const toggleSeason = (seasonNumber: number) => {
     setSelectedSeasons((current) => current.includes(seasonNumber) ? current.filter((value) => value !== seasonNumber) : [...current, seasonNumber]);

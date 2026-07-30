@@ -12,8 +12,13 @@ type Person struct {
 }
 
 type RequestableSeason struct {
-	SeasonNumber int `json:"seasonNumber"`
-	EpisodeCount int `json:"episodeCount"`
+	SeasonNumber int  `json:"seasonNumber"`
+	EpisodeCount int  `json:"episodeCount"`
+	// Available marks a season Seerr already reports as fully available
+	// (status 5) for a partially-available show, so the frontend can hide
+	// it from the season picker — only the seasons still missing should be
+	// selectable to request.
+	Available bool `json:"available,omitempty"`
 }
 
 type MediaDetail struct {
@@ -91,7 +96,11 @@ func (client *Client) MediaDetail(ctx context.Context, mediaType string, tmdbID 
 			EpisodeCount int `json:"episodeCount"`
 		} `json:"seasons"`
 		MediaInfo *struct {
-			Status int `json:"status"`
+			Status  int `json:"status"`
+			Seasons []struct {
+				SeasonNumber int `json:"seasonNumber"`
+				Status       int `json:"status"`
+			} `json:"seasons"`
 		} `json:"mediaInfo"`
 	}
 
@@ -128,8 +137,12 @@ func (client *Client) MediaDetail(ctx context.Context, mediaType string, tmdbID 
 		Crew:            []Person{},
 		Seasons:         []RequestableSeason{},
 	}
+	seasonAvailability := map[int]int{}
 	if result.MediaInfo != nil {
 		detail.MediaStatus = result.MediaInfo.Status
+		for _, season := range result.MediaInfo.Seasons {
+			seasonAvailability[season.SeasonNumber] = season.Status
+		}
 	}
 	for _, company := range result.ProductionCompanies {
 		detail.Studios = append(detail.Studios, company.Name)
@@ -138,7 +151,12 @@ func (client *Client) MediaDetail(ctx context.Context, mediaType string, tmdbID 
 		if season.SeasonNumber == 0 { // "Specials" — not a real season to request
 			continue
 		}
-		detail.Seasons = append(detail.Seasons, RequestableSeason{SeasonNumber: season.SeasonNumber, EpisodeCount: season.EpisodeCount})
+		const seerrStatusAvailable = 5
+		detail.Seasons = append(detail.Seasons, RequestableSeason{
+			SeasonNumber: season.SeasonNumber,
+			EpisodeCount: season.EpisodeCount,
+			Available:    seasonAvailability[season.SeasonNumber] == seerrStatusAvailable,
+		})
 	}
 	if result.PosterPath != "" {
 		detail.PosterURL = posterBaseURL + result.PosterPath

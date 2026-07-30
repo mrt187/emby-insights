@@ -349,6 +349,7 @@ func TestLoginCreatesSessionWithoutExposingEmbyToken(t *testing.T) {
 		authenticator: fakeAuthenticator{identity: emby.Identity{UserID: "user-1", DisplayName: "Thomas", AccessToken: "secret-token"}},
 		sessions:      store,
 		cookieSecure:  true,
+		loginLimiters: make(map[string]*ipRateLimiter),
 	}
 
 	request := httptest.NewRequest(http.MethodPost, "/api/auth/emby/login", strings.NewReader(`{"username":"thomas","password":"password"}`))
@@ -368,7 +369,7 @@ func TestLoginCreatesSessionWithoutExposingEmbyToken(t *testing.T) {
 }
 
 func TestLoginRejectsInvalidCredentials(t *testing.T) {
-	app := &App{authenticator: fakeAuthenticator{err: emby.ErrInvalidCredentials}, sessions: &memorySessionStore{}}
+	app := &App{authenticator: fakeAuthenticator{err: emby.ErrInvalidCredentials}, sessions: &memorySessionStore{}, loginLimiters: make(map[string]*ipRateLimiter)}
 	request := httptest.NewRequest(http.MethodPost, "/api/auth/emby/login", strings.NewReader(`{"username":"thomas","password":"wrong"}`))
 	recorder := httptest.NewRecorder()
 	app.Handler().ServeHTTP(recorder, request)
