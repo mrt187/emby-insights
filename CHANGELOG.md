@@ -8,6 +8,27 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.33] - 2026-07-30
+
+### Added
+
+- Internal chat between any user and the admin: a new "Chats" nav item,
+  polled every 20s. Regular users get a single thread with the admin;
+  the admin gets an inbox listing every user's thread. New messages
+  activate the notification bell and surface a preview in the "Jetzt
+  relevant" card on the Home page.
+- Set `ADMIN_EMBY_USER_ID` (your own Emby user ID, visible via `/api/me`)
+  to enable chat and be recognized as the admin — it's disabled until
+  configured. See `.env.example`.
+
+### Internal
+
+- Repurposed the `notifications` table (defined since the very first
+  migration but never used by any code) as the chat message store,
+  instead of adding a parallel table.
+- `useApiResource` gained an optional polling interval, reused for the
+  new unread-count and chat-thread polling instead of a separate hook.
+
 ## [0.8.32] - 2026-07-30
 
 ### Changed

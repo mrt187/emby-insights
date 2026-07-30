@@ -29,6 +29,7 @@ type Config struct {
 	SeerrAPIKey             string
 	CookieSecure            bool
 	ShutdownTimeout         time.Duration
+	AdminEmbyUserID         string
 }
 
 func Load() (Config, error) {
@@ -77,6 +78,7 @@ func Load() (Config, error) {
 		SeerrAPIKey:             valueOr("SEERR_API_KEY", ""),
 		CookieSecure:            valueOr("COOKIE_SECURE", "true") != "false",
 		ShutdownTimeout:         10 * time.Second,
+		AdminEmbyUserID:         valueOr("ADMIN_EMBY_USER_ID", ""),
 	}, nil
 }
 

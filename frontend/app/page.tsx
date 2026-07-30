@@ -1,9 +1,9 @@
 "use client";
 
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { LoginScreen } from "./login-screen";
 
-type Page = "Heute" | "Statistik" | "Anfragen" | "Profil";
+type Page = "Heute" | "Statistik" | "Anfragen" | "Chats" | "Profil";
 type Period = "Woche" | "Monat" | "Jahr";
 type StatisticsPeriod = "week" | "month" | "year";
 type PersonalStats = { watchSeconds: number; previousWatchSeconds: number; completedMovies: number; completedSeries: number; favouriteGenre: string; periodStartsAt: string; periodEndsAt: string };
@@ -36,16 +36,22 @@ type MediaDetail = {
 };
 type MediaTrackingEntry = { mediaSource: string; mediaId: string; mediaType: string; title: string; posterUrl: string; rating?: number; onWatchlist: boolean; rewatchCount: number };
 function isRequestableSeason(season: MediaSeason | RequestableSeason): season is RequestableSeason { return !("id" in season); }
-type IconName = "home" | "chart" | "sparkle" | "user" | "bell" | "arrow" | "close" | "clock" | "movie" | "series" | "genre" | "medal" | "refresh";
+type IconName = "home" | "chart" | "sparkle" | "user" | "bell" | "arrow" | "close" | "clock" | "movie" | "series" | "genre" | "medal" | "refresh" | "chat";
 type Tone = "blue" | "peach" | "mint" | "lilac";
 type LoadState = "loading" | "ready" | "error";
 
+type ChatMessage = { id: string; body: string; fromAdmin: boolean; createdAt: string };
+type ChatThread = { userId: string; displayName: string; lastMessage: string; lastAt: string; unreadCount: number };
+
+const UNREAD_POLL_MS = 20_000;
+const CHAT_POLL_MS = 20_000;
+
 const nav: { label: Page; icon: IconName }[] = [
   { label: "Heute", icon: "home" }, { label: "Statistik", icon: "chart" },
-  { label: "Anfragen", icon: "sparkle" }, { label: "Profil", icon: "user" },
+  { label: "Anfragen", icon: "sparkle" }, { label: "Chats", icon: "chat" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.32";
+const APP_VERSION = "0.8.33";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -80,10 +86,11 @@ function formatFullDate(value: string) {
   return Number.isNaN(date.getTime()) ? "" : fullDateFormatter.format(date);
 }
 
-function useApiResource<T>(path: string | null, initialValue: T): [T, LoadState, () => void] {
+function useApiResource<T>(path: string | null, initialValue: T, pollMs?: number): [T, LoadState, () => void] {
   const [data, setData] = useState<T>(initialValue);
   const [result, setResult] = useState<{ path: string | null; state: LoadState }>({ path: null, state: "loading" });
   const [reloadToken, setReloadToken] = useState(0);
+  const refetch = () => setReloadToken((token) => token + 1);
 
   useEffect(() => {
     if (!path) return;
@@ -98,11 +105,17 @@ function useApiResource<T>(path: string | null, initialValue: T): [T, LoadState,
     return () => { active = false; };
   }, [path, reloadToken]);
 
+  useEffect(() => {
+    if (!path || !pollMs) return;
+    const interval = setInterval(refetch, pollMs);
+    return () => clearInterval(interval);
+  }, [path, pollMs]);
+
   // Derived rather than set eagerly in the effect above: a path change (e.g.
   // switching the stats period) should read as "loading" immediately, without
   // an extra synchronous setState at the top of the effect.
   const state: LoadState = !path || result.path !== path ? "loading" : result.state;
-  return [data, state, () => setReloadToken((token) => token + 1)];
+  return [data, state, refetch];
 }
 
 function useEscapeKey(onEscape: () => void) {
@@ -116,8 +129,7 @@ function useEscapeKey(onEscape: () => void) {
 export default function Home() {
   const [page, setPage] = useState<Page>("Heute");
   const [noticeOpen, setNoticeOpen] = useState(false);
-  const [unread, setUnread] = useState(2);
-  const [user, setUser] = useState<{ id: string; name: string } | null>(null);
+  const [user, setUser] = useState<{ id: string; name: string; isAdmin: boolean } | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
   const [selectedMedia, setSelectedMedia] = useState<MediaSelection | null>(null);
   const noticeRef = useRef<HTMLDivElement>(null);
@@ -141,6 +153,14 @@ export default function Home() {
 
   const refetchRequests = () => { refetchRequestItems(); refetchRequestTotal(); };
 
+  const [unreadData] = useApiResource<{ count: number }>(user ? "/api/messages/unread-count" : null, { count: 0 }, UNREAD_POLL_MS);
+  const unread = unreadData.count;
+  const [ownThread] = useApiResource<ChatMessage[]>(user && !user.isAdmin && unread > 0 ? "/api/messages" : null, [], CHAT_POLL_MS);
+  const latestAdminMessage = [...ownThread].reverse().find((message) => message.fromAdmin);
+  const messagePreview = !user || unread === 0 ? null
+    : user.isAdmin ? { preview: `${unread} neue ${unread === 1 ? "Nachricht" : "Nachrichten"} von Nutzern` }
+    : { preview: latestAdminMessage ? latestAdminMessage.body : "Neue Nachricht erhalten" };
+
   useEffect(() => {
     if (!noticeOpen) return;
     const close = (returnFocus: boolean) => { setNoticeOpen(false); if (returnFocus) noticeButtonRef.current?.focus(); };
@@ -158,7 +178,7 @@ export default function Home() {
   if (!user) return <LoginScreen onAuthenticated={setUser} />;
 
   const selectPage = (next: Page) => { setPage(next); setNoticeOpen(false); };
-  const openNotices = () => { setNoticeOpen((open) => !open); setUnread(0); };
+  const openNotices = () => setNoticeOpen((open) => !open);
 
   return <main className="app-shell">
     {selectedMedia && <MediaDetailScreen selection={selectedMedia} onClose={() => setSelectedMedia(null)} onRequestCreated={refetchRequests} />}
@@ -179,12 +199,17 @@ export default function Home() {
           <button type="button" className="refresh-button" aria-label="Dashboard aktualisieren" onClick={() => window.location.reload()}><Icon name="refresh" /></button>
           <button ref={noticeButtonRef} className="notice-button" aria-label="Benachrichtigungen" aria-expanded={noticeOpen} aria-controls="notifications" onClick={openNotices}><Icon name="bell" />{unread > 0 && <b><span className="sr-only">{unread} ungelesene Benachrichtigungen</span></b>}</button>
           <button className="avatar" aria-label="Profil öffnen" onClick={() => selectPage("Profil")}><UserAvatar name={user.name} /></button>
-          {noticeOpen && <div ref={noticeRef} className="notifications" id="notifications" role="dialog" aria-label="Benachrichtigungen"><strong>Benachrichtigungen</strong><p>Deine Anfrage „Severance“ wird bearbeitet.</p><p>Am Freitag erscheint Alien: Earth.</p></div>}
+          {noticeOpen && <div ref={noticeRef} className="notifications" id="notifications" role="dialog" aria-label="Benachrichtigungen">
+            <strong>Benachrichtigungen</strong>
+            {messagePreview ? <p>{messagePreview.preview}</p> : <p>Keine neuen Benachrichtigungen.</p>}
+            {unread > 0 && <button type="button" className="text-button" onClick={() => selectPage("Chats")}>Zu den Chats <Icon name="arrow" /></button>}
+          </div>}
         </div>
       </header>
-      {page === "Heute" && <Today upcoming={upcomingItems} upcomingState={upcomingState} cinema={cinemaItems} cinemaState={cinemaState} requests={requestItems} requestState={requestState} newForYou={newForYouItems} newForYouState={newForYouState} availableRequests={availableRequests} onSelectMedia={setSelectedMedia} />}
+      {page === "Heute" && <Today upcoming={upcomingItems} upcomingState={upcomingState} cinema={cinemaItems} cinemaState={cinemaState} requests={requestItems} requestState={requestState} newForYou={newForYouItems} newForYouState={newForYouState} availableRequests={availableRequests} message={messagePreview} onSelectMedia={setSelectedMedia} onOpenChats={() => selectPage("Chats")} />}
       {page === "Statistik" && <Stats user={user} onSelectMedia={setSelectedMedia} />}
       {page === "Anfragen" && <Requests onSelectMedia={setSelectedMedia} />}
+      {page === "Chats" && <Chats user={user} />}
       {page === "Profil" && <Profile user={user} userProfile={userProfile} totalRequests={totalRequests} onSelectMedia={setSelectedMedia} />}
     </section>
 
@@ -207,6 +232,7 @@ function Icon({ name }: { name: IconName }) {
     genre: <><path d="M4 4h8l8 8-8 8-10-10V4Z" /><circle cx="9" cy="9" r="1" /></>,
     medal: <><circle cx="12" cy="14" r="6" /><path d="m8 3 2.5 5M16 3l-2.5 5M10 14l1.4 1.4L14.5 12" /></>,
     refresh: <><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M8 16H3v5" /></>,
+    chat: <path d="M4 4.5h16v11H9.5L5 20v-4.5H4v-11Z" />,
   };
   return <svg className="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
@@ -216,11 +242,12 @@ function UserAvatar({ name }: { name: string }) {
   return <span className="user-avatar"><span className="avatar-initial">{initial}</span><img src="/api/me/avatar" alt="" width="44" height="44" onError={(event) => event.currentTarget.remove()} /></span>;
 }
 
-function Today({ upcoming, upcomingState, cinema, cinemaState, requests, requestState, newForYou, newForYouState, availableRequests, onSelectMedia }: {
+function Today({ upcoming, upcomingState, cinema, cinemaState, requests, requestState, newForYou, newForYouState, availableRequests, message, onSelectMedia, onOpenChats }: {
 	upcoming: UpcomingItem[]; upcomingState: LoadState; requests: RequestItem[]; requestState: LoadState;
 	cinema: UpcomingItem[]; cinemaState: LoadState;
   newForYou: NewForYouItem[]; newForYouState: LoadState; availableRequests: RequestItem[];
-  onSelectMedia: (selection: MediaSelection) => void;
+  message: { preview: string } | null;
+  onSelectMedia: (selection: MediaSelection) => void; onOpenChats: () => void;
 }) {
   const [allEventsOpen, setAllEventsOpen] = useState(false);
   const [newForYouGridOpen, setNewForYouGridOpen] = useState(false);
@@ -230,8 +257,10 @@ function Today({ upcoming, upcomingState, cinema, cinemaState, requests, request
     upcoming: upcomingState === "ready" ? upcoming : [],
     cinema: cinemaState === "ready" ? cinema : [],
     newForYou: newForYouState === "ready" ? newForYou : [],
+    message,
     onSelectMedia,
     onShowNewForYou: () => setNewForYouGridOpen(true),
+    onOpenChats,
   });
 
   return <div className="content today-view">
@@ -263,11 +292,20 @@ function releaseWording(premiereDate: string) {
 
 // Builds the prioritised event list: newly available requests first, then
 // releases due within the next two days, then the unseen-titles summary.
-function relevantEvents({ availableRequests, upcoming, cinema, newForYou, onSelectMedia, onShowNewForYou }: {
+function relevantEvents({ availableRequests, upcoming, cinema, newForYou, message, onSelectMedia, onShowNewForYou, onOpenChats }: {
   availableRequests: RequestItem[]; upcoming: UpcomingItem[]; cinema: UpcomingItem[]; newForYou: NewForYouItem[];
-  onSelectMedia: (selection: MediaSelection) => void; onShowNewForYou: () => void;
+  message: { preview: string } | null;
+  onSelectMedia: (selection: MediaSelection) => void; onShowNewForYou: () => void; onOpenChats: () => void;
 }): RelevantEvent[] {
   const events: RelevantEvent[] = [];
+
+  if (message) {
+    events.push({
+      key: "message", tone: "blue", icon: "chat", status: "Neue Nachricht",
+      detail: message.preview,
+      onOpen: onOpenChats,
+    });
+  }
 
   for (const request of availableRequests) {
     events.push({
@@ -918,6 +956,124 @@ function Profile({ user, userProfile, totalRequests, onSelectMedia }: { user: { 
     <button className="logout-button" onClick={logout} disabled={signingOut}>{signingOut ? "Abmeldung läuft …" : "Abmelden"}</button>
   </div>;
 }
+
+const chatTimeFormatter = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit" });
+function formatChatTime(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : chatTimeFormatter.format(date);
+}
+
+function ChatMessageList({ messages, mineWhenFromAdmin }: { messages: ChatMessage[]; mineWhenFromAdmin: boolean }) {
+  const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { listRef.current?.scrollTo({ top: listRef.current.scrollHeight }); }, [messages]);
+  return <div className="chat-messages" ref={listRef}>
+    {messages.map((message) => <div key={message.id} className={message.fromAdmin === mineWhenFromAdmin ? "chat-bubble mine" : "chat-bubble theirs"}>
+      <p>{message.body}</p>
+      <small>{formatChatTime(message.createdAt)}</small>
+    </div>)}
+  </div>;
+}
+
+function ChatComposer({ placeholder, onSend }: { placeholder: string; onSend: (body: string) => Promise<boolean> }) {
+  const [body, setBody] = useState("");
+  const [sending, setSending] = useState(false);
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const trimmed = body.trim();
+    if (!trimmed || sending) return;
+    setSending(true);
+    try { if (await onSend(trimmed)) setBody(""); } finally { setSending(false); }
+  };
+  return <form className="chat-composer" onSubmit={submit}>
+    <input type="text" className="search-input" placeholder={placeholder} value={body} onChange={(event) => setBody(event.target.value)} aria-label={placeholder} maxLength={4000} />
+    <button type="submit" className="search-button" disabled={body.trim() === "" || sending}>Senden</button>
+  </form>;
+}
+
+function Chats({ user }: { user: { id: string; name: string; isAdmin: boolean } }) {
+  return user.isAdmin ? <AdminChats /> : <UserChat />;
+}
+
+function UserChat() {
+  const [messages, state, refetch] = useApiResource<ChatMessage[]>("/api/messages", [], CHAT_POLL_MS);
+
+  useEffect(() => { fetch("/api/messages/read", { method: "POST", credentials: "include" }).catch(() => null); }, []);
+
+  const send = async (body: string) => {
+    const response = await fetch("/api/messages", {
+      method: "POST", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ body }),
+    });
+    if (response.ok) refetch();
+    return response.ok;
+  };
+
+  return <div className="content page-view chat-view">
+    <section className="chat-thread" aria-label="Chat mit dem Betreiber">
+      {state === "loading" && <p className="poster-status" role="status">Wird geladen …</p>}
+      {state === "error" && <p className="poster-status">Nicht verfügbar</p>}
+      {state === "ready" && messages.length === 0 && <p className="chat-empty">Schreib mir gern, wenn du eine Frage oder einen Wunsch hast.</p>}
+      <ChatMessageList messages={messages} mineWhenFromAdmin={false} />
+      <ChatComposer placeholder="Nachricht schreiben …" onSend={send} />
+    </section>
+  </div>;
+}
+
+function AdminChats() {
+  const [threads, threadsState] = useApiResource<ChatThread[]>("/api/admin/messages/threads", [], CHAT_POLL_MS);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const selectedThread = threads.find((thread) => thread.userId === selectedUserId) ?? null;
+
+  return <div className="content page-view chat-view">
+    <section className="chat-inbox" aria-label="Nachrichten-Posteingang">
+      {threadsState === "loading" && <p className="poster-status" role="status">Wird geladen …</p>}
+      {threadsState === "error" && <p className="poster-status">Nicht verfügbar</p>}
+      {threadsState === "ready" && threads.length === 0 && <p className="chat-empty">Noch keine Nachrichten von Nutzern.</p>}
+      <ul className="chat-thread-list">
+        {threads.map((thread) => <li key={thread.userId}>
+          <button type="button" className="chat-thread-row" onClick={() => setSelectedUserId(thread.userId)}>
+            <span className="chat-thread-name">{thread.displayName || "Unbekannt"}</span>
+            <span className="chat-thread-preview">{thread.lastMessage}</span>
+            {thread.unreadCount > 0 && <span className="chat-thread-badge">{thread.unreadCount}</span>}
+          </button>
+        </li>)}
+      </ul>
+    </section>
+    {selectedThread && <AdminChatThreadScreen thread={selectedThread} onClose={() => setSelectedUserId(null)} />}
+  </div>;
+}
+
+function AdminChatThreadScreen({ thread, onClose }: { thread: ChatThread; onClose: () => void }) {
+  useEscapeKey(onClose);
+  const [messages, state, refetch] = useApiResource<ChatMessage[]>(`/api/admin/messages/thread?userId=${encodeURIComponent(thread.userId)}`, [], CHAT_POLL_MS);
+
+  useEffect(() => {
+    fetch(`/api/admin/messages/thread/read?userId=${encodeURIComponent(thread.userId)}`, { method: "POST", credentials: "include" }).catch(() => null);
+  }, [thread.userId]);
+
+  const send = async (body: string) => {
+    const response = await fetch(`/api/admin/messages/thread?userId=${encodeURIComponent(thread.userId)}`, {
+      method: "POST", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ body }),
+    });
+    if (response.ok) refetch();
+    return response.ok;
+  };
+
+  return <div className="media-detail-overlay media-grid-overlay" role="dialog" aria-modal="true" aria-label={`Chat mit ${thread.displayName}`}>
+    <div className="media-detail-scroll">
+      <button type="button" className="media-detail-close" onClick={onClose} aria-label="Schließen"><Icon name="close" /></button>
+      <h1 className="media-grid-title">{thread.displayName || "Unbekannt"}</h1>
+      {state === "loading" && <p className="poster-status" role="status">Wird geladen …</p>}
+      {state === "error" && <p className="poster-status">Nicht verfügbar</p>}
+      <ChatMessageList messages={messages} mineWhenFromAdmin={true} />
+      <ChatComposer placeholder="Antwort schreiben …" onSend={send} />
+    </div>
+  </div>;
+}
+
 function greeting() {
   const hour = new Date().getHours();
   return hour < 12 ? "Moin" : hour < 18 ? "Mahlzeit" : "Nabend";

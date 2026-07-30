@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -50,6 +51,8 @@ type App struct {
 	favorites           emby.FavoriteWriter
 	sessions            session.Store
 	cookieSecure        bool
+	messages            store.MessageStore
+	adminUserID         string
 }
 
 func New(cfg config.Config) (*App, error) {
@@ -93,6 +96,8 @@ func New(cfg config.Config) (*App, error) {
 		favorites:           embyClient,
 		sessions:            session.NewRedisStore(cache),
 		cookieSecure:        cfg.CookieSecure,
+		messages:            store.NewPostgresMessageStore(database),
+		adminUserID:         cfg.AdminEmbyUserID,
 	}, nil
 }
 
@@ -150,6 +155,14 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/tracking/ratings", app.trackingRatings)
 	mux.HandleFunc("POST /api/media/emby/favorite", app.setFavoriteHandler(true))
 	mux.HandleFunc("DELETE /api/media/emby/favorite", app.setFavoriteHandler(false))
+	mux.HandleFunc("GET /api/messages", app.getMessages)
+	mux.HandleFunc("POST /api/messages", app.sendMessage)
+	mux.HandleFunc("POST /api/messages/read", app.markOwnThreadRead)
+	mux.HandleFunc("GET /api/messages/unread-count", app.unreadMessageCount)
+	mux.HandleFunc("GET /api/admin/messages/threads", app.adminMessageThreads)
+	mux.HandleFunc("GET /api/admin/messages/thread", app.adminMessageThread)
+	mux.HandleFunc("POST /api/admin/messages/thread", app.adminSendMessage)
+	mux.HandleFunc("POST /api/admin/messages/thread/read", app.adminMarkThreadRead)
 	return mux
 }
 
@@ -196,7 +209,7 @@ func (app *App) login(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	http.SetCookie(writer, &http.Cookie{Name: sessionCookieName, Value: sessionID, Path: "/", MaxAge: int(session.Duration.Seconds()), HttpOnly: true, Secure: app.cookieSecure, SameSite: http.SameSiteLaxMode})
-	respondJSON(writer, http.StatusOK, profile(identity))
+	respondJSON(writer, http.StatusOK, app.identityProfile(identity))
 }
 
 func (app *App) me(writer http.ResponseWriter, request *http.Request) {
@@ -204,7 +217,7 @@ func (app *App) me(writer http.ResponseWriter, request *http.Request) {
 	if !ok {
 		return
 	}
-	respondJSON(writer, http.StatusOK, profile(identity))
+	respondJSON(writer, http.StatusOK, app.identityProfile(identity))
 }
 
 func (app *App) meProfile(writer http.ResponseWriter, request *http.Request) {
@@ -630,6 +643,190 @@ func (app *App) trackingRatings(writer http.ResponseWriter, request *http.Reques
 	respondJSON(writer, http.StatusOK, orEmpty(items))
 }
 
+const maxMessageBodyLength = 4000
+
+// requireAdmin rejects the request unless ADMIN_EMBY_USER_ID is configured
+// and matches the caller. Chat is a closed loop between each user and this
+// one fixed admin identity — there is no broader role system.
+func (app *App) requireAdmin(writer http.ResponseWriter, identity emby.Identity) bool {
+	if app.adminUserID == "" || identity.UserID != app.adminUserID {
+		respondJSON(writer, http.StatusForbidden, map[string]string{"error": "admin access required"})
+		return false
+	}
+	return true
+}
+
+func decodeMessageBody(writer http.ResponseWriter, request *http.Request) (string, bool) {
+	var input struct {
+		Body string `json:"body"`
+	}
+	request.Body = http.MaxBytesReader(writer, request.Body, 1<<16)
+	if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return "", false
+	}
+	trimmed := strings.TrimSpace(input.Body)
+	if trimmed == "" || len(trimmed) > maxMessageBodyLength {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "body must be 1-4000 characters"})
+		return "", false
+	}
+	return trimmed, true
+}
+
+// getMessages returns the caller's own thread with the admin. The admin has
+// no thread of their own — they use the /api/admin/messages/* endpoints.
+func (app *App) getMessages(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	if identity.UserID == app.adminUserID {
+		respondJSON(writer, http.StatusForbidden, map[string]string{"error": "the admin account has no thread of its own"})
+		return
+	}
+	messages, err := app.messages.Thread(request.Context(), identity.UserID)
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "messages are unavailable"})
+		return
+	}
+	respondJSON(writer, http.StatusOK, orEmpty(messages))
+}
+
+func (app *App) sendMessage(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	if identity.UserID == app.adminUserID {
+		respondJSON(writer, http.StatusForbidden, map[string]string{"error": "the admin account has no thread of its own"})
+		return
+	}
+	body, ok := decodeMessageBody(writer, request)
+	if !ok {
+		return
+	}
+	if err := app.messages.Send(request.Context(), identity.UserID, identity.DisplayName, body, false); err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "sending the message failed"})
+		return
+	}
+	writer.WriteHeader(http.StatusNoContent)
+}
+
+func (app *App) markOwnThreadRead(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	if err := app.messages.MarkRead(request.Context(), identity.UserID, true); err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "updating messages failed"})
+		return
+	}
+	writer.WriteHeader(http.StatusNoContent)
+}
+
+// unreadMessageCount backs the notification bell. For a regular user it is
+// how many admin replies they haven't read; for the admin it is how many
+// user messages are unread across every thread.
+func (app *App) unreadMessageCount(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	var count int
+	var err error
+	if identity.UserID == app.adminUserID {
+		count, err = app.messages.UnreadCountForAdmin(request.Context())
+	} else {
+		count, err = app.messages.UnreadCountForUser(request.Context(), identity.UserID)
+	}
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "unread count is unavailable"})
+		return
+	}
+	respondJSON(writer, http.StatusOK, map[string]int{"count": count})
+}
+
+func (app *App) adminMessageThreads(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	if !app.requireAdmin(writer, identity) {
+		return
+	}
+	threads, err := app.messages.Threads(request.Context())
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "threads are unavailable"})
+		return
+	}
+	respondJSON(writer, http.StatusOK, orEmpty(threads))
+}
+
+func (app *App) adminMessageThread(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	if !app.requireAdmin(writer, identity) {
+		return
+	}
+	userID := request.URL.Query().Get("userId")
+	if userID == "" {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "userId is required"})
+		return
+	}
+	messages, err := app.messages.Thread(request.Context(), userID)
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "messages are unavailable"})
+		return
+	}
+	respondJSON(writer, http.StatusOK, orEmpty(messages))
+}
+
+func (app *App) adminSendMessage(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	if !app.requireAdmin(writer, identity) {
+		return
+	}
+	userID := request.URL.Query().Get("userId")
+	if userID == "" {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "userId is required"})
+		return
+	}
+	body, ok := decodeMessageBody(writer, request)
+	if !ok {
+		return
+	}
+	if err := app.messages.Send(request.Context(), userID, "", body, true); err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "sending the message failed"})
+		return
+	}
+	writer.WriteHeader(http.StatusNoContent)
+}
+
+func (app *App) adminMarkThreadRead(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	if !app.requireAdmin(writer, identity) {
+		return
+	}
+	userID := request.URL.Query().Get("userId")
+	if userID == "" {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "userId is required"})
+		return
+	}
+	if err := app.messages.MarkRead(request.Context(), userID, false); err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "updating messages failed"})
+		return
+	}
+	writer.WriteHeader(http.StatusNoContent)
+}
+
 // validEmbyItemID matches the shapes Emby actually uses for item IDs — hex
 // GUIDs (with or without dashes) and numeric IDs. Anything else is rejected
 // before it can reach SetFavorite, which interpolates the ID into a URL sent
@@ -780,8 +977,12 @@ func (app *App) identityFromRequest(writer http.ResponseWriter, request *http.Re
 	return identity, true
 }
 
-func profile(identity emby.Identity) map[string]string {
-	return map[string]string{"id": identity.UserID, "name": identity.DisplayName}
+func (app *App) identityProfile(identity emby.Identity) map[string]any {
+	return map[string]any{
+		"id":      identity.UserID,
+		"name":    identity.DisplayName,
+		"isAdmin": app.adminUserID != "" && identity.UserID == app.adminUserID,
+	}
 }
 
 func respondJSON(writer http.ResponseWriter, status int, body any) {
