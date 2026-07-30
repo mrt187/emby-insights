@@ -53,7 +53,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Chats", icon: "chat" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.43";
+const APP_VERSION = "0.8.44";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -615,9 +615,6 @@ function useDiscoverList(path: string) {
   return [items, state] as const;
 }
 
-// Hulu (former entry here) doesn't operate in Germany at all, so it could
-// never return results regardless of provider id — dropped in favor of WOW
-// once its exact TMDB provider id is confirmed (see CHANGELOG).
 const STREAMING_PROVIDERS: { id: string; name: string }[] = [
   { id: "8", name: "Netflix" },
   { id: "337", name: "Disney+" },
@@ -625,6 +622,7 @@ const STREAMING_PROVIDERS: { id: string; name: string }[] = [
   { id: "350", name: "Apple TV+" },
   { id: "531", name: "Paramount+" },
   { id: "1899", name: "HBO Max" },
+  { id: "30", name: "WOW" },
 ];
 
 function Requests({ onSelectMedia }: { onSelectMedia: (selection: MediaSelection) => void }) {

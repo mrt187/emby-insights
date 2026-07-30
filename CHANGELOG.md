@@ -8,6 +8,15 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.44] - 2026-07-30
+
+### Added
+
+- WOW added back as a provider chip under Anfragen, using the confirmed
+  TMDB provider id 30 (verified via Seerr's own discover UI, replacing
+  the earlier Hulu chip that was dropped for not being available in
+  Germany).
+
 ## [0.8.43] - 2026-07-30
 
 ### Fixed
