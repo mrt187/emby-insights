@@ -206,7 +206,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .content { container: content / inline-size; display: grid; gap: 34px; }
 .content > * { min-width: 0; }
 
-.section-heading { display: flex; justify-content: space-between; align-items: end; gap: 16px; }
+.section-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 10px 16px; }
 .section-heading > div { min-width: 0; }
 .section-heading h2 { margin: 0; font-size: 25px; font-weight: 800; letter-spacing: -1px; }
 

@@ -8,6 +8,17 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.36] - 2026-07-30
+
+### Fixed
+
+- On the Chats page, the "Rundmail"/"Neuer Chat" buttons overflowed past
+  the screen edge next to the "Posteingang" heading on mobile instead of
+  wrapping onto their own line.
+- The mobile bottom nav had 5 items in a 4-column grid, so "Profil" wrapped
+  onto its own broken second row. Removed it from the bottom nav — it's
+  already reachable via the avatar button in the header.
+
 ## [0.8.35] - 2026-07-30
 
 ### Added
