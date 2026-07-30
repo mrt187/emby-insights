@@ -308,21 +308,16 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .metric-card .skeleton-detail { display: block; width: 70%; height: 10px; }
 .genre-card strong { font-size: 15px; line-height: 1.15; overflow-wrap: anywhere; }
 .genre-card .metric-icon { position: absolute; right: 14px; top: 14px; }
-.rank-card { display: flex; align-items: center; gap: 14px; }
-.rank-avatar-badge { position: relative; flex: 0 0 auto; }
-.rank-avatar { position: relative; display: block; width: 52px; height: 52px; border: 2px solid rgb(241 246 243 / 66%); border-radius: 50%; overflow: hidden; background: var(--ink); }
+.rank-avatar-badge { position: relative; z-index: 1; display: block; width: 36px; height: 36px; margin-bottom: 8px; }
+.rank-avatar { position: relative; display: block; width: 36px; height: 36px; border: 2px solid rgb(241 246 243 / 66%); border-radius: 50%; overflow: hidden; background: var(--ink); }
 .rank-badge {
-  position: absolute; right: -4px; bottom: -4px; z-index: 1; min-width: 22px; height: 22px; padding: 0 5px;
+  position: absolute; right: -4px; bottom: -4px; z-index: 1; min-width: 20px; height: 20px; padding: 0 4px;
   display: grid; place-items: center; border: 2px solid var(--ink-raised); border-radius: 999px;
-  color: #15191d; font-size: 11px; font-weight: 900; font-variant-numeric: tabular-nums;
+  color: #15191d; font-size: 10px; font-weight: 900; font-variant-numeric: tabular-nums;
   background: linear-gradient(145deg, #cdd3d7, #818a91); box-shadow: 0 3px 8px rgb(0 0 0 / 32%);
 }
 .rank-badge.gold { background: linear-gradient(145deg, #ffe69a, #c59124); }
 .rank-badge.bronze { background: linear-gradient(145deg, #e4a77d, #9a5836); }
-.rank-card-copy { position: relative; z-index: 1; display: grid; gap: 4px; min-width: 0; }
-.rank-card-copy strong { display: block; font-size: clamp(20px, 2vw, 27px); font-weight: 800; letter-spacing: -1px; line-height: 1; }
-.rank-card-copy p { margin: 2px 0 0; color: var(--text-secondary); font-size: 12px; }
-.rank-card-copy small { color: var(--muted); font-size: 10px; }
 
 /* --------------------------------------------------------- poster rows */
 
@@ -337,20 +332,14 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   scroll-snap-type: x proximity; scrollbar-width: thin; scrollbar-color: #405148 transparent;
 }
 .provider-chip {
-  flex: 0 0 auto; scroll-snap-align: start; min-height: 64px; min-width: 132px; padding: 0 22px;
-  display: grid; place-items: center; border-radius: 14px; border: 1px solid rgb(255 255 255 / 10%);
-  font-weight: 800; font-size: 15px; letter-spacing: -.2px; color: #f5f7f6; white-space: nowrap;
+  flex: 0 0 auto; scroll-snap-align: start; min-height: 84px; min-width: 172px; padding: 0 28px;
+  display: grid; place-items: center; border-radius: 16px; border: 1px solid rgb(255 255 255 / 14%);
+  font-weight: 800; font-size: 18px; letter-spacing: -.2px; color: #f5f7f6; white-space: nowrap;
+  background: linear-gradient(150deg, rgb(38 42 46 / 92%), rgb(12 13 15 / 92%));
   box-shadow: 0 10px 22px rgb(0 0 0 / 25%);
   transition: transform 200ms var(--ease-out), border-color 200ms ease;
 }
-.provider-chip:hover { transform: translateY(-3px); border-color: rgb(255 255 255 / 22%); }
-.provider-netflix { background: linear-gradient(135deg, #8a0f0f, #2c0303); }
-.provider-disneyplus { background: linear-gradient(135deg, #123a8f, #060f2e); }
-.provider-primevideo { background: linear-gradient(135deg, #1f5e78, #082029); color: #9fe3ff; }
-.provider-appletv { background: linear-gradient(135deg, #34343a, #0a0a0c); }
-.provider-hulu { background: linear-gradient(135deg, #0c4a37, #05130f); color: #b6ff4d; }
-.provider-paramountplus { background: linear-gradient(135deg, #1450e0, #050f3d); }
-.provider-hbomax { background: linear-gradient(135deg, #4b1f8f, #140729); }
+.provider-chip:hover { transform: translateY(-3px); border-color: rgb(255 255 255 / 30%); }
 .poster-entry { flex: 0 0 158px; min-width: 0; scroll-snap-align: start; }
 .poster-entry-button {
   display: block; box-sizing: border-box; width: 100%; padding: 0; border: 0; margin: 0;

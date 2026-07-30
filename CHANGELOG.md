@@ -8,6 +8,28 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.43] - 2026-07-30
+
+### Fixed
+
+- The rank card's title ("Platz N") could render above the card's own
+  background on narrower widths — its content was a horizontal
+  avatar+text flex row that needed to fit a wrapping three-line subtitle
+  next to a fixed-size avatar, unlike every other card's simple vertical
+  stack. It now uses the exact same vertical flow as the metric cards
+  (avatar in place of the icon, then title/label/detail stacked below),
+  so it grows like the others instead of overflowing.
+
+### Changed
+
+- Provider chips under Anfragen are bigger and now a single, consistent
+  dark/monochrome style instead of per-brand colored gradients.
+- Removed the Hulu chip — it doesn't operate in Germany at all, so no
+  provider id could ever return results for it. Replacing it with WOW
+  (the German Sky-owned service) is pending — its exact TMDB provider id
+  couldn't be confirmed without live API access; needs a quick check
+  against the Seerr/TMDB discover UI to get the right id.
+
 ## [0.8.42] - 2026-07-30
 
 ### Fixed

@@ -53,7 +53,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Chats", icon: "chat" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.42";
+const APP_VERSION = "0.8.43";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -404,6 +404,11 @@ function MetricCard({ icon, tone, value, label, detail, positive, genre = false,
     : <article className={`metric-card tone-${tone}${genre ? " genre-card" : ""}`}>{inner}</article>;
 }
 
+// Same vertical flow as MetricCard (icon, then strong/p/small stacked in
+// normal document flow) instead of the previous side-by-side avatar+text
+// row — that horizontal layout needed the avatar and a wrapping subtitle to
+// both fit a fixed row height, and on narrower widths the text overflowed
+// above the card instead of just growing the box like every other card.
 function RankCard({ rank, name, userId }: { rank: number | null; name: string; userId: string }) {
   const hasRank = rank !== null && rank > 0;
   const medalClass = rank === 1 ? " gold" : rank === 3 ? " bronze" : "";
@@ -412,11 +417,9 @@ function RankCard({ rank, name, userId }: { rank: number | null; name: string; u
       <span className="rank-avatar"><UserAvatar name={name} userId={userId} /></span>
       <span className={`rank-badge${medalClass}`}>{hasRank ? rank : "—"}</span>
     </span>
-    <span className="rank-card-copy">
-      <strong>{hasRank ? `Platz ${rank}` : "—"}</strong>
-      <p>Dein Platz</p>
-      <small>Nach Sehzeit unter allen Nutzern</small>
-    </span>
+    <strong>{hasRank ? `Platz ${rank}` : "—"}</strong>
+    <p>Dein Platz</p>
+    <small>Nach Sehzeit unter allen Nutzern</small>
   </article>;
 }
 
@@ -612,14 +615,16 @@ function useDiscoverList(path: string) {
   return [items, state] as const;
 }
 
-const STREAMING_PROVIDERS: { id: string; name: string; className: string }[] = [
-  { id: "8", name: "Netflix", className: "provider-netflix" },
-  { id: "337", name: "Disney+", className: "provider-disneyplus" },
-  { id: "9", name: "Prime Video", className: "provider-primevideo" },
-  { id: "350", name: "Apple TV+", className: "provider-appletv" },
-  { id: "15", name: "Hulu", className: "provider-hulu" },
-  { id: "531", name: "Paramount+", className: "provider-paramountplus" },
-  { id: "1899", name: "HBO Max", className: "provider-hbomax" },
+// Hulu (former entry here) doesn't operate in Germany at all, so it could
+// never return results regardless of provider id — dropped in favor of WOW
+// once its exact TMDB provider id is confirmed (see CHANGELOG).
+const STREAMING_PROVIDERS: { id: string; name: string }[] = [
+  { id: "8", name: "Netflix" },
+  { id: "337", name: "Disney+" },
+  { id: "9", name: "Prime Video" },
+  { id: "350", name: "Apple TV+" },
+  { id: "531", name: "Paramount+" },
+  { id: "1899", name: "HBO Max" },
 ];
 
 function Requests({ onSelectMedia }: { onSelectMedia: (selection: MediaSelection) => void }) {
@@ -688,7 +693,7 @@ function Requests({ onSelectMedia }: { onSelectMedia: (selection: MediaSelection
     <section className="poster-section">
       <div className="section-heading"><div><p className="eyebrow">WO STREAMEN?</p><h2>Anbieter</h2></div></div>
       <div className="provider-scroller">
-        {STREAMING_PROVIDERS.map((provider) => <button type="button" key={provider.id} className={`provider-chip ${provider.className}`} onClick={() => setProviderId(provider.id)}>{provider.name}</button>)}
+        {STREAMING_PROVIDERS.map((provider) => <button type="button" key={provider.id} className="provider-chip" onClick={() => setProviderId(provider.id)}>{provider.name}</button>)}
       </div>
     </section>
     {selectedProvider && <MediaGridScreen
