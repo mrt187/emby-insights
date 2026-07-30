@@ -37,7 +37,7 @@ type MediaDetail = {
   mediaStatus?: number;
   status?: string; releaseDate?: string; studios?: string[];
 };
-type MediaTrackingEntry = { mediaSource: string; mediaId: string; mediaType: string; title: string; posterUrl: string; rating?: number; onWatchlist: boolean; rewatchCount: number };
+type MediaTrackingEntry = { mediaSource: string; mediaId: string; mediaType: string; title: string; posterUrl: string; rating?: number; onWatchlist: boolean; rewatchCount: number; hiddenInProgress?: boolean };
 function isRequestableSeason(season: MediaSeason | RequestableSeason): season is RequestableSeason { return !("id" in season); }
 type IconName = "home" | "chart" | "sparkle" | "user" | "bell" | "arrow" | "close" | "clock" | "movie" | "series" | "genre" | "medal" | "refresh" | "chat" | "settings";
 type Tone = "blue" | "peach" | "mint" | "lilac";
@@ -62,7 +62,7 @@ function visibleNav(user: CurrentUser): { label: Page; icon: IconName }[] {
   return items;
 }
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.47";
+const APP_VERSION = "0.8.48";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -227,7 +227,7 @@ export default function Home() {
       {page === "Verwaltung" && user.isAdmin && <AdminSettings />}
     </section>
 
-    <nav className="bottom-nav" aria-label="Hauptnavigation (mobil)">{nav.map((item) => <button key={item.label} className={page === item.label ? "active" : ""} onClick={() => selectPage(item.label)} aria-current={page === item.label ? "page" : undefined}><Icon name={item.icon} /><span className="sr-only">{item.label}</span></button>)}</nav>
+    <nav className="bottom-nav" aria-label="Hauptnavigation (mobil)">{nav.filter((item) => item.label !== "Profil").map((item) => <button key={item.label} className={page === item.label ? "active" : ""} onClick={() => selectPage(item.label)} aria-current={page === item.label ? "page" : undefined}><Icon name={item.icon} /><span className="sr-only">{item.label}</span></button>)}</nav>
   </main>;
 }
 
@@ -277,11 +277,34 @@ function Today({ upcoming, upcomingState, cinema, cinemaState, requests, request
 }) {
   const [allEventsOpen, setAllEventsOpen] = useState(false);
   const [newForYouGridOpen, setNewForYouGridOpen] = useState(false);
+  const [dismissedSeriesIds, setDismissedSeriesIds] = useState<string[]>([]);
 
   // Ohne Radarr fehlen Filmtermine, ohne Sonarr Serientermine — beide fließen
   // serverseitig in dieselbe Liste, deshalb wird hier nach Medientyp gefiltert
   // statt eine eigene Abfrage pro Dienst zu brauchen.
   const visibleUpcoming = upcoming.filter((item) => (item.mediaType === "movie" ? features.movieDates : features.seriesDates));
+  const visibleSeriesInProgress = seriesInProgress.filter((item) => !dismissedSeriesIds.includes(item.id));
+
+  // Merges with any existing rating/watchlist entry (Upsert overwrites the
+  // whole row) so hiding a series never silently clears an unrelated star
+  // rating. Removed from view immediately; the server-side filter (see
+  // seriesInProgressHandler) keeps it hidden on the next real fetch too.
+  const hideSeries = async (item: SeriesProgress) => {
+    setDismissedSeriesIds((current) => [...current, item.id]);
+    try {
+      const existingResponse = await fetch(`/api/tracking?source=emby&id=${encodeURIComponent(item.id)}`, { credentials: "include" });
+      const existing: MediaTrackingEntry = existingResponse.ok ? await existingResponse.json() : { mediaSource: "emby", mediaId: item.id, mediaType: "series", title: item.title, posterUrl: item.posterUrl, onWatchlist: false, rewatchCount: 0 };
+      await fetch("/api/tracking", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...existing, mediaSource: "emby", mediaId: item.id, mediaType: "series", title: item.title, posterUrl: item.posterUrl, hiddenInProgress: true }),
+      });
+    } catch {
+      // The row already reflects the dismissal locally; a failed write just
+      // means it can reappear after a reload, not a broken UI right now.
+    }
+  };
 
   const events = relevantEvents({
     availableRequests,
@@ -297,7 +320,7 @@ function Today({ upcoming, upcomingState, cinema, cinemaState, requests, request
   return <div className="content today-view">
     <RelevantNow events={events} onShowAll={() => setAllEventsOpen(true)} />
     {features.upcoming && <PosterRow title="Demnächst" eyebrow="IN DEN NÄCHSTEN 4 WOCHEN AUF EMBY" items={visibleUpcoming} state={upcomingState} emptyLabel="Nichts Neues in den nächsten vier Wochen." itemTitle={upcomingTitle} detail={(item) => availabilityWording(item.availabilityDate)} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />}
-    <PosterRow title="Offene Staffeln" eyebrow="TEILWEISE GESEHEN" items={seriesInProgress} state={seriesInProgressState} emptyLabel="Keine Serien mit offenen Folgen." detail={(item) => `${item.watchedEpisodes} von ${item.totalEpisodes} Folgen`} progress={(item) => Math.round((item.watchedEpisodes / item.totalEpisodes) * 100)} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
+    <PosterRow title="Noch nicht fertig" eyebrow="TEILWEISE GESEHEN" items={visibleSeriesInProgress} state={seriesInProgressState} emptyLabel="Keine Serien mit offenen Folgen." detail={(item) => `${item.watchedEpisodes} von ${item.totalEpisodes} Folgen`} progress={(item) => Math.round((item.watchedEpisodes / item.totalEpisodes) * 100)} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onDismiss={hideSeries} />
     {features.requests && <PosterRow title="Meine Anfragen" eyebrow="SEERR · OFFEN" items={requests} state={requestState} emptyLabel="Keine offenen Anfragen." detail={(item) => item.status} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />}
     <PosterRow title="Neu für dich" eyebrow="IN DEN LETZTEN 14 TAGEN" items={newForYou} state={newForYouState} emptyLabel="Nichts Neues in den letzten 14 Tagen." detail={() => "Ungesehen"} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
     {features.movieDates && <PosterRow title="Im Kino" eyebrow="KOMMENDE UND AKTUELLE KINOSTARTS" items={cinema} state={cinemaState} emptyLabel="Zurzeit keine Kinostarts." detail={cinemaWording} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />}
@@ -441,8 +464,9 @@ function RankCard({ rank, name, userId }: { rank: number | null; name: string; u
   </article>;
 }
 
-function PosterRow<T extends { id: string; title: string; posterUrl?: string }>({ title, eyebrow, gridTitle, items, detail, itemTitle, state, emptyLabel, progress, onSelect }: {
+function PosterRow<T extends { id: string; title: string; posterUrl?: string }>({ title, eyebrow, gridTitle, items, detail, itemTitle, state, emptyLabel, progress, onSelect, onDismiss, dismissLabel }: {
   title?: string; eyebrow?: string; gridTitle?: string; items: readonly T[]; detail: (item: T) => string; itemTitle?: (item: T) => string; state?: LoadState; emptyLabel?: string; progress?: (item: T) => number; onSelect?: (item: T) => void;
+  onDismiss?: (item: T) => void; dismissLabel?: string;
 }) {
   const [gridOpen, setGridOpen] = useState(false);
   const resolvedGridTitle = gridTitle ?? title ?? "Übersicht";
@@ -462,9 +486,17 @@ function PosterRow<T extends { id: string; title: string; posterUrl?: string }>(
         </div>
         <strong>{itemTitle?.(item) ?? item.title}</strong><small className={detail(item).includes("★") ? "rating-stars" : undefined}>{detail(item)}</small>
       </>;
-      return onSelect
-        ? <button type="button" className="poster-entry poster-entry-button" key={item.id} onClick={() => onSelect(item)}>{inner}</button>
-        : <article className="poster-entry" key={item.id}>{inner}</article>;
+      // onDismiss's button can't nest inside onSelect's — buttons can't
+      // contain buttons — so it's a sibling below the entry instead of
+      // inside it.
+      const entry = onSelect
+        ? <button type="button" className="poster-entry poster-entry-button" onClick={() => onSelect(item)}>{inner}</button>
+        : <article className="poster-entry">{inner}</article>;
+      if (!onDismiss) return <div className="poster-entry-wrap" key={item.id}>{entry}</div>;
+      return <div className="poster-entry-wrap" key={item.id}>
+        {entry}
+        <button type="button" className="request-button poster-dismiss-button" aria-label={`${dismissLabel ?? "Ausblenden"}: ${itemTitle?.(item) ?? item.title}`} onClick={() => onDismiss(item)}>{dismissLabel ?? "Ausblenden"}</button>
+      </div>;
     })}</div>}
     {gridOpen && <MediaGridScreen title={resolvedGridTitle} items={items} detail={detail} progress={progress} onSelect={onSelect} onClose={() => setGridOpen(false)} />}
   </section>;

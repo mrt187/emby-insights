@@ -1394,6 +1394,17 @@ func (app *App) seriesInProgressHandler(writer http.ResponseWriter, request *htt
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "series in progress are unavailable"})
 		return
 	}
+	// A failure to load dismissals must not hide the whole row — it just
+	// means a previously-dismissed series briefly reappears.
+	if hidden, err := app.tracking.HiddenInProgressIDs(request.Context(), identity.UserID); err == nil && len(hidden) > 0 {
+		visible := make([]emby.SeriesProgress, 0, len(items))
+		for _, item := range items {
+			if !hidden[item.ID] {
+				visible = append(visible, item)
+			}
+		}
+		items = visible
+	}
 	respondJSON(writer, http.StatusOK, orEmpty(items))
 }
 

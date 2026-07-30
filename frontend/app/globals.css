@@ -342,6 +342,14 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 }
 .provider-chip:hover { transform: translateY(-3px); border-color: rgb(255 255 255 / 30%); }
 .poster-entry { flex: 0 0 158px; min-width: 0; scroll-snap-align: start; }
+.poster-entry-wrap { display: flex; flex-direction: column; flex: 0 0 158px; min-width: 0; scroll-snap-align: start; }
+.poster-entry-wrap .poster-entry { flex: initial; min-width: initial; scroll-snap-align: initial; }
+/* Same look as .request-button (the "Anfragen" button), just fitted into a
+   narrow poster card: full width, smaller padding, no min-height floor. */
+.poster-dismiss-button {
+  width: 100%; margin-top: 8px; padding: 8px 12px; min-height: 0;
+  font-size: 12px; text-align: center;
+}
 .poster-entry-button {
   display: block; box-sizing: border-box; width: 100%; padding: 0; border: 0; margin: 0;
   background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer;
@@ -362,7 +370,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   box-shadow: 0 14px 26px rgb(0 0 0 / 18%);
   transition: transform 220ms var(--ease-out), border-color 220ms ease, box-shadow 220ms ease;
 }
-.poster-entry:hover .poster {
+.poster-entry:hover .poster, .poster-entry-wrap:hover .poster {
   transform: translateY(-5px) rotate(-.5deg);
   border-color: rgb(236 255 244 / 38%); box-shadow: 0 22px 38px rgb(0 0 0 / 32%);
 }
@@ -877,7 +885,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   .week-grid { gap: 10px; }
   .genre-card { min-height: 96px; }
 
-  .poster-entry { flex-basis: 143px; }
+  .poster-entry, .poster-entry-wrap { flex-basis: 143px; }
   .poster.wide { height: 206px; border-radius: 16px; }
 
   .relevant-head { padding: 10px 10px 2px; }

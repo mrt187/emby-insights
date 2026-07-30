@@ -272,6 +272,9 @@ type fakeTrackingStore struct {
 	watchlist    []store.MediaTracking
 	ratings      []store.MediaTracking
 	err          error
+
+	hiddenInProgress map[string]bool
+	hiddenErr        error
 }
 
 func (fake *fakeTrackingStore) Get(_ context.Context, _, _, _ string) (store.MediaTracking, bool, error) {
@@ -290,6 +293,18 @@ func (fake *fakeTrackingStore) Watchlist(_ context.Context, _ string) ([]store.M
 
 func (fake *fakeTrackingStore) Ratings(_ context.Context, _ string) ([]store.MediaTracking, error) {
 	return fake.ratings, fake.err
+}
+
+func (fake *fakeTrackingStore) HiddenInProgressIDs(_ context.Context, _ string) (map[string]bool, error) {
+	return fake.hiddenInProgress, fake.hiddenErr
+}
+
+type fakeSeriesInProgressReader struct {
+	items []emby.SeriesProgress
+}
+
+func (reader *fakeSeriesInProgressReader) SeriesInProgress(_ context.Context, _ string, _ []string) ([]emby.SeriesProgress, error) {
+	return reader.items, nil
 }
 
 type fakeFavoriteWriter struct {
@@ -564,6 +579,48 @@ func TestContinueWatchingUsesSessionIdentity(t *testing.T) {
 	}
 	if !strings.Contains(recorder.Body.String(), "The Bear") {
 		t.Fatalf("body = %s", recorder.Body.String())
+	}
+}
+
+func TestSeriesInProgressFiltersOutHiddenSeries(t *testing.T) {
+	sessions := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	reader := &fakeSeriesInProgressReader{items: []emby.SeriesProgress{
+		{ID: "series-1", Title: "The Bear", WatchedEpisodes: 3, TotalEpisodes: 8},
+		{ID: "series-2", Title: "Severance", WatchedEpisodes: 5, TotalEpisodes: 10},
+	}}
+	tracking := &fakeTrackingStore{hiddenInProgress: map[string]bool{"series-1": true}}
+	app := &App{sessions: sessions, seriesInProgress: reader, tracking: tracking}
+
+	request := httptest.NewRequest(http.MethodGet, "/api/series-in-progress", nil)
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	body := recorder.Body.String()
+	if strings.Contains(body, "The Bear") {
+		t.Fatalf("body = %s, want the hidden series excluded", body)
+	}
+	if !strings.Contains(body, "Severance") {
+		t.Fatalf("body = %s, want the non-hidden series included", body)
+	}
+}
+
+func TestSeriesInProgressIgnoresHiddenLookupFailure(t *testing.T) {
+	sessions := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	reader := &fakeSeriesInProgressReader{items: []emby.SeriesProgress{{ID: "series-1", Title: "The Bear", WatchedEpisodes: 3, TotalEpisodes: 8}}}
+	tracking := &fakeTrackingStore{hiddenErr: errors.New("boom")}
+	app := &App{sessions: sessions, seriesInProgress: reader, tracking: tracking}
+
+	request := httptest.NewRequest(http.MethodGet, "/api/series-in-progress", nil)
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "The Bear") {
+		t.Fatalf("status = %d, body = %s, want the series still shown when the hidden lookup fails", recorder.Code, recorder.Body.String())
 	}
 }
 

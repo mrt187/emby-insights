@@ -8,6 +8,20 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.48] - 2026-07-30
+
+### Added
+
+- "Offene Staffeln" renamed to "Noch nicht fertig" (eyebrow "Teilweise
+  gesehen" unchanged).
+- Series in that row can now be dismissed with an "Ausblenden" button
+  (styled like the Anfragen button), without needing to finish watching
+  them. Dismissals persist per user (new `hidden_in_progress` column,
+  independent of ratings/watchlist) and are also filtered server-side, so
+  a dismissed series stays hidden after a real refetch.
+- Mobile bottom nav: Profil removed again (reachable via the avatar tap in
+  the header, as before).
+
 ## [0.8.47] - 2026-07-30
 
 ### Changed
