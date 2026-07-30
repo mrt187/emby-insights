@@ -8,6 +8,16 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.38] - 2026-07-30
+
+### Fixed
+
+- The chat thread list's message preview ran past the screen edge on
+  mobile instead of being truncated with an ellipsis: a grid/flex item's
+  automatic minimum size defaults to its content's min-content width, so
+  the nowrap preview text forced every ancestor (list, row) wider instead
+  of clipping. Added `min-width: 0` down the whole chain.
+
 ## [0.8.37] - 2026-07-30
 
 ### Changed

@@ -653,14 +653,18 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .chat-composer { display: flex; gap: 10px; }
 
 .chat-avatar { position: relative; flex: 0 0 36px; width: 36px; height: 36px; border-radius: 50%; overflow: hidden; background: var(--ink); }
-.chat-thread-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+/* min-width: 0 the whole way down: a grid/flex item's automatic minimum
+   size otherwise defaults to its content's min-content width, so a long
+   nowrap preview can force every ancestor wider instead of being clipped. */
+.chat-thread-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; min-width: 0; }
+.chat-thread-list > li { min-width: 0; }
 .chat-thread-row {
-  width: 100%; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 10px 12px;
+  width: 100%; min-width: 0; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 10px 12px;
   border: 0; border-radius: 12px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer;
   transition: background-color 180ms ease;
 }
 .chat-thread-row:hover { background: rgb(255 255 255 / 5%); }
-.chat-thread-name { flex: 0 0 auto; font-weight: 700; font-size: 13px; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-thread-name { flex: 0 1 40%; min-width: 0; font-weight: 700; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-thread-preview { flex: 1; min-width: 0; color: var(--text-secondary); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-thread-badge {
   flex: 0 0 auto; min-width: 22px; height: 22px; padding: 0 6px; display: grid; place-items: center;
