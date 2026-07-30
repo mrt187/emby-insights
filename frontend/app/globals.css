@@ -701,8 +701,12 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 /* Admin's per-user chat overlay: the same "composer always at the bottom"
    treatment, scoped so it doesn't affect the other .media-detail-scroll
    screens (media detail, grids, contact picker) which need normal
-   variable-length page scrolling instead. */
+   variable-length page scrolling instead. It reuses .chat-thread (the same
+   bordered/gradient card the regular user's chat page uses, so both look
+   the same) but overrides its page-context min-height, since here the
+   available height is already bounded by this flex column's height:100%. */
 .chat-overlay-scroll { display: flex; flex-direction: column; height: 100%; }
+.chat-overlay-scroll .chat-thread { min-height: 0; }
 .chat-overlay-scroll .chat-messages { flex: 1; min-height: 0; }
 .chat-overlay-scroll .chat-composer { flex: 0 0 auto; }
 

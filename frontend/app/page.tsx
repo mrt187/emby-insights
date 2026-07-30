@@ -53,7 +53,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Chats", icon: "chat" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.41";
+const APP_VERSION = "0.8.42";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -201,7 +201,7 @@ export default function Home() {
         <div className="header-actions">
           <button type="button" className="refresh-button" aria-label="Dashboard aktualisieren" onClick={() => window.location.reload()}><Icon name="refresh" /></button>
           <button ref={noticeButtonRef} className="notice-button" aria-label="Benachrichtigungen" aria-expanded={noticeOpen} aria-controls="notifications" onClick={openNotices}><Icon name="bell" />{unread > 0 && <b><span className="sr-only">{unread} ungelesene Benachrichtigungen</span></b>}</button>
-          <button className="avatar" aria-label="Profil öffnen" onClick={() => selectPage("Profil")}><UserAvatar name={user.name} /></button>
+          <button className="avatar" aria-label="Profil öffnen" onClick={() => selectPage("Profil")}><UserAvatar name={user.name} userId={user.id} /></button>
           {noticeOpen && <div ref={noticeRef} className="notifications" id="notifications" role="dialog" aria-label="Benachrichtigungen">
             <strong>Benachrichtigungen</strong>
             {messagePreview ? <p>{messagePreview.preview}</p> : <p>Keine neuen Benachrichtigungen.</p>}
@@ -245,8 +245,13 @@ function PersonAvatar({ name, src }: { name: string; src: string }) {
   return <span className="user-avatar"><span className="avatar-initial">{initial}</span><img src={src} alt="" width="44" height="44" onError={(event) => event.currentTarget.remove()} /></span>;
 }
 
-function UserAvatar({ name }: { name: string }) {
-  return <PersonAvatar name={name} src="/api/me/avatar" />;
+// UserAvatar's src must include the user id: an <img> only re-fetches when
+// its src string actually changes, and "/api/me/avatar" alone stayed
+// identical across a user switch on the same device (no full page reload
+// in between), so the browser kept showing whichever bitmap was already
+// painted into that element instead of requesting the new user's picture.
+function UserAvatar({ name, userId }: { name: string; userId: string }) {
+  return <PersonAvatar name={name} src={`/api/me/avatar?u=${encodeURIComponent(userId)}`} />;
 }
 
 function Today({ upcoming, upcomingState, cinema, cinemaState, requests, requestState, newForYou, newForYouState, seriesInProgress, seriesInProgressState, availableRequests, message, onSelectMedia, onOpenChats }: {
@@ -399,12 +404,12 @@ function MetricCard({ icon, tone, value, label, detail, positive, genre = false,
     : <article className={`metric-card tone-${tone}${genre ? " genre-card" : ""}`}>{inner}</article>;
 }
 
-function RankCard({ rank, name }: { rank: number | null; name: string }) {
+function RankCard({ rank, name, userId }: { rank: number | null; name: string; userId: string }) {
   const hasRank = rank !== null && rank > 0;
   const medalClass = rank === 1 ? " gold" : rank === 3 ? " bronze" : "";
   return <article className="metric-card rank-card tone-lilac">
     <span className="rank-avatar-badge">
-      <span className="rank-avatar"><UserAvatar name={name} /></span>
+      <span className="rank-avatar"><UserAvatar name={name} userId={userId} /></span>
       <span className={`rank-badge${medalClass}`}>{hasRank ? rank : "—"}</span>
     </span>
     <span className="rank-card-copy">
@@ -511,7 +516,7 @@ function BarChart({ title, data, formatValue, loading }: { title: string; data: 
   </section>;
 }
 
-function Stats({ user, onSelectMedia }: { user: { name: string }; onSelectMedia: (selection: MediaSelection) => void }) {
+function Stats({ user, onSelectMedia }: { user: { id: string; name: string }; onSelectMedia: (selection: MediaSelection) => void }) {
   const [period, setPeriod] = useState<Period>("Woche");
   const [completedGridView, setCompletedGridView] = useState<"movies" | "series" | null>(null);
 
@@ -532,7 +537,7 @@ function Stats({ user, onSelectMedia }: { user: { name: string }; onSelectMedia:
   return <div className="content page-view">
     <section className="period-tabs" aria-label="Zeitraum auswählen">{(["Woche", "Monat", "Jahr"] as Period[]).map((item) => <button className={period === item ? "selected" : ""} onClick={() => setPeriod(item)} key={item} aria-pressed={period === item}>{item}</button>)}</section>
     <section className="week-grid" aria-label={`Kennzahlen für ${period}`}>
-      <RankCard rank={watchTimeRank} name={user.name} />
+      <RankCard rank={watchTimeRank} name={user.name} userId={user.id} />
       <MetricCard icon="clock" tone="blue" value={statistics ? formatDuration(statistics.watchSeconds) : "—"} label="Sehzeit" detail={statistics ? comparisonText(statistics) : loadingCopy(state)} loading={state === "loading"} />
       <MetricCard icon="movie" tone="peach" value={statistics ? statistics.completedMovies : "—"} label="Filme abgeschlossen" detail={statistics ? period : loadingCopy(state)} loading={state === "loading"} onClick={statistics && statistics.completedMovies > 0 && completedMoviesState === "ready" ? () => setCompletedGridView("movies") : undefined} />
       <MetricCard icon="series" tone="mint" value={statistics ? statistics.completedSeries : "—"} label="Serien abgeschlossen" detail={statistics ? period : loadingCopy(state)} loading={state === "loading"} onClick={statistics && statistics.completedSeries > 0 && completedSeriesState === "ready" ? () => setCompletedGridView("series") : undefined} />
@@ -614,7 +619,7 @@ const STREAMING_PROVIDERS: { id: string; name: string; className: string }[] = [
   { id: "350", name: "Apple TV+", className: "provider-appletv" },
   { id: "15", name: "Hulu", className: "provider-hulu" },
   { id: "531", name: "Paramount+", className: "provider-paramountplus" },
-  { id: "384", name: "HBO Max", className: "provider-hbomax" },
+  { id: "1899", name: "HBO Max", className: "provider-hbomax" },
 ];
 
 function Requests({ onSelectMedia }: { onSelectMedia: (selection: MediaSelection) => void }) {
@@ -967,7 +972,7 @@ function useTrackingList(path: string) {
   return [items, state] as const;
 }
 
-function Profile({ user, userProfile, totalRequests, onSelectMedia }: { user: { name: string }; userProfile: UserProfile | null; totalRequests: number | null; onSelectMedia: (selection: MediaSelection) => void }) {
+function Profile({ user, userProfile, totalRequests, onSelectMedia }: { user: { id: string; name: string }; userProfile: UserProfile | null; totalRequests: number | null; onSelectMedia: (selection: MediaSelection) => void }) {
   const [signingOut, setSigningOut] = useState(false);
   const [watchlist, watchlistState] = useTrackingList("/api/tracking/watchlist");
   const [ratings, ratingsState] = useTrackingList("/api/tracking/ratings");
@@ -980,7 +985,7 @@ function Profile({ user, userProfile, totalRequests, onSelectMedia }: { user: { 
     window.location.reload();
   };
   return <div className="content page-view profile">
-    <section className="profile-head"><div className="avatar big"><UserAvatar name={user.name} /></div><div><p className="eyebrow">EMBY-PROFIL</p><h2>{user.name}</h2></div></section>
+    <section className="profile-head"><div className="avatar big"><UserAvatar name={user.name} userId={user.id} /></div><div><p className="eyebrow">EMBY-PROFIL</p><h2>{user.name}</h2></div></section>
     <section className="media-detail-facts profile-facts">
       <dl>
         <div><dt>Mitglied seit</dt><dd>{userProfile ? formatFullDate(userProfile.memberSince) : "—"}</dd></div>
@@ -1039,10 +1044,10 @@ function ChatComposer({ placeholder, onSend }: { placeholder: string; onSend: (b
 }
 
 function Chats({ user }: { user: { id: string; name: string; isAdmin: boolean } }) {
-  return user.isAdmin ? <AdminChats adminName={user.name} /> : <UserChat userName={user.name} />;
+  return user.isAdmin ? <AdminChats adminName={user.name} adminUserId={user.id} /> : <UserChat userName={user.name} userId={user.id} />;
 }
 
-function UserChat({ userName }: { userName: string }) {
+function UserChat({ userName, userId }: { userName: string; userId: string }) {
   const [messages, state, refetch] = useApiResource<ChatMessage[]>("/api/messages", [], CHAT_POLL_MS);
 
   useEffect(() => { fetch("/api/messages/read", { method: "POST", credentials: "include" }).catch(() => null); }, []);
@@ -1062,13 +1067,13 @@ function UserChat({ userName }: { userName: string }) {
       {state === "loading" && <p className="poster-status" role="status">Wird geladen …</p>}
       {state === "error" && <p className="poster-status">Nicht verfügbar</p>}
       {state === "ready" && messages.length === 0 && <p className="chat-empty">Schreib mir gern, wenn du eine Frage oder einen Wunsch hast.</p>}
-      <ChatMessageList messages={messages} mineWhenFromAdmin={false} mineName={userName} mineAvatarSrc="/api/me/avatar" theirsName="Admin" theirsAvatarSrc="/api/messages/admin-avatar" />
+      <ChatMessageList messages={messages} mineWhenFromAdmin={false} mineName={userName} mineAvatarSrc={`/api/me/avatar?u=${encodeURIComponent(userId)}`} theirsName="Admin" theirsAvatarSrc="/api/messages/admin-avatar" />
       <ChatComposer placeholder="Nachricht schreiben …" onSend={send} />
     </section>
   </div>;
 }
 
-function AdminChats({ adminName }: { adminName: string }) {
+function AdminChats({ adminName, adminUserId }: { adminName: string; adminUserId: string }) {
   const [threads, threadsState, refetchThreads] = useApiResource<ChatThread[]>("/api/admin/messages/threads", [], CHAT_POLL_MS);
   const [contacts] = useApiResource<Contact[]>("/api/admin/users", []);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -1110,7 +1115,7 @@ function AdminChats({ adminName }: { adminName: string }) {
     </section>
     {pickerOpen && <ContactPickerScreen contacts={availableContacts} onSelect={startNewThread} onClose={() => setPickerOpen(false)} />}
     {broadcastOpen && <BroadcastScreen onClose={() => setBroadcastOpen(false)} onSent={() => { setBroadcastOpen(false); refetchThreads(); }} />}
-    {selectedThread && <AdminChatThreadScreen thread={selectedThread} adminName={adminName} onClose={closeThread} />}
+    {selectedThread && <AdminChatThreadScreen thread={selectedThread} adminName={adminName} adminUserId={adminUserId} onClose={closeThread} />}
   </div>;
 }
 
@@ -1180,7 +1185,7 @@ function ContactPickerScreen({ contacts, onSelect, onClose }: { contacts: Contac
   </div>;
 }
 
-function AdminChatThreadScreen({ thread, adminName, onClose }: { thread: ChatThread; adminName: string; onClose: () => void }) {
+function AdminChatThreadScreen({ thread, adminName, adminUserId, onClose }: { thread: ChatThread; adminName: string; adminUserId: string; onClose: () => void }) {
   useEscapeKey(onClose);
   const [messages, state, refetch] = useApiResource<ChatMessage[]>(`/api/admin/messages/thread?userId=${encodeURIComponent(thread.userId)}`, [], CHAT_POLL_MS);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -1217,10 +1222,12 @@ function AdminChatThreadScreen({ thread, adminName, onClose }: { thread: ChatThr
         <h1 className="media-grid-title">{thread.displayName || "Unbekannt"}</h1>
         <button type="button" className="chat-delete-button" onClick={() => setConfirmDelete(true)} aria-label="Chat löschen"><Icon name="close" /></button>
       </div>
-      {state === "loading" && <p className="poster-status" role="status">Wird geladen …</p>}
-      {state === "error" && <p className="poster-status">Nicht verfügbar</p>}
-      <ChatMessageList messages={messages} mineWhenFromAdmin={true} mineName={adminName} mineAvatarSrc="/api/me/avatar" theirsName={thread.displayName || "Unbekannt"} theirsAvatarSrc={`/api/admin/users/avatar?userId=${encodeURIComponent(thread.userId)}`} />
-      <ChatComposer placeholder="Antwort schreiben …" onSend={send} />
+      <section className="chat-thread" aria-label={`Chat mit ${thread.displayName || "Unbekannt"}`}>
+        {state === "loading" && <p className="poster-status" role="status">Wird geladen …</p>}
+        {state === "error" && <p className="poster-status">Nicht verfügbar</p>}
+        <ChatMessageList messages={messages} mineWhenFromAdmin={true} mineName={adminName} mineAvatarSrc={`/api/me/avatar?u=${encodeURIComponent(adminUserId)}`} theirsName={thread.displayName || "Unbekannt"} theirsAvatarSrc={`/api/admin/users/avatar?userId=${encodeURIComponent(thread.userId)}`} />
+        <ChatComposer placeholder="Antwort schreiben …" onSend={send} />
+      </section>
     </div>
     {confirmDelete && <div className="request-modal-backdrop" role="presentation" onClick={() => !deleting && setConfirmDelete(false)}>
       <div className="request-modal" role="dialog" aria-modal="true" aria-label="Chat löschen" onClick={(event) => event.stopPropagation()}>

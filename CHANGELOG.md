@@ -8,6 +8,26 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.42] - 2026-07-30
+
+### Fixed
+
+- The own-profile avatar (header, rank card, profile page, and "my"
+  messages in chat) kept showing the previous session's picture after a
+  different user logged in on the same device. The `<img>` element's
+  `src` was the literal string `/api/me/avatar` in every case, which
+  never changed across a login switch, so the browser never even issued
+  a new request — no HTTP cache involved. The URL now includes the
+  user's id (`/api/me/avatar?u=<id>`), which forces a real reload.
+- HBO Max's provider chip returned no results — it used TMDB's legacy
+  "HBO Max" provider id (384), which predates HBO Max's actual German
+  launch (13 Jan 2026) and has no DE listing. Switched to the current
+  "Max" provider id (1899), the one TMDB lists for the German rollout.
+- The admin's chat view looked visually different from the regular
+  user's chat (no bordered/gradient card around the messages) because it
+  was built on a different container. It now reuses the same `.chat-thread`
+  card styling as the user-facing chat.
+
 ## [0.8.41] - 2026-07-30
 
 ### Fixed
