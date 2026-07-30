@@ -8,6 +8,14 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.32] - 2026-07-30
+
+### Changed
+
+- Reordered the statistics week grid so the rank card comes first and the
+  completed-movies/completed-series cards sit next to each other instead
+  of diagonally opposite.
+
 ## [0.8.31] - 2026-07-30
 
 ### Changed
