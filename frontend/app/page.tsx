@@ -62,7 +62,7 @@ function visibleNav(user: CurrentUser): { label: Page; icon: IconName }[] {
   return items;
 }
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.46";
+const APP_VERSION = "0.8.47";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -227,7 +227,7 @@ export default function Home() {
       {page === "Verwaltung" && user.isAdmin && <AdminSettings />}
     </section>
 
-    <nav className="bottom-nav" aria-label="Hauptnavigation (mobil)">{nav.filter((item) => item.label !== "Profil").map((item) => <button key={item.label} className={page === item.label ? "active" : ""} onClick={() => selectPage(item.label)} aria-current={page === item.label ? "page" : undefined}><Icon name={item.icon} /><span className="sr-only">{item.label}</span></button>)}</nav>
+    <nav className="bottom-nav" aria-label="Hauptnavigation (mobil)">{nav.map((item) => <button key={item.label} className={page === item.label ? "active" : ""} onClick={() => selectPage(item.label)} aria-current={page === item.label ? "page" : undefined}><Icon name={item.icon} /><span className="sr-only">{item.label}</span></button>)}</nav>
   </main>;
 }
 
@@ -1168,19 +1168,26 @@ function AdminSettings() {
   </div>;
 }
 
+// Collapsed by default and independent of the enabled toggle: the operator
+// can peek at / edit the address and key without flipping the service on,
+// and enabling it doesn't force the card open every time it re-renders.
 function ServiceCard({ title, description, shows, draft, onChange, existing, showsBaseUrl }: {
   title: string; description: string; shows: string;
   draft: ServiceDraft; onChange: (next: ServiceDraft) => void; existing: ServiceView; showsBaseUrl: boolean;
 }) {
-  return <article className="admin-service-card">
-    <div className="admin-service-head">
+  const [expanded, setExpanded] = useState(false);
+  return <article className={expanded ? "admin-service-card expanded" : "admin-service-card"}>
+    <button type="button" className="admin-service-head" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded}>
       <div><strong>{title}</strong><p className="admin-hint">{description}</p></div>
-      <label className="toggle-switch">
-        <input type="checkbox" checked={draft.enabled} onChange={(event) => onChange({ ...draft, enabled: event.target.checked })} aria-label={`${title} aktivieren`} />
-        <span className="toggle-track"><span className="toggle-thumb" /></span>
-      </label>
-    </div>
-    {draft.enabled && <div className="admin-service-body">
+      <span className="admin-service-head-controls">
+        <label className="toggle-switch" onClick={(event) => event.stopPropagation()}>
+          <input type="checkbox" checked={draft.enabled} onChange={(event) => onChange({ ...draft, enabled: event.target.checked })} aria-label={`${title} aktivieren`} />
+          <span className="toggle-track"><span className="toggle-thumb" /></span>
+        </label>
+        <span className="admin-service-chevron"><Icon name="arrow" /></span>
+      </span>
+    </button>
+    {expanded && <div className="admin-service-body">
       {showsBaseUrl && <label className="admin-field">
         <span>Server-Adresse</span>
         <input type="text" className="search-input" placeholder="https://…" value={draft.baseUrl} onChange={(event) => onChange({ ...draft, baseUrl: event.target.value })} />

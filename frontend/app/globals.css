@@ -673,8 +673,15 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   display: grid; gap: 12px; padding: 18px; border-radius: 16px;
   border: 1px solid var(--line); background: var(--ink-raised);
 }
-.admin-service-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.admin-service-head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  width: 100%; border: 0; background: none; padding: 0; font: inherit; color: inherit; text-align: left; cursor: pointer;
+}
 .admin-service-head strong { font-size: 16px; font-weight: 800; }
+.admin-service-head-controls { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.admin-service-chevron { display: grid; place-items: center; width: 18px; height: 18px; color: var(--muted); }
+.admin-service-chevron .icon { width: 14px; height: 14px; transform: rotate(90deg); transition: transform 180ms var(--ease-out); }
+.admin-service-card.expanded .admin-service-chevron .icon { transform: rotate(-90deg); }
 .admin-service-body { display: grid; gap: 12px; }
 .admin-field { display: grid; gap: 6px; font-size: 13px; font-weight: 700; color: var(--text-secondary); }
 .admin-service-shows { margin: 0; padding-top: 10px; border-top: 1px dashed var(--line); color: var(--muted); font-size: 12px; line-height: 1.4; }
@@ -845,7 +852,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 
   .bottom-nav {
     position: fixed; z-index: var(--z-navigation); bottom: 0; left: 0; right: 0;
-    display: grid; grid-template-columns: repeat(4, 1fr);
+    display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
     padding: 9px 10px calc(9px + env(safe-area-inset-bottom));
     background: rgb(11 16 23 / 86%); border-top: 1px solid var(--line);
     backdrop-filter: blur(22px) saturate(150%);

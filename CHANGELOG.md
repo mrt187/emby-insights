@@ -8,6 +8,17 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.47] - 2026-07-30
+
+### Changed
+
+- Verwaltung's Seerr/Radarr/Sonarr/TMDB cards are now collapsible, closed by
+  default and independent of the enabled toggle — the address and API key
+  fields only show after tapping the card, so flipping the toggle no longer
+  forces the card open.
+- The mobile bottom navigation now shows every nav entry (Profil included)
+  side by side instead of a fixed 4-column grid that hid it.
+
 ## [0.8.46] - 2026-07-30
 
 ### Fixed
