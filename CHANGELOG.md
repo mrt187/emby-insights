@@ -8,6 +8,16 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.29] - 2026-07-30
+
+### Changed
+
+- Redesigned the "Dein Platz" rank card on the statistics page: the
+  placement badge now sits on the user's avatar (like a leaderboard pin)
+  and the value reads "Platz N" with a subtext explaining it's ranked by
+  watch time across all users, instead of a disconnected medal icon that
+  didn't make its purpose clear at a glance.
+
 ## [0.8.28] - 2026-07-30
 
 ### Fixed

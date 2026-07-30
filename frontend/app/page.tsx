@@ -45,7 +45,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.28";
+const APP_VERSION = "0.8.29";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -353,12 +353,18 @@ function MetricCard({ icon, tone, value, label, detail, positive, genre = false,
 }
 
 function RankCard({ rank, name }: { rank: number | null; name: string }) {
-  const placement = rank && rank > 0 ? rank : "—";
+  const hasRank = rank !== null && rank > 0;
+  const medalClass = rank === 1 ? " gold" : rank === 3 ? " bronze" : "";
   return <article className="metric-card rank-card tone-lilac">
-    <span className="metric-icon"><Icon name="medal" /></span>
-    <span className={`rank-medal${rank === 1 ? " gold" : rank === 2 ? " silver" : rank === 3 ? " bronze" : ""}`}>{placement}</span>
-    <span className="rank-avatar"><UserAvatar name={name} /></span>
-    <p>Dein Platz</p>
+    <span className="rank-avatar-badge">
+      <span className="rank-avatar"><UserAvatar name={name} /></span>
+      <span className={`rank-badge${medalClass}`}>{hasRank ? rank : "—"}</span>
+    </span>
+    <span className="rank-card-copy">
+      <strong>{hasRank ? `Platz ${rank}` : "—"}</strong>
+      <p>Dein Platz</p>
+      <small>Nach Sehzeit unter allen Nutzern</small>
+    </span>
   </article>;
 }
 
