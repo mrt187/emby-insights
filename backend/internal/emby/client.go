@@ -125,11 +125,15 @@ func (client *Client) Authenticate(ctx context.Context, credentials Credentials)
 }
 
 func (client *Client) UserPrimaryImage(ctx context.Context, identity Identity) (UserImage, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, client.baseURL+"/Users/"+identity.UserID+"/Images/Primary", nil)
+	return client.userPrimaryImage(ctx, identity.UserID, identity.AccessToken)
+}
+
+func (client *Client) userPrimaryImage(ctx context.Context, userID, token string) (UserImage, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, client.baseURL+"/Users/"+url.PathEscape(userID)+"/Images/Primary", nil)
 	if err != nil {
 		return UserImage{}, err
 	}
-	request.Header.Set("X-Emby-Token", identity.AccessToken)
+	request.Header.Set("X-Emby-Token", token)
 	response, err := client.httpClient.Do(request)
 	if err != nil {
 		return UserImage{}, fmt.Errorf("fetch Emby profile image: %w", err)

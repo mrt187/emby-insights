@@ -68,21 +68,16 @@ func (store *PostgresMessageStore) Thread(ctx context.Context, embyUserID string
 	return messages, rows.Err()
 }
 
-// Send appends one message to a user's thread. displayName is only used for
-// user-sent messages (it seeds/refreshes the thread's cached name); admin
-// replies pass the empty string and keep whatever name is already stored,
-// since there is no user directory to look the name up from otherwise.
+// Send appends one message to a user's thread. displayName seeds/refreshes
+// the thread's cached name whenever the caller has one to offer (a user's
+// own DisplayName, or the name the admin picked from the Emby directory to
+// start a new thread); when empty, it falls back to whatever name is
+// already stored for that thread, since there is no user directory lookup
+// available at read time otherwise.
 func (store *PostgresMessageStore) Send(ctx context.Context, embyUserID, displayName, body string, fromAdmin bool) error {
-	if fromAdmin || displayName == "" {
-		_, err := store.pool.Exec(ctx, `
-			INSERT INTO messages (emby_user_id, body, from_admin, display_name)
-			VALUES ($1, $2, $3, COALESCE((SELECT display_name FROM messages WHERE emby_user_id = $1 ORDER BY created_at DESC LIMIT 1), ''))
-		`, embyUserID, body, fromAdmin)
-		return err
-	}
 	_, err := store.pool.Exec(ctx, `
 		INSERT INTO messages (emby_user_id, body, from_admin, display_name)
-		VALUES ($1, $2, $3, $4)
+		VALUES ($1, $2, $3, COALESCE(NULLIF($4, ''), (SELECT display_name FROM messages WHERE emby_user_id = $1 ORDER BY created_at DESC LIMIT 1), ''))
 	`, embyUserID, body, fromAdmin, displayName)
 	return err
 }

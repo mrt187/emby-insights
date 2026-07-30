@@ -8,6 +8,24 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.34] - 2026-07-30
+
+### Added
+
+- The admin can now start a new chat with any Emby user, not just reply to
+  incoming ones: a "Neuer Chat" picker in the Chats inbox lists every user
+  (with their Emby profile picture) who doesn't already have a thread.
+
+### Internal
+
+- New `emby.Users`/`UserPrimaryImageByID` (admin-key-authenticated, so it
+  works even for people who have never logged into this app) back
+  `GET /api/admin/users` and `GET /api/admin/users/avatar`.
+- `store.MessageStore.Send` always seeds/refreshes the thread's cached
+  display name from whichever caller has one, rather than only trusting a
+  user's own first message — needed so admin-started threads show a real
+  name immediately.
+
 ## [0.8.33] - 2026-07-30
 
 ### Added

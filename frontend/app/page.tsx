@@ -42,6 +42,7 @@ type LoadState = "loading" | "ready" | "error";
 
 type ChatMessage = { id: string; body: string; fromAdmin: boolean; createdAt: string };
 type ChatThread = { userId: string; displayName: string; lastMessage: string; lastAt: string; unreadCount: number };
+type Contact = { id: string; name: string };
 
 const UNREAD_POLL_MS = 20_000;
 const CHAT_POLL_MS = 20_000;
@@ -51,7 +52,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Chats", icon: "chat" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.33";
+const APP_VERSION = "0.8.34";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -237,9 +238,13 @@ function Icon({ name }: { name: IconName }) {
   return <svg className="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
-function UserAvatar({ name }: { name: string }) {
+function PersonAvatar({ name, src }: { name: string; src: string }) {
   const initial = name.trim().charAt(0).toUpperCase() || "?";
-  return <span className="user-avatar"><span className="avatar-initial">{initial}</span><img src="/api/me/avatar" alt="" width="44" height="44" onError={(event) => event.currentTarget.remove()} /></span>;
+  return <span className="user-avatar"><span className="avatar-initial">{initial}</span><img src={src} alt="" width="44" height="44" onError={(event) => event.currentTarget.remove()} /></span>;
+}
+
+function UserAvatar({ name }: { name: string }) {
+  return <PersonAvatar name={name} src="/api/me/avatar" />;
 }
 
 function Today({ upcoming, upcomingState, cinema, cinemaState, requests, requestState, newForYou, newForYouState, availableRequests, message, onSelectMedia, onOpenChats }: {
@@ -1021,18 +1026,34 @@ function UserChat() {
 }
 
 function AdminChats() {
-  const [threads, threadsState] = useApiResource<ChatThread[]>("/api/admin/messages/threads", [], CHAT_POLL_MS);
+  const [threads, threadsState, refetchThreads] = useApiResource<ChatThread[]>("/api/admin/messages/threads", [], CHAT_POLL_MS);
+  const [contacts] = useApiResource<Contact[]>("/api/admin/users", []);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-  const selectedThread = threads.find((thread) => thread.userId === selectedUserId) ?? null;
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [newThreadContact, setNewThreadContact] = useState<Contact | null>(null);
+
+  const existingThread = threads.find((thread) => thread.userId === selectedUserId) ?? null;
+  const selectedThread: ChatThread | null = existingThread ?? (newThreadContact
+    ? { userId: newThreadContact.id, displayName: newThreadContact.name, lastMessage: "", lastAt: new Date().toISOString(), unreadCount: 0 }
+    : null);
+  const availableContacts = contacts.filter((contact) => !threads.some((thread) => thread.userId === contact.id));
+
+  const closeThread = () => { setSelectedUserId(null); setNewThreadContact(null); refetchThreads(); };
+  const startNewThread = (contact: Contact) => { setNewThreadContact(contact); setPickerOpen(false); };
 
   return <div className="content page-view chat-view">
     <section className="chat-inbox" aria-label="Nachrichten-Posteingang">
+      <div className="section-heading">
+        <div><h2>Posteingang</h2></div>
+        <button type="button" className="text-button" onClick={() => setPickerOpen(true)}>Neuer Chat <Icon name="arrow" /></button>
+      </div>
       {threadsState === "loading" && <p className="poster-status" role="status">Wird geladen …</p>}
       {threadsState === "error" && <p className="poster-status">Nicht verfügbar</p>}
       {threadsState === "ready" && threads.length === 0 && <p className="chat-empty">Noch keine Nachrichten von Nutzern.</p>}
       <ul className="chat-thread-list">
         {threads.map((thread) => <li key={thread.userId}>
           <button type="button" className="chat-thread-row" onClick={() => setSelectedUserId(thread.userId)}>
+            <span className="chat-avatar"><PersonAvatar name={thread.displayName || "?"} src={`/api/admin/users/avatar?userId=${encodeURIComponent(thread.userId)}`} /></span>
             <span className="chat-thread-name">{thread.displayName || "Unbekannt"}</span>
             <span className="chat-thread-preview">{thread.lastMessage}</span>
             {thread.unreadCount > 0 && <span className="chat-thread-badge">{thread.unreadCount}</span>}
@@ -1040,7 +1061,26 @@ function AdminChats() {
         </li>)}
       </ul>
     </section>
-    {selectedThread && <AdminChatThreadScreen thread={selectedThread} onClose={() => setSelectedUserId(null)} />}
+    {pickerOpen && <ContactPickerScreen contacts={availableContacts} onSelect={startNewThread} onClose={() => setPickerOpen(false)} />}
+    {selectedThread && <AdminChatThreadScreen thread={selectedThread} onClose={closeThread} />}
+  </div>;
+}
+
+function ContactPickerScreen({ contacts, onSelect, onClose }: { contacts: Contact[]; onSelect: (contact: Contact) => void; onClose: () => void }) {
+  useEscapeKey(onClose);
+  return <div className="media-detail-overlay media-grid-overlay" role="dialog" aria-modal="true" aria-label="Neuen Chat starten">
+    <div className="media-detail-scroll">
+      <button type="button" className="media-detail-close" onClick={onClose} aria-label="Schließen"><Icon name="close" /></button>
+      <h1 className="media-grid-title">Neuen Chat starten</h1>
+      {contacts.length === 0
+        ? <p className="chat-empty">Alle Nutzer haben bereits einen Thread.</p>
+        : <ul className="chat-thread-list">{contacts.map((contact) => <li key={contact.id}>
+          <button type="button" className="chat-thread-row" onClick={() => onSelect(contact)}>
+            <span className="chat-avatar"><PersonAvatar name={contact.name || "?"} src={`/api/admin/users/avatar?userId=${encodeURIComponent(contact.id)}`} /></span>
+            <span className="chat-thread-name">{contact.name || "Unbekannt"}</span>
+          </button>
+        </li>)}</ul>}
+    </div>
   </div>;
 }
 
@@ -1056,7 +1096,7 @@ function AdminChatThreadScreen({ thread, onClose }: { thread: ChatThread; onClos
     const response = await fetch(`/api/admin/messages/thread?userId=${encodeURIComponent(thread.userId)}`, {
       method: "POST", credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ body }),
+      body: JSON.stringify({ body, displayName: thread.displayName }),
     });
     if (response.ok) refetch();
     return response.ok;

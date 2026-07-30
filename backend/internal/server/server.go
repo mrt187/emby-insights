@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -53,6 +54,8 @@ type App struct {
 	cookieSecure        bool
 	messages            store.MessageStore
 	adminUserID         string
+	directory           emby.UserDirectoryReader
+	adminAvatars        emby.AdminAvatarReader
 }
 
 func New(cfg config.Config) (*App, error) {
@@ -98,6 +101,8 @@ func New(cfg config.Config) (*App, error) {
 		cookieSecure:        cfg.CookieSecure,
 		messages:            store.NewPostgresMessageStore(database),
 		adminUserID:         cfg.AdminEmbyUserID,
+		directory:           embyClient,
+		adminAvatars:        embyClient,
 	}, nil
 }
 
@@ -163,6 +168,8 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/admin/messages/thread", app.adminMessageThread)
 	mux.HandleFunc("POST /api/admin/messages/thread", app.adminSendMessage)
 	mux.HandleFunc("POST /api/admin/messages/thread/read", app.adminMarkThreadRead)
+	mux.HandleFunc("GET /api/admin/users", app.adminUserDirectory)
+	mux.HandleFunc("GET /api/admin/users/avatar", app.adminUserAvatar)
 	return mux
 }
 
@@ -673,6 +680,28 @@ func decodeMessageBody(writer http.ResponseWriter, request *http.Request) (strin
 	return trimmed, true
 }
 
+// decodeAdminMessageBody additionally accepts a displayName, sent along by
+// the frontend when the admin starts a brand new thread from the user
+// picker (see adminUserDirectory) — there is no other way to learn a user's
+// name before they have sent their own first message.
+func decodeAdminMessageBody(writer http.ResponseWriter, request *http.Request) (body, displayName string, ok bool) {
+	var input struct {
+		Body        string `json:"body"`
+		DisplayName string `json:"displayName"`
+	}
+	request.Body = http.MaxBytesReader(writer, request.Body, 1<<16)
+	if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return "", "", false
+	}
+	trimmed := strings.TrimSpace(input.Body)
+	if trimmed == "" || len(trimmed) > maxMessageBodyLength {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "body must be 1-4000 characters"})
+		return "", "", false
+	}
+	return trimmed, strings.TrimSpace(input.DisplayName), true
+}
+
 // getMessages returns the caller's own thread with the admin. The admin has
 // no thread of their own — they use the /api/admin/messages/* endpoints.
 func (app *App) getMessages(writer http.ResponseWriter, request *http.Request) {
@@ -796,15 +825,70 @@ func (app *App) adminSendMessage(writer http.ResponseWriter, request *http.Reque
 		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "userId is required"})
 		return
 	}
-	body, ok := decodeMessageBody(writer, request)
+	body, displayName, ok := decodeAdminMessageBody(writer, request)
 	if !ok {
 		return
 	}
-	if err := app.messages.Send(request.Context(), userID, "", body, true); err != nil {
+	if err := app.messages.Send(request.Context(), userID, displayName, body, true); err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "sending the message failed"})
 		return
 	}
 	writer.WriteHeader(http.StatusNoContent)
+}
+
+// adminUserDirectory lists every Emby user except the admin, for the "start
+// a new chat" picker — including people who have never opened this app, so
+// the admin can reach out first if they want to.
+func (app *App) adminUserDirectory(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	if !app.requireAdmin(writer, identity) {
+		return
+	}
+	users, err := app.directory.Users(request.Context())
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "the user directory is unavailable"})
+		return
+	}
+	contacts := make([]map[string]string, 0, len(users))
+	for _, user := range users {
+		if user.ID == app.adminUserID {
+			continue
+		}
+		contacts = append(contacts, map[string]string{"id": user.ID, "name": user.Name})
+	}
+	sort.Slice(contacts, func(i, j int) bool { return contacts[i]["name"] < contacts[j]["name"] })
+	respondJSON(writer, http.StatusOK, contacts)
+}
+
+func (app *App) adminUserAvatar(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	if !app.requireAdmin(writer, identity) {
+		return
+	}
+	userID := request.URL.Query().Get("userId")
+	if userID == "" || !validEmbyItemID.MatchString(userID) {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "userId is required"})
+		return
+	}
+	image, err := app.adminAvatars.UserPrimaryImageByID(request.Context(), userID)
+	if errors.Is(err, emby.ErrPrimaryImageUnavailable) {
+		http.NotFound(writer, request)
+		return
+	}
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "profile image is unavailable"})
+		return
+	}
+	writer.Header().Set("Content-Type", image.ContentType)
+	writer.Header().Set("Cache-Control", "private, max-age=3600")
+	writer.WriteHeader(http.StatusOK)
+	_, _ = writer.Write(image.Data)
 }
 
 func (app *App) adminMarkThreadRead(writer http.ResponseWriter, request *http.Request) {
