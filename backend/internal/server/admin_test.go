@@ -232,3 +232,26 @@ func TestApplySettingsKeepsLiveSeerrClientAfterResavingWithoutTheAPIKey(t *testi
 		t.Fatal("live Seerr client became nil after resaving without retyping the API key")
 	}
 }
+
+func TestAdminDebugLiveReportsSeerrConfigured(t *testing.T) {
+	configStore := &fakeConfigStore{ownerID: "user-1"}
+	app, cookie := loggedInApp(t, configStore, emby.Identity{UserID: "user-1", DisplayName: "Alice"})
+	app.live = &liveConfig{}
+	if err := app.applySettings(context.Background(), appconfig.Settings{
+		Seerr: appconfig.ServiceSetting{Enabled: true, BaseURL: "http://seerr.local", APIKey: "real-key"},
+	}); err != nil {
+		t.Fatalf("applySettings() error = %v", err)
+	}
+
+	request := httptest.NewRequest(http.MethodGet, "/api/admin/debug/live", nil)
+	request.AddCookie(cookie)
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	if !strings.Contains(recorder.Body.String(), `"seerrConfigured":true`) {
+		t.Fatalf("body = %s, want seerrConfigured:true", recorder.Body.String())
+	}
+}

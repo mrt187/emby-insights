@@ -281,6 +281,7 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/admin/libraries", app.adminLibraries)
 	mux.HandleFunc("GET /api/admin/settings", app.adminGetSettings)
 	mux.HandleFunc("PUT /api/admin/settings", app.adminPutSettings)
+	mux.HandleFunc("GET /api/admin/debug/live", app.adminDebugLive)
 	return mux
 }
 
@@ -1330,6 +1331,29 @@ func (app *App) adminPutSettings(writer http.ResponseWriter, request *http.Reque
 		return
 	}
 	writer.WriteHeader(http.StatusNoContent)
+}
+
+// adminDebugLive reports the currently live, in-memory integration state —
+// as opposed to GET /api/admin/settings, which reports what's persisted in
+// the database. The two can disagree if applySettings failed to rebuild the
+// live clients after a save; this endpoint exists to tell that case apart
+// from a genuinely misconfigured or unreachable service.
+func (app *App) adminDebugLive(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	if !app.requireAdmin(writer, request, identity) {
+		return
+	}
+	seerrClient, comingSoonClient, region := app.live.current()
+	respondJSON(writer, http.StatusOK, map[string]any{
+		"seerrConfigured":      seerrClient != nil,
+		"comingSoonConfigured": comingSoonClient != nil,
+		"comingSoonRegion":     region,
+		"newForYouLibraryIds":  orEmpty(app.live.newForYouLibraries()),
+		"watchedLibraryIds":    orEmpty(app.live.watchedLibraries()),
+	})
 }
 
 // validEmbyItemID matches the shapes Emby actually uses for item IDs — hex

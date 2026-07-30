@@ -8,6 +8,16 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.51] - 2026-07-30
+
+### Added
+
+- `GET /api/admin/debug/live` (admin-only): reports the currently live,
+  in-memory Seerr/Radarr/Sonarr/TMDB configuration state, as opposed to
+  `GET /api/admin/settings` which reports what's persisted in the
+  database. Lets a live-vs-persisted mismatch be diagnosed directly
+  instead of guessing between a caching issue and a real misconfiguration.
+
 ## [0.8.50] - 2026-07-30
 
 ### Fixed
