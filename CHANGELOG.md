@@ -8,6 +8,17 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.40] - 2026-07-30
+
+### Changed
+
+- Discover lists (`/api/discover/*`) are now cached for 1h, personal stats
+  (`/api/stats*`) and requests (`/api/requests`) for 5min, backed by Redis
+  with the existing coming-soon cache pattern — a Redis outage or a cache
+  miss always falls through to the live upstream call, so the dashboard
+  never breaks because of the cache. Submitting a new request immediately
+  invalidates that user's requests cache instead of waiting out the TTL.
+
 ## [0.8.39] - 2026-07-30
 
 ### Added

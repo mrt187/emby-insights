@@ -23,6 +23,9 @@ import (
 
 const sessionCookieName = "emby_insights_session"
 const comingSoonCacheTTL = 15 * time.Minute
+const discoverCacheTTL = 1 * time.Hour
+const statsCacheTTL = 5 * time.Minute
+const requestsCacheTTL = 5 * time.Minute
 
 type App struct {
 	database            *pgxpool.Pool
@@ -140,19 +143,19 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/series-in-progress", app.seriesInProgressHandler)
 	mux.HandleFunc("GET /api/completed-movies", app.completedMovies)
 	mux.HandleFunc("GET /api/completed-series", app.completedSeries)
-	mux.HandleFunc("GET /api/discover/trending", app.discoverHandler(func(ctx context.Context, discover seerr.DiscoverReader) ([]seerr.DiscoverItem, error) {
+	mux.HandleFunc("GET /api/discover/trending", app.discoverHandler("discover:trending", func(ctx context.Context, discover seerr.DiscoverReader) ([]seerr.DiscoverItem, error) {
 		return discover.Trending(ctx)
 	}))
-	mux.HandleFunc("GET /api/discover/movies/popular", app.discoverHandler(func(ctx context.Context, discover seerr.DiscoverReader) ([]seerr.DiscoverItem, error) {
+	mux.HandleFunc("GET /api/discover/movies/popular", app.discoverHandler("discover:movies-popular", func(ctx context.Context, discover seerr.DiscoverReader) ([]seerr.DiscoverItem, error) {
 		return discover.PopularMovies(ctx)
 	}))
-	mux.HandleFunc("GET /api/discover/movies/upcoming", app.discoverHandler(func(ctx context.Context, discover seerr.DiscoverReader) ([]seerr.DiscoverItem, error) {
+	mux.HandleFunc("GET /api/discover/movies/upcoming", app.discoverHandler("discover:movies-upcoming", func(ctx context.Context, discover seerr.DiscoverReader) ([]seerr.DiscoverItem, error) {
 		return discover.UpcomingMovies(ctx)
 	}))
-	mux.HandleFunc("GET /api/discover/series/popular", app.discoverHandler(func(ctx context.Context, discover seerr.DiscoverReader) ([]seerr.DiscoverItem, error) {
+	mux.HandleFunc("GET /api/discover/series/popular", app.discoverHandler("discover:series-popular", func(ctx context.Context, discover seerr.DiscoverReader) ([]seerr.DiscoverItem, error) {
 		return discover.PopularSeries(ctx)
 	}))
-	mux.HandleFunc("GET /api/discover/series/upcoming", app.discoverHandler(func(ctx context.Context, discover seerr.DiscoverReader) ([]seerr.DiscoverItem, error) {
+	mux.HandleFunc("GET /api/discover/series/upcoming", app.discoverHandler("discover:series-upcoming", func(ctx context.Context, discover seerr.DiscoverReader) ([]seerr.DiscoverItem, error) {
 		return discover.UpcomingSeries(ctx)
 	}))
 	mux.HandleFunc("GET /api/discover/search", app.discoverSearch)
@@ -258,7 +261,9 @@ func (app *App) stats(writer http.ResponseWriter, request *http.Request) {
 	if !ok {
 		return
 	}
-	statistics, err := app.statistics.PersonalWatchTime(request.Context(), identity.UserID, period)
+	statistics, err := cachedJSON(request.Context(), app, "stats:"+identity.UserID+":"+period, statsCacheTTL, func(ctx context.Context) (emby.PersonalWatchTime, error) {
+		return app.statistics.PersonalWatchTime(ctx, identity.UserID, period)
+	})
 	if err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "personal statistics are unavailable"})
 		return
@@ -275,7 +280,9 @@ func (app *App) watchTimeRankStats(writer http.ResponseWriter, request *http.Req
 		respondJSON(writer, http.StatusServiceUnavailable, map[string]string{"error": "watch-time rank is unavailable"})
 		return
 	}
-	rank, err := app.watchTimeRank.WatchTimeRank(request.Context(), identity.UserID)
+	rank, err := cachedJSON(request.Context(), app, "watchtimerank:"+identity.UserID, statsCacheTTL, func(ctx context.Context) (emby.WatchTimeRank, error) {
+		return app.watchTimeRank.WatchTimeRank(ctx, identity.UserID)
+	})
 	if err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "watch-time rank is unavailable"})
 		return
@@ -292,7 +299,9 @@ func (app *App) deviceStats(writer http.ResponseWriter, request *http.Request) {
 	if !ok {
 		return
 	}
-	devices, err := app.deviceStatistics.DeviceWatchTimes(request.Context(), identity.UserID, period)
+	devices, err := cachedJSON(request.Context(), app, "devicestats:"+identity.UserID+":"+period, statsCacheTTL, func(ctx context.Context) ([]emby.DeviceWatchTime, error) {
+		return app.deviceStatistics.DeviceWatchTimes(ctx, identity.UserID, period)
+	})
 	if err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "device statistics are unavailable"})
 		return
@@ -309,7 +318,9 @@ func (app *App) hourStats(writer http.ResponseWriter, request *http.Request) {
 	if !ok {
 		return
 	}
-	hours, err := app.sessionStatistics.HourWatchTimes(request.Context(), identity.UserID, period)
+	hours, err := cachedJSON(request.Context(), app, "hourstats:"+identity.UserID+":"+period, statsCacheTTL, func(ctx context.Context) ([]emby.HourWatchTime, error) {
+		return app.sessionStatistics.HourWatchTimes(ctx, identity.UserID, period)
+	})
 	if err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "hour statistics are unavailable"})
 		return
@@ -326,7 +337,9 @@ func (app *App) weekdayStats(writer http.ResponseWriter, request *http.Request) 
 	if !ok {
 		return
 	}
-	weekdays, err := app.sessionStatistics.WeekdayWatchTimes(request.Context(), identity.UserID, period)
+	weekdays, err := cachedJSON(request.Context(), app, "weekdaystats:"+identity.UserID+":"+period, statsCacheTTL, func(ctx context.Context) ([]emby.WeekdayWatchTime, error) {
+		return app.sessionStatistics.WeekdayWatchTimes(ctx, identity.UserID, period)
+	})
 	if err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "weekday statistics are unavailable"})
 		return
@@ -343,16 +356,23 @@ func (app *App) longestSessionStats(writer http.ResponseWriter, request *http.Re
 	if !ok {
 		return
 	}
-	session, found, err := app.sessionStatistics.LongestSession(request.Context(), identity.UserID, period)
+	type longestSessionResult struct {
+		Session emby.LongestSession
+		Found   bool
+	}
+	result, err := cachedJSON(request.Context(), app, "longestsession:"+identity.UserID+":"+period, statsCacheTTL, func(ctx context.Context) (longestSessionResult, error) {
+		session, found, err := app.sessionStatistics.LongestSession(ctx, identity.UserID, period)
+		return longestSessionResult{Session: session, Found: found}, err
+	})
 	if err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "longest-session statistics are unavailable"})
 		return
 	}
-	if !found {
+	if !result.Found {
 		respondJSON(writer, http.StatusOK, nil)
 		return
 	}
-	respondJSON(writer, http.StatusOK, session)
+	respondJSON(writer, http.StatusOK, result.Session)
 }
 
 func (app *App) mostActiveDayStats(writer http.ResponseWriter, request *http.Request) {
@@ -364,16 +384,23 @@ func (app *App) mostActiveDayStats(writer http.ResponseWriter, request *http.Req
 	if !ok {
 		return
 	}
-	day, found, err := app.sessionStatistics.MostActiveDay(request.Context(), identity.UserID, period)
+	type mostActiveDayResult struct {
+		Day   emby.MostActiveDay
+		Found bool
+	}
+	result, err := cachedJSON(request.Context(), app, "mostactiveday:"+identity.UserID+":"+period, statsCacheTTL, func(ctx context.Context) (mostActiveDayResult, error) {
+		day, found, err := app.sessionStatistics.MostActiveDay(ctx, identity.UserID, period)
+		return mostActiveDayResult{Day: day, Found: found}, err
+	})
 	if err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "most-active-day statistics are unavailable"})
 		return
 	}
-	if !found {
+	if !result.Found {
 		respondJSON(writer, http.StatusOK, nil)
 		return
 	}
-	respondJSON(writer, http.StatusOK, day)
+	respondJSON(writer, http.StatusOK, result.Day)
 }
 
 func parsePeriod(writer http.ResponseWriter, request *http.Request) (string, bool) {
@@ -412,28 +439,34 @@ func (app *App) inCinemaItems(writer http.ResponseWriter, request *http.Request)
 	respondJSON(writer, http.StatusOK, orEmpty(items))
 }
 
-// cachedComingSoonItems keeps calendar and TMDB lookups off the request path
-// for a short period. The upstream services remain the source of truth; a
-// cache failure must never make the dashboard unavailable.
-func (app *App) cachedComingSoonItems(ctx context.Context, kind string, read func(context.Context) ([]comingsoon.Item, error)) ([]comingsoon.Item, error) {
+// cachedJSON keeps upstream lookups off the request path for a short period.
+// The upstream services remain the source of truth; a cache failure (miss,
+// Redis down, corrupt payload) must never make the dashboard unavailable —
+// it just falls through to read().
+func cachedJSON[T any](ctx context.Context, app *App, key string, ttl time.Duration, read func(context.Context) (T, error)) (T, error) {
 	if app.redis != nil {
-		if value, err := app.redis.Get(ctx, "comingsoon:"+kind).Result(); err == nil {
-			var items []comingsoon.Item
-			if json.Unmarshal([]byte(value), &items) == nil {
-				return items, nil
+		if value, err := app.redis.Get(ctx, key).Result(); err == nil {
+			var cached T
+			if json.Unmarshal([]byte(value), &cached) == nil {
+				return cached, nil
 			}
 		}
 	}
-	items, err := read(ctx)
+	result, err := read(ctx)
 	if err != nil {
-		return nil, err
+		var zero T
+		return zero, err
 	}
 	if app.redis != nil {
-		if value, err := json.Marshal(items); err == nil {
-			_ = app.redis.Set(ctx, "comingsoon:"+kind, value, comingSoonCacheTTL).Err()
+		if value, err := json.Marshal(result); err == nil {
+			_ = app.redis.Set(ctx, key, value, ttl).Err()
 		}
 	}
-	return items, nil
+	return result, nil
+}
+
+func (app *App) cachedComingSoonItems(ctx context.Context, kind string, read func(context.Context) ([]comingsoon.Item, error)) ([]comingsoon.Item, error) {
+	return cachedJSON(ctx, app, "comingsoon:"+kind, comingSoonCacheTTL, read)
 }
 
 func (app *App) myRequests(writer http.ResponseWriter, request *http.Request) {
@@ -441,7 +474,9 @@ func (app *App) myRequests(writer http.ResponseWriter, request *http.Request) {
 	if !ok {
 		return
 	}
-	items, err := app.requests.Requests(request.Context(), identity.UserID)
+	items, err := cachedJSON(request.Context(), app, "requests:"+identity.UserID, requestsCacheTTL, func(ctx context.Context) ([]seerr.Request, error) {
+		return app.requests.Requests(ctx, identity.UserID)
+	})
 	if err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "requests are unavailable"})
 		return
@@ -514,14 +549,17 @@ func (app *App) discoverByProvider(writer http.ResponseWriter, request *http.Req
 }
 
 // discoverHandler builds a handler for one Seerr discover list. Discover
-// data is not personal, but the endpoint still requires a session like the
-// rest of the API.
-func (app *App) discoverHandler(read func(context.Context, seerr.DiscoverReader) ([]seerr.DiscoverItem, error)) http.HandlerFunc {
+// data is not personal and shared by every user, so it is cached under a
+// fixed key for discoverCacheTTL — the endpoint still requires a session
+// like the rest of the API.
+func (app *App) discoverHandler(cacheKey string, read func(context.Context, seerr.DiscoverReader) ([]seerr.DiscoverItem, error)) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		if _, ok := app.identityFromRequest(writer, request); !ok {
 			return
 		}
-		items, err := read(request.Context(), app.discover)
+		items, err := cachedJSON(request.Context(), app, cacheKey, discoverCacheTTL, func(ctx context.Context) ([]seerr.DiscoverItem, error) {
+			return read(ctx, app.discover)
+		})
 		if err != nil {
 			respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "discover list is unavailable"})
 			return
@@ -594,6 +632,9 @@ func (app *App) createSeerrRequestHandler(writer http.ResponseWriter, request *h
 	if err := app.seerrRequestCreator.CreateRequest(request.Context(), identity.UserID, input.MediaType, input.TmdbID, input.Seasons); err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "creating the Seerr request failed"})
 		return
+	}
+	if app.redis != nil {
+		_ = app.redis.Del(request.Context(), "requests:"+identity.UserID).Err()
 	}
 	writer.WriteHeader(http.StatusNoContent)
 }
