@@ -112,6 +112,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .brand {
   display: flex; gap: 9px; align-items: center; padding: 0 13px 52px;
   font-size: 20px; font-weight: 700; letter-spacing: -1.15px; color: var(--text-primary);
+  border: 0; background: none; font-family: inherit; cursor: pointer; text-align: left;
 }
 .brand span { color: #9fb7ae; font-weight: 500; }
 .brand-logo {
@@ -667,15 +668,6 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .admin-section { display: grid; gap: 16px; }
 .admin-hint { margin: 4px 0 0; color: var(--muted); font-size: 13px; line-height: 1.4; }
 
-.admin-library-groups { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
-.admin-library-group h3 { margin: 0; font-size: 15px; font-weight: 800; }
-.admin-library-list { display: grid; gap: 6px; margin-top: 10px; list-style: none; padding: 0; }
-.admin-library-checkbox {
-  display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 12px;
-  border-radius: 10px; background: var(--ink); font-size: 14px; font-weight: 600; cursor: pointer;
-}
-.admin-library-checkbox input { width: 16px; height: 16px; accent-color: var(--mint-bright); }
-
 .admin-service-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 .admin-service-card {
   display: grid; gap: 12px; padding: 18px; border-radius: 16px;
@@ -686,6 +678,14 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .admin-service-body { display: grid; gap: 12px; }
 .admin-field { display: grid; gap: 6px; font-size: 13px; font-weight: 700; color: var(--text-secondary); }
 .admin-service-shows { margin: 0; padding-top: 10px; border-top: 1px dashed var(--line); color: var(--muted); font-size: 12px; line-height: 1.4; }
+
+.admin-library-tile {
+  width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer;
+  transition: border-color 180ms var(--ease-out), transform 180ms var(--ease-out);
+}
+.admin-library-tile:hover { border-color: rgb(140 224 173 / 35%); transform: translateY(-2px); }
+.admin-library-tile .icon { flex-shrink: 0; width: 18px; height: 18px; color: var(--muted); }
+.admin-library-tile-count { margin: 0; font-size: 13px; font-weight: 700; color: var(--mint-bright); }
 
 .admin-save-bar { position: sticky; bottom: 12px; display: flex; align-items: center; gap: 14px; justify-content: flex-end; }
 

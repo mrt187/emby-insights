@@ -1464,22 +1464,6 @@ func (app *App) identityFromRequest(writer http.ResponseWriter, request *http.Re
 	return identity, true
 }
 
-// hasTrackedWatchData reports whether the Emby Insights connector / Playback
-// Reporting has ever recorded a watched item, the cheapest available signal
-// that personal watch-time statistics exist at all. A query failure is
-// treated as "no data yet" rather than an error — Statistik simply stays
-// hidden rather than breaking the rest of the dashboard.
-func (app *App) hasTrackedWatchData(ctx context.Context) bool {
-	if app.database == nil {
-		return false
-	}
-	var exists bool
-	if err := app.database.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM media_tracking WHERE watched_on IS NOT NULL)`).Scan(&exists); err != nil {
-		return false
-	}
-	return exists
-}
-
 func (app *App) identityProfile(ctx context.Context, identity emby.Identity) map[string]any {
 	var settings appconfig.Settings
 	if app.appconfig != nil {
@@ -1497,7 +1481,14 @@ func (app *App) identityProfile(ctx context.Context, identity emby.Identity) map
 			"movieDates":  settings.Radarr.Enabled,
 			"seriesDates": settings.Sonarr.Enabled,
 			"upcoming":    settings.Radarr.Enabled || settings.Sonarr.Enabled,
-			"statistics":  app.hasTrackedWatchData(ctx),
+			// Statistik always shows: unlike Seerr/Radarr/Sonarr/TMDB, the Emby
+			// Insights connector/Playback Reporting isn't something the admin
+			// toggles in Verwaltung, and there is no reliable signal to detect
+			// it's missing without a live Emby call on every /api/me request.
+			// media_tracking (ratings/watchlist) was tried and rejected as a
+			// proxy: it stays empty until a user manually rates/bookmarks
+			// something, which hid Statistik even with playback data present.
+			"statistics": true,
 		},
 	}
 }

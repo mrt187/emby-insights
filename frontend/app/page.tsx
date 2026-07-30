@@ -62,7 +62,7 @@ function visibleNav(user: CurrentUser): { label: Page; icon: IconName }[] {
   return items;
 }
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.45";
+const APP_VERSION = "0.8.46";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -197,7 +197,7 @@ export default function Home() {
     {selectedMedia && <MediaDetailScreen selection={selectedMedia} onClose={() => setSelectedMedia(null)} onRequestCreated={refetchRequests} />}
     <a className="skip-link" href="#dashboard-content">Zum Inhalt springen</a>
     <aside className="side-nav" aria-label="Hauptnavigation">
-      <div className="brand"><img className="brand-logo" src="/emby-insights-logo.svg" alt="Emby Insights" width="31" height="31" /><span>insights</span></div>
+      <button type="button" className="brand" onClick={goHomeAndRefresh} aria-label="Zu Heute und Dashboard aktualisieren"><img className="brand-logo" src="/emby-insights-logo.svg" alt="Emby Insights" width="31" height="31" /><span>insights</span></button>
       <nav>{nav.map((item) => <button className={page === item.label ? "nav-item active" : "nav-item"} key={item.label} onClick={() => selectPage(item.label)} aria-current={page === item.label ? "page" : undefined}><Icon name={item.icon} />{item.label}</button>)}</nav>
       <div className="sidebar-meta">
         <div className="server-status"><i aria-hidden="true" /> Verbunden mit Emby</div>
@@ -298,9 +298,9 @@ function Today({ upcoming, upcomingState, cinema, cinemaState, requests, request
     <RelevantNow events={events} onShowAll={() => setAllEventsOpen(true)} />
     {features.upcoming && <PosterRow title="Demnächst" eyebrow="IN DEN NÄCHSTEN 4 WOCHEN AUF EMBY" items={visibleUpcoming} state={upcomingState} emptyLabel="Nichts Neues in den nächsten vier Wochen." itemTitle={upcomingTitle} detail={(item) => availabilityWording(item.availabilityDate)} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />}
     <PosterRow title="Offene Staffeln" eyebrow="TEILWEISE GESEHEN" items={seriesInProgress} state={seriesInProgressState} emptyLabel="Keine Serien mit offenen Folgen." detail={(item) => `${item.watchedEpisodes} von ${item.totalEpisodes} Folgen`} progress={(item) => Math.round((item.watchedEpisodes / item.totalEpisodes) * 100)} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
-    {features.movieDates && <PosterRow title="Im Kino" eyebrow="KOMMENDE UND AKTUELLE KINOSTARTS" items={cinema} state={cinemaState} emptyLabel="Zurzeit keine Kinostarts." detail={cinemaWording} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />}
     {features.requests && <PosterRow title="Meine Anfragen" eyebrow="SEERR · OFFEN" items={requests} state={requestState} emptyLabel="Keine offenen Anfragen." detail={(item) => item.status} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />}
     <PosterRow title="Neu für dich" eyebrow="IN DEN LETZTEN 14 TAGEN" items={newForYou} state={newForYouState} emptyLabel="Nichts Neues in den letzten 14 Tagen." detail={() => "Ungesehen"} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
+    {features.movieDates && <PosterRow title="Im Kino" eyebrow="KOMMENDE UND AKTUELLE KINOSTARTS" items={cinema} state={cinemaState} emptyLabel="Zurzeit keine Kinostarts." detail={cinemaWording} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />}
 
     {allEventsOpen && <RelevantAllScreen events={events} onClose={() => setAllEventsOpen(false)} />}
     {newForYouGridOpen && <MediaGridScreen title="Neu für dich" items={newForYou} detail={() => "Ungesehen"} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setNewForYouGridOpen(false)} />}
@@ -1046,6 +1046,7 @@ function AdminSettings() {
 
   const [newForYouIds, setNewForYouIds] = useState<string[]>([]);
   const [watchedIds, setWatchedIds] = useState<string[]>([]);
+  const [libraryPicker, setLibraryPicker] = useState<"newForYou" | "watched" | null>(null);
   const [seerr, setSeerr] = useState<ServiceDraft>({ enabled: false, baseUrl: "", apiKey: "" });
   const [radarr, setRadarr] = useState<ServiceDraft>({ enabled: false, baseUrl: "", apiKey: "" });
   const [sonarr, setSonarr] = useState<ServiceDraft>({ enabled: false, baseUrl: "", apiKey: "" });
@@ -1113,29 +1114,25 @@ function AdminSettings() {
       {librariesState === "loading" && <p className="poster-status" role="status">Bibliotheken werden geladen …</p>}
       {librariesState === "error" && <p className="poster-status">Emby-Bibliotheken nicht verfügbar.</p>}
       {librariesState === "ready" && libraries.length === 0 && <p className="poster-status">Keine Bibliotheken gefunden.</p>}
-      {libraries.length > 0 && <div className="admin-library-groups">
-        <div className="admin-library-group">
-          <h3>Neu für dich</h3>
-          <p className="admin-hint">Bibliotheken, aus denen kürzlich hinzugefügte, ungesehene Titel vorgeschlagen werden.</p>
-          <ul className="admin-library-list">{libraries.map((library) => <li key={library.id}>
-            <label className="admin-library-checkbox">
-              <input type="checkbox" checked={newForYouIds.includes(library.id)} onChange={() => toggleLibrary(newForYouIds, setNewForYouIds, library.id)} />
-              <span>{library.name}</span>
-            </label>
-          </li>)}</ul>
-        </div>
-        <div className="admin-library-group">
-          <h3>Gesehene Filme und Serien</h3>
-          <p className="admin-hint">Bibliotheken, aus denen die Statistik- und Verlaufslisten gespeist werden.</p>
-          <ul className="admin-library-list">{libraries.map((library) => <li key={library.id}>
-            <label className="admin-library-checkbox">
-              <input type="checkbox" checked={watchedIds.includes(library.id)} onChange={() => toggleLibrary(watchedIds, setWatchedIds, library.id)} />
-              <span>{library.name}</span>
-            </label>
-          </li>)}</ul>
-        </div>
+      {libraries.length > 0 && <div className="admin-service-grid">
+        <LibraryTile
+          title="Neu für dich" description="Bibliotheken, aus denen kürzlich hinzugefügte, ungesehene Titel vorgeschlagen werden."
+          selectedCount={newForYouIds.length} onOpen={() => setLibraryPicker("newForYou")}
+        />
+        <LibraryTile
+          title="Gesehene Filme und Serien" description="Bibliotheken, aus denen die Statistik- und Verlaufslisten gespeist werden."
+          selectedCount={watchedIds.length} onOpen={() => setLibraryPicker("watched")}
+        />
       </div>}
     </section>
+
+    {libraryPicker && <LibraryPickerModal
+      title={libraryPicker === "newForYou" ? "Neu für dich" : "Gesehene Filme und Serien"}
+      libraries={libraries}
+      selectedIds={libraryPicker === "newForYou" ? newForYouIds : watchedIds}
+      onToggle={(id) => libraryPicker === "newForYou" ? toggleLibrary(newForYouIds, setNewForYouIds, id) : toggleLibrary(watchedIds, setWatchedIds, id)}
+      onClose={() => setLibraryPicker(null)}
+    />}
 
     <section className="admin-section" aria-label="Optionale Dienste">
       <div className="section-heading"><div><p className="eyebrow">OPTIONALE DIENSTE</p><h2>Verbindungen</h2></div></div>
@@ -1195,6 +1192,43 @@ function ServiceCard({ title, description, shows, draft, onChange, existing, sho
     </div>}
     <p className="admin-service-shows">{shows}</p>
   </article>;
+}
+
+// LibraryTile mirrors ServiceCard's look (same admin-service-card grid) so
+// the Bibliotheken and Optionale Dienste sections read as one consistent set
+// of tiles, even though a library group opens a picker instead of expanding
+// inline fields.
+function LibraryTile({ title, description, selectedCount, onOpen }: { title: string; description: string; selectedCount: number; onOpen: () => void }) {
+  return <button type="button" className="admin-service-card admin-library-tile" onClick={onOpen}>
+    <div className="admin-service-head">
+      <div><strong>{title}</strong><p className="admin-hint">{description}</p></div>
+      <Icon name="arrow" />
+    </div>
+    <p className="admin-library-tile-count">{selectedCount === 0 ? "Keine Bibliothek ausgewählt" : `${selectedCount} ${selectedCount === 1 ? "Bibliothek" : "Bibliotheken"} ausgewählt`}</p>
+  </button>;
+}
+
+function LibraryPickerModal({ title, libraries, selectedIds, onToggle, onClose }: {
+  title: string; libraries: EmbyLibrary[]; selectedIds: string[]; onToggle: (id: string) => void; onClose: () => void;
+}) {
+  useEscapeKey(onClose);
+  return <div className="request-modal-backdrop" role="presentation" onClick={onClose}>
+    <div className="request-modal" role="dialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()}>
+      <div><p className="eyebrow">BIBLIOTHEKEN</p><h3>{title}</h3></div>
+      {libraries.length === 0
+        ? <p className="poster-status">Keine Bibliotheken gefunden.</p>
+        : <div className="season-list">{libraries.map((library) => <label className="season-toggle-row" key={library.id}>
+          <span>{library.name}</span>
+          <span className="toggle-switch">
+            <input type="checkbox" checked={selectedIds.includes(library.id)} onChange={() => onToggle(library.id)} />
+            <span className="toggle-track"><span className="toggle-thumb" /></span>
+          </span>
+        </label>)}</div>}
+      <div className="request-modal-actions">
+        <button type="button" className="request-button" onClick={onClose}>Fertig</button>
+      </div>
+    </div>
+  </div>;
 }
 
 const chatTimeFormatter = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit" });
@@ -1441,6 +1475,15 @@ function AdminChatThreadScreen({ thread, adminName, adminUserId, onClose }: { th
 function greeting() {
   const hour = new Date().getHours();
   return hour < 12 ? "Moin" : hour < 18 ? "Mahlzeit" : "Nabend";
+}
+
+// A plain reload() can still be served from Safari's cache when the app is
+// added to the iPad home screen (no address bar / pull-to-refresh there to
+// force a fresh fetch). The cache-busting query string makes this an
+// unmatched URL, so the browser has to hit the network — and landing back on
+// "/" also resets the in-memory page state to "Heute" (its initial value).
+function goHomeAndRefresh() {
+  window.location.href = `${window.location.pathname}?refresh=${Date.now()}`;
 }
 function loadingCopy(state: LoadState) { return state === "error" ? "Nicht verfügbar" : "Wird geladen …"; }
 function formatDuration(seconds: number) { const hours = Math.floor(seconds / 3600); const minutes = Math.floor((seconds % 3600) / 60); return hours > 0 ? `${hours}\u00a0Std. ${minutes}\u00a0Min.` : `${minutes}\u00a0Min.`; }

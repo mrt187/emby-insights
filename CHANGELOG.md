@@ -8,6 +8,24 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.46] - 2026-07-30
+
+### Fixed
+
+- Statistik disappeared for accounts that never used the in-app star
+  rating/watchlist feature: its visibility was wrongly tied to the
+  `media_tracking` table (personal ratings/watchlist), not to actual
+  playback data. There's no reliable way to detect the Playback Reporting
+  connector without a live Emby call, so Statistik is always shown again.
+- Verwaltung's library selection now matches the Dienste tiles visually:
+  "Neu für dich" and "Gesehene Filme und Serien" are two tiles that open an
+  overlay with a toggle switch per library, like the season picker on
+  series requests, instead of two inline checkbox lists.
+- Tapping the sidebar logo now jumps to Heute and force-refreshes the page
+  (cache-busted URL) — works around iPad home-screen installs not having a
+  browser reload control to recover from stale content.
+- "Im Kino" moved to the last poster row on Heute.
+
 ## [0.8.45] - 2026-07-30
 
 ### Added
