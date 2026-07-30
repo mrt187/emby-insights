@@ -349,6 +349,8 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .provider-primevideo { background: linear-gradient(135deg, #1f5e78, #082029); color: #9fe3ff; }
 .provider-appletv { background: linear-gradient(135deg, #34343a, #0a0a0c); }
 .provider-hulu { background: linear-gradient(135deg, #0c4a37, #05130f); color: #b6ff4d; }
+.provider-paramountplus { background: linear-gradient(135deg, #1450e0, #050f3d); }
+.provider-hbomax { background: linear-gradient(135deg, #4b1f8f, #140729); }
 .poster-entry { flex: 0 0 158px; min-width: 0; scroll-snap-align: start; }
 .poster-entry-button {
   display: block; box-sizing: border-box; width: 100%; padding: 0; border: 0; margin: 0;
@@ -671,8 +673,12 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 }
 /* The whole thread card fills the remaining screen height so the composer
    always sits at the bottom edge instead of floating right under a short
-   message list — messages scroll internally, the composer never moves. */
-.chat-thread { flex: 1; min-height: calc(100svh - 260px); }
+   message list — messages scroll internally, the composer never moves.
+   Overrides the shared display:grid above: as a grid container with extra
+   vertical space, align-content:normal computes to stretch, which blew up
+   both the message row and the composer row (input + button) to giant
+   heights on short threads. Flex with an auto-height composer avoids that. */
+.chat-thread { display: flex; flex-direction: column; flex: 1; min-height: calc(100svh - 260px); }
 .chat-empty { color: var(--muted); font-size: 13px; padding: 4px 2px; }
 .chat-messages { flex: 1; min-height: 0; display: grid; align-content: start; gap: 10px; overflow-y: auto; padding: 2px 2px 4px; }
 .chat-bubble { display: flex; align-items: end; gap: 8px; max-width: 84%; }

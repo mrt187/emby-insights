@@ -53,7 +53,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Chats", icon: "chat" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.40";
+const APP_VERSION = "0.8.41";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -150,6 +150,7 @@ export default function Home() {
   const [requestTotal, , refetchRequestTotal] = useApiResource<{ total: number } | null>(user ? "/api/requests/total" : null, null);
   const totalRequests = requestTotal?.total ?? null;
   const [newForYouItems, newForYouState] = useApiResource<NewForYouItem[]>(user ? "/api/new-for-you" : null, []);
+  const [seriesInProgress, seriesInProgressState] = useApiResource<SeriesProgress[]>(user ? "/api/series-in-progress" : null, []);
   const [availableRequests] = useApiResource<RequestItem[]>(user ? "/api/requests/available" : null, []);
   const [userProfile] = useApiResource<UserProfile | null>(user ? "/api/me/profile" : null, null);
 
@@ -208,7 +209,7 @@ export default function Home() {
           </div>}
         </div>
       </header>
-      {page === "Heute" && <Today upcoming={upcomingItems} upcomingState={upcomingState} cinema={cinemaItems} cinemaState={cinemaState} requests={requestItems} requestState={requestState} newForYou={newForYouItems} newForYouState={newForYouState} availableRequests={availableRequests} message={messagePreview} onSelectMedia={setSelectedMedia} onOpenChats={() => selectPage("Chats")} />}
+      {page === "Heute" && <Today upcoming={upcomingItems} upcomingState={upcomingState} cinema={cinemaItems} cinemaState={cinemaState} requests={requestItems} requestState={requestState} newForYou={newForYouItems} newForYouState={newForYouState} seriesInProgress={seriesInProgress} seriesInProgressState={seriesInProgressState} availableRequests={availableRequests} message={messagePreview} onSelectMedia={setSelectedMedia} onOpenChats={() => selectPage("Chats")} />}
       {page === "Statistik" && <Stats user={user} onSelectMedia={setSelectedMedia} />}
       {page === "Anfragen" && <Requests onSelectMedia={setSelectedMedia} />}
       {page === "Chats" && <Chats user={user} />}
@@ -248,10 +249,11 @@ function UserAvatar({ name }: { name: string }) {
   return <PersonAvatar name={name} src="/api/me/avatar" />;
 }
 
-function Today({ upcoming, upcomingState, cinema, cinemaState, requests, requestState, newForYou, newForYouState, availableRequests, message, onSelectMedia, onOpenChats }: {
+function Today({ upcoming, upcomingState, cinema, cinemaState, requests, requestState, newForYou, newForYouState, seriesInProgress, seriesInProgressState, availableRequests, message, onSelectMedia, onOpenChats }: {
 	upcoming: UpcomingItem[]; upcomingState: LoadState; requests: RequestItem[]; requestState: LoadState;
 	cinema: UpcomingItem[]; cinemaState: LoadState;
   newForYou: NewForYouItem[]; newForYouState: LoadState; availableRequests: RequestItem[];
+  seriesInProgress: SeriesProgress[]; seriesInProgressState: LoadState;
   message: { preview: string } | null;
   onSelectMedia: (selection: MediaSelection) => void; onOpenChats: () => void;
 }) {
@@ -272,6 +274,7 @@ function Today({ upcoming, upcomingState, cinema, cinemaState, requests, request
   return <div className="content today-view">
     <RelevantNow events={events} onShowAll={() => setAllEventsOpen(true)} />
     <PosterRow title="Demnächst" eyebrow="IN DEN NÄCHSTEN 4 WOCHEN AUF EMBY" items={upcoming} state={upcomingState} emptyLabel="Nichts Neues in den nächsten vier Wochen." itemTitle={upcomingTitle} detail={(item) => availabilityWording(item.availabilityDate)} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />
+    <PosterRow title="Offene Staffeln" eyebrow="TEILWEISE GESEHEN" items={seriesInProgress} state={seriesInProgressState} emptyLabel="Keine Serien mit offenen Folgen." detail={(item) => `${item.watchedEpisodes} von ${item.totalEpisodes} Folgen`} progress={(item) => Math.round((item.watchedEpisodes / item.totalEpisodes) * 100)} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
     <PosterRow title="Im Kino" eyebrow="KOMMENDE UND AKTUELLE KINOSTARTS" items={cinema} state={cinemaState} emptyLabel="Zurzeit keine Kinostarts." detail={cinemaWording} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />
     <PosterRow title="Meine Anfragen" eyebrow="SEERR · OFFEN" items={requests} state={requestState} emptyLabel="Keine offenen Anfragen." detail={(item) => item.status} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />
     <PosterRow title="Neu für dich" eyebrow="IN DEN LETZTEN 14 TAGEN" items={newForYou} state={newForYouState} emptyLabel="Nichts Neues in den letzten 14 Tagen." detail={() => "Ungesehen"} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
@@ -518,7 +521,6 @@ function Stats({ user, onSelectMedia }: { user: { name: string }; onSelectMedia:
   const [continueWatching, continueWatchingState] = useApiResource<ContinueWatchingItem[]>("/api/continue-watching", []);
   const [watchedMovies, watchedMoviesState] = useApiResource<WatchedItem[]>("/api/watched-movies", []);
   const [watchedSeries, watchedSeriesState] = useApiResource<WatchedItem[]>("/api/watched-series", []);
-  const [seriesInProgress, seriesInProgressState] = useApiResource<SeriesProgress[]>("/api/series-in-progress", []);
   const [completedMovies, completedMoviesState] = useApiResource<WatchedItem[]>(`/api/completed-movies?period=${apiPeriod[period]}`, []);
   const [completedSeries, completedSeriesState] = useApiResource<WatchedItem[]>(`/api/completed-series?period=${apiPeriod[period]}`, []);
   const [deviceStats, deviceStatsState] = useApiResource<DeviceWatchTime[]>(`/api/stats/devices?period=${apiPeriod[period]}`, []);
@@ -539,7 +541,6 @@ function Stats({ user, onSelectMedia }: { user: { name: string }; onSelectMedia:
     <PosterRow title="Was ich gerade schaue" eyebrow="WEITERSCHAUEN" items={continueWatching} state={continueWatchingState} emptyLabel="Nichts in Bearbeitung." detail={(item) => `${item.progressPercent} % gesehen`} progress={(item) => item.progressPercent} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
     <PosterRow title="Gesehene Filme" eyebrow="ALLE" items={watchedMovies} state={watchedMoviesState} emptyLabel="Noch keine Filme abgeschlossen." detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
     <PosterRow title="Gesehene Serien" eyebrow="ALLE" items={watchedSeries} state={watchedSeriesState} emptyLabel="Noch keine Serien abgeschlossen." detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
-    <PosterRow title="Offene Staffeln" eyebrow="TEILWEISE GESEHEN" items={seriesInProgress} state={seriesInProgressState} emptyLabel="Keine Serien mit offenen Folgen." detail={(item) => `${item.watchedEpisodes} von ${item.totalEpisodes} Folgen`} progress={(item) => Math.round((item.watchedEpisodes / item.totalEpisodes) * 100)} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
 
     <section className="chart-grid">
       <BarChart title="Meistgesehene Genres" data={topGenres(watchedMovies, watchedSeries)} loading={watchedMoviesState === "loading" || watchedSeriesState === "loading"} />
@@ -612,6 +613,8 @@ const STREAMING_PROVIDERS: { id: string; name: string; className: string }[] = [
   { id: "9", name: "Prime Video", className: "provider-primevideo" },
   { id: "350", name: "Apple TV+", className: "provider-appletv" },
   { id: "15", name: "Hulu", className: "provider-hulu" },
+  { id: "531", name: "Paramount+", className: "provider-paramountplus" },
+  { id: "384", name: "HBO Max", className: "provider-hbomax" },
 ];
 
 function Requests({ onSelectMedia }: { onSelectMedia: (selection: MediaSelection) => void }) {

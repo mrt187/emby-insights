@@ -76,3 +76,24 @@ func TestInCinemasUsesThirtyDayWindow(t *testing.T) {
 		t.Fatalf("InCinemas() = %#v", items)
 	}
 }
+
+// TestInCinemasKeepsFilmsWithoutAnnouncedDigitalDate guards against a
+// regression where a movie currently in cinemas but without a known digital
+// release date (common — that date is often announced weeks into the run)
+// was silently dropped from the row entirely, because a zero digital date
+// is not "after now".
+func TestInCinemasKeepsFilmsWithoutAnnouncedDigitalDate(t *testing.T) {
+	now := time.Now().UTC()
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		fmt.Fprintf(writer, `[{"title":"No Digital Date Yet","tmdbId":1,"inCinemas":%q}]`, now.AddDate(0, 0, -2).Format(time.RFC3339))
+	}))
+	defer server.Close()
+
+	items, err := NewClient(server.URL, "calendar-key", "", "", "", "DE", 28).InCinemas(context.Background())
+	if err != nil {
+		t.Fatalf("InCinemas() error = %v", err)
+	}
+	if len(items) != 1 || items[0].Title != "No Digital Date Yet" || items[0].CinemaEndDate != "" {
+		t.Fatalf("InCinemas() = %#v", items)
+	}
+}

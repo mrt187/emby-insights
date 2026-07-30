@@ -115,9 +115,14 @@ func (client *Client) InCinemas(ctx context.Context) ([]Item, error) {
 			return nil, err
 		}
 		// Cinema has a 30-day preview window. Films that already opened remain
-		// visible for their full cinema run, until their digital release arrives.
+		// visible for their full cinema run, until their digital release
+		// arrives — and many films in cinemas right now don't have a digital
+		// date announced yet, so a zero digital date must count as "still
+		// running", not as "already available", or every such film silently
+		// disappears from this row.
 		windowEnd := now.AddDate(0, 0, cinemaWindowDays)
-		if !dates.cinema.IsZero() && !dates.cinema.After(windowEnd) && dates.digital.After(now) {
+		stillRunning := dates.digital.IsZero() || dates.digital.After(now)
+		if !dates.cinema.IsZero() && !dates.cinema.After(windowEnd) && stillRunning {
 			items = append(items, movie.item(dates.cinema, dates.digital, "movie"))
 		}
 	}
@@ -133,7 +138,11 @@ type movie struct {
 
 func (movie movie) item(available, cinemaEnd time.Time, mediaType string) Item {
 	id := fmt.Sprintf("%d", movie.TmdbID)
-	return Item{ID: id, TmdbID: id, Title: movie.Title, PosterURL: movie.PosterURL, MediaType: mediaType, AvailabilityDate: available.Format(time.RFC3339), CinemaStartDate: available.Format(time.RFC3339), CinemaEndDate: cinemaEnd.Format(time.RFC3339)}
+	var cinemaEndFormatted string
+	if !cinemaEnd.IsZero() {
+		cinemaEndFormatted = cinemaEnd.Format(time.RFC3339)
+	}
+	return Item{ID: id, TmdbID: id, Title: movie.Title, PosterURL: movie.PosterURL, MediaType: mediaType, AvailabilityDate: available.Format(time.RFC3339), CinemaStartDate: available.Format(time.RFC3339), CinemaEndDate: cinemaEndFormatted}
 }
 
 type episode struct {

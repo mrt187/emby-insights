@@ -864,7 +864,7 @@ func (app *App) adminAvatarForUser(writer http.ResponseWriter, request *http.Req
 		return
 	}
 	writer.Header().Set("Content-Type", image.ContentType)
-	writer.Header().Set("Cache-Control", "private, max-age=3600")
+	writer.Header().Set("Cache-Control", "private, no-cache")
 	writer.WriteHeader(http.StatusOK)
 	_, _ = writer.Write(image.Data)
 }
@@ -980,7 +980,7 @@ func (app *App) adminUserAvatar(writer http.ResponseWriter, request *http.Reques
 		return
 	}
 	writer.Header().Set("Content-Type", image.ContentType)
-	writer.Header().Set("Cache-Control", "private, max-age=3600")
+	writer.Header().Set("Cache-Control", "private, no-cache")
 	writer.WriteHeader(http.StatusOK)
 	_, _ = writer.Write(image.Data)
 }
@@ -1251,7 +1251,7 @@ func (app *App) avatar(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	writer.Header().Set("Content-Type", image.ContentType)
-	writer.Header().Set("Cache-Control", "private, max-age=3600")
+	writer.Header().Set("Cache-Control", "private, no-cache")
 	writer.WriteHeader(http.StatusOK)
 	_, _ = writer.Write(image.Data)
 }

@@ -8,6 +8,35 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.41] - 2026-07-30
+
+### Fixed
+
+- The chat window on mobile/tablet no longer blows up the message input and
+  send button to a huge size on short threads — the thread card used CSS
+  Grid, whose default `align-content` stretches auto-sized rows to fill
+  leftover vertical space; switched it to a flex column so only the message
+  list grows and the composer keeps its natural height at the bottom.
+- Logging in as a different user on the same device no longer shows the
+  previous user's profile picture — the avatar endpoints were cached for
+  1h with no per-user cache key, so the browser kept serving the old
+  image; they now require revalidation on every load.
+- "Im Kino" was only showing 1–2 movies because any film without an
+  announced digital release date (common for new releases — that date is
+  often set weeks into the cinema run) was being treated as already
+  available and dropped from the row entirely. A missing digital date now
+  counts as "still running".
+
+### Added
+
+- Two more provider chips under Anfragen: Paramount+ and HBO Max.
+
+### Changed
+
+- "Offene Staffeln" (partially watched series) moved from the Statistics
+  page to the Home/"Heute" tab, directly under "Demnächst", where it's
+  more likely to be noticed day-to-day.
+
 ## [0.8.40] - 2026-07-30
 
 ### Changed
