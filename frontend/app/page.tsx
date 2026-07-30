@@ -45,7 +45,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.30";
+const APP_VERSION = "0.8.31";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -767,6 +767,13 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated }: { selection
             {detail.communityRating > 0 && <p className="media-detail-rating">★ {detail.communityRating.toFixed(1)}</p>}
           </div>
         </div>
+        {(detail.status || detail.releaseDate || (detail.studios && detail.studios.length > 0)) && <section className="media-detail-facts">
+          <dl>
+            {detail.status && <div><dt>Status</dt><dd>{detail.status}</dd></div>}
+            {detail.releaseDate && <div><dt>Erscheinungsdatum</dt><dd>{formatFullDate(detail.releaseDate)}</dd></div>}
+            {detail.studios && detail.studios.length > 0 && <div><dt>Studios</dt><dd>{detail.studios.join(", ")}</dd></div>}
+          </dl>
+        </section>}
         <div className="tracking-bar">
           {selection.source === "emby" && <>
             <div className="star-rating" role="radiogroup" aria-label="Deine Bewertung">
@@ -803,13 +810,6 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated }: { selection
         </div>}
         {detail.overview && <section className="media-detail-overview"><h2>Übersicht</h2><OverviewText text={detail.overview} /></section>}
         </div>
-        {(detail.status || detail.releaseDate || (detail.studios && detail.studios.length > 0)) && <section className="media-detail-facts">
-          <dl>
-            {detail.status && <div><dt>Status</dt><dd>{detail.status}</dd></div>}
-            {detail.releaseDate && <div><dt>Erscheinungsdatum</dt><dd>{formatFullDate(detail.releaseDate)}</dd></div>}
-            {detail.studios && detail.studios.length > 0 && <div><dt>Studios</dt><dd>{detail.studios.join(", ")}</dd></div>}
-          </dl>
-        </section>}
         {embySeasons.length > 0 && <section className="media-detail-seasons">
           <h2>Staffeln</h2>
           <div className="poster-scroller">{embySeasons.map((season) => {

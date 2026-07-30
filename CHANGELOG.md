@@ -8,6 +8,15 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.31] - 2026-07-30
+
+### Changed
+
+- Moved the Status/Erscheinungsdatum/Studios facts on the media detail
+  screen right under the title, ahead of the watchlist/request controls
+  and the overview, so they're visible immediately instead of only after
+  scrolling past a potentially long overview.
+
 ## [0.8.30] - 2026-07-30
 
 ### Fixed
