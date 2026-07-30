@@ -8,6 +8,34 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.45] - 2026-07-30
+
+### Added
+
+- Setup wizard replacing manual `.env` configuration: the first Emby account
+  to log in successfully becomes the Emby Insights admin automatically and
+  atomically (no more `ADMIN_EMBY_USER_ID`), and gets a new **Verwaltung**
+  admin page to configure Emby library selection and the optional Seerr,
+  Radarr, Sonarr and TMDB integrations from the browser — changes apply
+  immediately, no container restart required.
+- `EMBY_DEVICE_ID` is now generated once and persisted automatically instead
+  of requiring a manually supplied unique ID.
+- API keys for optional integrations are stored encrypted at rest (AES-256-GCM,
+  keyed by a new `APP_ENCRYPTION_KEY` env var) and are never returned to the
+  browser, only as a masked preview.
+- Home, Statistik and Anfragen now hide sections tied to services that
+  haven't been configured yet (e.g. no Seerr means no Anfragen page or
+  request-related Home cards; no Radarr/Sonarr means no Demnächst/Im Kino).
+
+### Changed
+
+- `.env.example` no longer lists `EMBY_DEVICE_ID`, `RADARR_*`, `SONARR_*`,
+  `TMDB_API_KEY`, `COMINGSOON_*`, `EMBY_NEW_FOR_YOU_LIBRARY_IDS`,
+  `EMBY_WATCHED_LIBRARY_IDS` or `ADMIN_EMBY_USER_ID` — all of that now lives
+  in Postgres and is managed through Verwaltung. Existing installs are
+  seeded once from any of these variables still present at first boot after
+  the upgrade, so nothing already configured is lost.
+
 ## [0.8.44] - 2026-07-30
 
 ### Added

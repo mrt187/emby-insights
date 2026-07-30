@@ -2,7 +2,8 @@
 
 import { FormEvent, useState } from "react";
 
-type User = { id: string; name: string; isAdmin: boolean };
+type Features = { requests: boolean; movieDates: boolean; seriesDates: boolean; upcoming: boolean; statistics: boolean };
+type User = { id: string; name: string; isAdmin: boolean; features: Features };
 
 export function LoginScreen({ onAuthenticated }: { onAuthenticated: (user: User) => void }) {
   const [username, setUsername] = useState("");

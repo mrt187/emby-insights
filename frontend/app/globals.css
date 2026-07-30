@@ -652,6 +652,43 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .logout-button:hover { background: #3b2521; border-color: #8f5d54; }
 .logout-button:disabled { opacity: .6; cursor: wait; }
 
+/* ------------------------------------------------------------ verwaltung */
+
+.admin-page { display: grid; gap: 28px; }
+.admin-intro-banner {
+  display: grid; gap: 10px; padding: 20px; border-radius: 16px;
+  border: 1px solid rgb(140 224 173 / 30%);
+  background: linear-gradient(150deg, color-mix(in srgb, var(--mint-bright) 14%, var(--ink-raised)), var(--ink-raised));
+}
+.admin-intro-banner h2 { margin: 0; font-size: 20px; letter-spacing: -.4px; }
+.admin-intro-banner p { margin: 0; color: var(--text-secondary); font-size: 14px; line-height: 1.5; }
+.admin-intro-banner .request-button { justify-self: start; }
+
+.admin-section { display: grid; gap: 16px; }
+.admin-hint { margin: 4px 0 0; color: var(--muted); font-size: 13px; line-height: 1.4; }
+
+.admin-library-groups { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.admin-library-group h3 { margin: 0; font-size: 15px; font-weight: 800; }
+.admin-library-list { display: grid; gap: 6px; margin-top: 10px; list-style: none; padding: 0; }
+.admin-library-checkbox {
+  display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 12px;
+  border-radius: 10px; background: var(--ink); font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.admin-library-checkbox input { width: 16px; height: 16px; accent-color: var(--mint-bright); }
+
+.admin-service-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.admin-service-card {
+  display: grid; gap: 12px; padding: 18px; border-radius: 16px;
+  border: 1px solid var(--line); background: var(--ink-raised);
+}
+.admin-service-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.admin-service-head strong { font-size: 16px; font-weight: 800; }
+.admin-service-body { display: grid; gap: 12px; }
+.admin-field { display: grid; gap: 6px; font-size: 13px; font-weight: 700; color: var(--text-secondary); }
+.admin-service-shows { margin: 0; padding-top: 10px; border-top: 1px dashed var(--line); color: var(--muted); font-size: 12px; line-height: 1.4; }
+
+.admin-save-bar { position: sticky; bottom: 12px; display: flex; align-items: center; gap: 14px; justify-content: flex-end; }
+
 /* ---------------------------------------------------------------- chats */
 
 .chat-view { max-width: 720px; display: flex; flex-direction: column; }

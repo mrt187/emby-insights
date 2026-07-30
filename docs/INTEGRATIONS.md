@@ -58,13 +58,11 @@ Für Seerr verwenden wir zuerst die stabile Emby-ID-Verknüpfung. Der Benutzerna
 - **Emby:** Erfordert einen Test der verfügbaren Bibliotheksereignisse; andernfalls nutzt Emby Insights einen gezielten kurzen Abgleich.
 - **Browser:** Das Go-Backend sendet neue Daten sofort über eine eigene Live-Verbindung an geöffnete Dashboards.
 
-## Benötigte Umgebungsvariablen
+## Konfiguration
 
-```text
-EMBY_URL=
-EMBY_API_KEY=
-SEERR_URL=
-SEERR_API_KEY=
-```
-
-Für abweichende Zuordnungen werden zusätzlich optionale Mapping-Werte ergänzt.
+Nur die Basis-Anbindung an Emby selbst (Adresse, Admin-API-Key) sowie die
+Datenbank-/Verschlüsselungswerte stehen noch in `.env`. Radarr, Sonarr, TMDB
+und Seerr werden nicht mehr über Umgebungsvariablen konfiguriert, sondern über
+die Verwaltungsoberfläche (siehe Einrichtungsassistent): der erste Emby-Login
+wird automatisch zum Emby-Insights-Admin und richtet die übrigen Dienste dort
+ein.

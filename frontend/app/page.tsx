@@ -3,7 +3,9 @@
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { LoginScreen } from "./login-screen";
 
-type Page = "Heute" | "Statistik" | "Anfragen" | "Chats" | "Profil";
+type Page = "Heute" | "Statistik" | "Anfragen" | "Chats" | "Profil" | "Verwaltung";
+type Features = { requests: boolean; movieDates: boolean; seriesDates: boolean; upcoming: boolean; statistics: boolean };
+type CurrentUser = { id: string; name: string; isAdmin: boolean; features: Features };
 type Period = "Woche" | "Monat" | "Jahr";
 type StatisticsPeriod = "week" | "month" | "year";
 type PersonalStats = { watchSeconds: number; previousWatchSeconds: number; completedMovies: number; completedSeries: number; favouriteGenre: string; periodStartsAt: string; periodEndsAt: string };
@@ -37,7 +39,7 @@ type MediaDetail = {
 };
 type MediaTrackingEntry = { mediaSource: string; mediaId: string; mediaType: string; title: string; posterUrl: string; rating?: number; onWatchlist: boolean; rewatchCount: number };
 function isRequestableSeason(season: MediaSeason | RequestableSeason): season is RequestableSeason { return !("id" in season); }
-type IconName = "home" | "chart" | "sparkle" | "user" | "bell" | "arrow" | "close" | "clock" | "movie" | "series" | "genre" | "medal" | "refresh" | "chat";
+type IconName = "home" | "chart" | "sparkle" | "user" | "bell" | "arrow" | "close" | "clock" | "movie" | "series" | "genre" | "medal" | "refresh" | "chat" | "settings";
 type Tone = "blue" | "peach" | "mint" | "lilac";
 type LoadState = "loading" | "ready" | "error";
 
@@ -48,12 +50,19 @@ type Contact = { id: string; name: string };
 const UNREAD_POLL_MS = 20_000;
 const CHAT_POLL_MS = 20_000;
 
-const nav: { label: Page; icon: IconName }[] = [
-  { label: "Heute", icon: "home" }, { label: "Statistik", icon: "chart" },
-  { label: "Anfragen", icon: "sparkle" }, { label: "Chats", icon: "chat" }, { label: "Profil", icon: "user" },
-];
+// Which nav entries a user sees depends on which optional services the admin
+// has configured in Verwaltung: Statistik needs tracked watch data, Anfragen
+// needs Seerr, and Verwaltung only ever shows for the Emby Insights admin.
+function visibleNav(user: CurrentUser): { label: Page; icon: IconName }[] {
+  const items: { label: Page; icon: IconName }[] = [{ label: "Heute", icon: "home" }];
+  if (user.features.statistics) items.push({ label: "Statistik", icon: "chart" });
+  if (user.features.requests) items.push({ label: "Anfragen", icon: "sparkle" });
+  items.push({ label: "Chats", icon: "chat" }, { label: "Profil", icon: "user" });
+  if (user.isAdmin) items.push({ label: "Verwaltung", icon: "settings" });
+  return items;
+}
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.44";
+const APP_VERSION = "0.8.45";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -131,7 +140,7 @@ function useEscapeKey(onEscape: () => void) {
 export default function Home() {
   const [page, setPage] = useState<Page>("Heute");
   const [noticeOpen, setNoticeOpen] = useState(false);
-  const [user, setUser] = useState<{ id: string; name: string; isAdmin: boolean } | null>(null);
+  const [user, setUser] = useState<CurrentUser | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
   const [selectedMedia, setSelectedMedia] = useState<MediaSelection | null>(null);
   const noticeRef = useRef<HTMLDivElement>(null);
@@ -144,14 +153,14 @@ export default function Home() {
       .finally(() => setCheckingSession(false));
   }, []);
 
-  const [upcomingItems, upcomingState] = useApiResource<UpcomingItem[]>(user ? "/api/upcoming" : null, []);
-  const [cinemaItems, cinemaState] = useApiResource<UpcomingItem[]>(user ? "/api/in-cinemas" : null, []);
-  const [requestItems, requestState, refetchRequestItems] = useApiResource<RequestItem[]>(user ? "/api/requests" : null, []);
-  const [requestTotal, , refetchRequestTotal] = useApiResource<{ total: number } | null>(user ? "/api/requests/total" : null, null);
+  const [upcomingItems, upcomingState] = useApiResource<UpcomingItem[]>(user?.features.upcoming ? "/api/upcoming" : null, []);
+  const [cinemaItems, cinemaState] = useApiResource<UpcomingItem[]>(user?.features.movieDates ? "/api/in-cinemas" : null, []);
+  const [requestItems, requestState, refetchRequestItems] = useApiResource<RequestItem[]>(user?.features.requests ? "/api/requests" : null, []);
+  const [requestTotal, , refetchRequestTotal] = useApiResource<{ total: number } | null>(user?.features.requests ? "/api/requests/total" : null, null);
   const totalRequests = requestTotal?.total ?? null;
   const [newForYouItems, newForYouState] = useApiResource<NewForYouItem[]>(user ? "/api/new-for-you" : null, []);
   const [seriesInProgress, seriesInProgressState] = useApiResource<SeriesProgress[]>(user ? "/api/series-in-progress" : null, []);
-  const [availableRequests] = useApiResource<RequestItem[]>(user ? "/api/requests/available" : null, []);
+  const [availableRequests] = useApiResource<RequestItem[]>(user?.features.requests ? "/api/requests/available" : null, []);
   const [userProfile] = useApiResource<UserProfile | null>(user ? "/api/me/profile" : null, null);
 
   const refetchRequests = () => { refetchRequestItems(); refetchRequestTotal(); };
@@ -182,6 +191,7 @@ export default function Home() {
 
   const selectPage = (next: Page) => { setPage(next); setNoticeOpen(false); };
   const openNotices = () => setNoticeOpen((open) => !open);
+  const nav = visibleNav(user);
 
   return <main className="app-shell">
     {selectedMedia && <MediaDetailScreen selection={selectedMedia} onClose={() => setSelectedMedia(null)} onRequestCreated={refetchRequests} />}
@@ -209,11 +219,12 @@ export default function Home() {
           </div>}
         </div>
       </header>
-      {page === "Heute" && <Today upcoming={upcomingItems} upcomingState={upcomingState} cinema={cinemaItems} cinemaState={cinemaState} requests={requestItems} requestState={requestState} newForYou={newForYouItems} newForYouState={newForYouState} seriesInProgress={seriesInProgress} seriesInProgressState={seriesInProgressState} availableRequests={availableRequests} message={messagePreview} onSelectMedia={setSelectedMedia} onOpenChats={() => selectPage("Chats")} />}
-      {page === "Statistik" && <Stats user={user} onSelectMedia={setSelectedMedia} />}
-      {page === "Anfragen" && <Requests onSelectMedia={setSelectedMedia} />}
+      {page === "Heute" && <Today upcoming={upcomingItems} upcomingState={upcomingState} cinema={cinemaItems} cinemaState={cinemaState} requests={requestItems} requestState={requestState} newForYou={newForYouItems} newForYouState={newForYouState} seriesInProgress={seriesInProgress} seriesInProgressState={seriesInProgressState} availableRequests={availableRequests} features={user.features} message={messagePreview} onSelectMedia={setSelectedMedia} onOpenChats={() => selectPage("Chats")} />}
+      {page === "Statistik" && user.features.statistics && <Stats user={user} onSelectMedia={setSelectedMedia} />}
+      {page === "Anfragen" && user.features.requests && <Requests onSelectMedia={setSelectedMedia} />}
       {page === "Chats" && <Chats user={user} />}
-      {page === "Profil" && <Profile user={user} userProfile={userProfile} totalRequests={totalRequests} onSelectMedia={setSelectedMedia} />}
+      {page === "Profil" && <Profile user={user} userProfile={userProfile} totalRequests={user.features.requests ? totalRequests : null} onSelectMedia={setSelectedMedia} />}
+      {page === "Verwaltung" && user.isAdmin && <AdminSettings />}
     </section>
 
     <nav className="bottom-nav" aria-label="Hauptnavigation (mobil)">{nav.filter((item) => item.label !== "Profil").map((item) => <button key={item.label} className={page === item.label ? "active" : ""} onClick={() => selectPage(item.label)} aria-current={page === item.label ? "page" : undefined}><Icon name={item.icon} /><span className="sr-only">{item.label}</span></button>)}</nav>
@@ -236,6 +247,7 @@ function Icon({ name }: { name: IconName }) {
     medal: <><circle cx="12" cy="14" r="6" /><path d="m8 3 2.5 5M16 3l-2.5 5M10 14l1.4 1.4L14.5 12" /></>,
     refresh: <><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M8 16H3v5" /></>,
     chat: <path d="M4 4.5h16v11H9.5L5 20v-4.5H4v-11Z" />,
+    settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.04 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 9 19.35a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.65 15a1.7 1.7 0 0 0-1.56-1.04H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.65 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.65a1.7 1.7 0 0 0 1.04-1.56V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15 4.65a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.35 9c.14.62.68 1.34 1.56 1.04H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.96Z" /></>,
   };
   return <svg className="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
@@ -254,20 +266,26 @@ function UserAvatar({ name, userId }: { name: string; userId: string }) {
   return <PersonAvatar name={name} src={`/api/me/avatar?u=${encodeURIComponent(userId)}`} />;
 }
 
-function Today({ upcoming, upcomingState, cinema, cinemaState, requests, requestState, newForYou, newForYouState, seriesInProgress, seriesInProgressState, availableRequests, message, onSelectMedia, onOpenChats }: {
+function Today({ upcoming, upcomingState, cinema, cinemaState, requests, requestState, newForYou, newForYouState, seriesInProgress, seriesInProgressState, availableRequests, features, message, onSelectMedia, onOpenChats }: {
 	upcoming: UpcomingItem[]; upcomingState: LoadState; requests: RequestItem[]; requestState: LoadState;
 	cinema: UpcomingItem[]; cinemaState: LoadState;
   newForYou: NewForYouItem[]; newForYouState: LoadState; availableRequests: RequestItem[];
   seriesInProgress: SeriesProgress[]; seriesInProgressState: LoadState;
+  features: Features;
   message: { preview: string } | null;
   onSelectMedia: (selection: MediaSelection) => void; onOpenChats: () => void;
 }) {
   const [allEventsOpen, setAllEventsOpen] = useState(false);
   const [newForYouGridOpen, setNewForYouGridOpen] = useState(false);
 
+  // Ohne Radarr fehlen Filmtermine, ohne Sonarr Serientermine — beide fließen
+  // serverseitig in dieselbe Liste, deshalb wird hier nach Medientyp gefiltert
+  // statt eine eigene Abfrage pro Dienst zu brauchen.
+  const visibleUpcoming = upcoming.filter((item) => (item.mediaType === "movie" ? features.movieDates : features.seriesDates));
+
   const events = relevantEvents({
     availableRequests,
-    upcoming: upcomingState === "ready" ? upcoming : [],
+    upcoming: upcomingState === "ready" ? visibleUpcoming : [],
     cinema: cinemaState === "ready" ? cinema : [],
     newForYou: newForYouState === "ready" ? newForYou : [],
     message,
@@ -278,10 +296,10 @@ function Today({ upcoming, upcomingState, cinema, cinemaState, requests, request
 
   return <div className="content today-view">
     <RelevantNow events={events} onShowAll={() => setAllEventsOpen(true)} />
-    <PosterRow title="Demnächst" eyebrow="IN DEN NÄCHSTEN 4 WOCHEN AUF EMBY" items={upcoming} state={upcomingState} emptyLabel="Nichts Neues in den nächsten vier Wochen." itemTitle={upcomingTitle} detail={(item) => availabilityWording(item.availabilityDate)} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />
+    {features.upcoming && <PosterRow title="Demnächst" eyebrow="IN DEN NÄCHSTEN 4 WOCHEN AUF EMBY" items={visibleUpcoming} state={upcomingState} emptyLabel="Nichts Neues in den nächsten vier Wochen." itemTitle={upcomingTitle} detail={(item) => availabilityWording(item.availabilityDate)} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />}
     <PosterRow title="Offene Staffeln" eyebrow="TEILWEISE GESEHEN" items={seriesInProgress} state={seriesInProgressState} emptyLabel="Keine Serien mit offenen Folgen." detail={(item) => `${item.watchedEpisodes} von ${item.totalEpisodes} Folgen`} progress={(item) => Math.round((item.watchedEpisodes / item.totalEpisodes) * 100)} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
-    <PosterRow title="Im Kino" eyebrow="KOMMENDE UND AKTUELLE KINOSTARTS" items={cinema} state={cinemaState} emptyLabel="Zurzeit keine Kinostarts." detail={cinemaWording} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />
-    <PosterRow title="Meine Anfragen" eyebrow="SEERR · OFFEN" items={requests} state={requestState} emptyLabel="Keine offenen Anfragen." detail={(item) => item.status} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />
+    {features.movieDates && <PosterRow title="Im Kino" eyebrow="KOMMENDE UND AKTUELLE KINOSTARTS" items={cinema} state={cinemaState} emptyLabel="Zurzeit keine Kinostarts." detail={cinemaWording} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />}
+    {features.requests && <PosterRow title="Meine Anfragen" eyebrow="SEERR · OFFEN" items={requests} state={requestState} emptyLabel="Keine offenen Anfragen." detail={(item) => item.status} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />}
     <PosterRow title="Neu für dich" eyebrow="IN DEN LETZTEN 14 TAGEN" items={newForYou} state={newForYouState} emptyLabel="Nichts Neues in den letzten 14 Tagen." detail={() => "Ungesehen"} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
 
     {allEventsOpen && <RelevantAllScreen events={events} onClose={() => setAllEventsOpen(false)} />}
@@ -975,7 +993,7 @@ function useTrackingList(path: string) {
   return [items, state] as const;
 }
 
-function Profile({ user, userProfile, totalRequests, onSelectMedia }: { user: { id: string; name: string }; userProfile: UserProfile | null; totalRequests: number | null; onSelectMedia: (selection: MediaSelection) => void }) {
+function Profile({ user, userProfile, totalRequests, onSelectMedia }: { user: CurrentUser; userProfile: UserProfile | null; totalRequests: number | null; onSelectMedia: (selection: MediaSelection) => void }) {
   const [signingOut, setSigningOut] = useState(false);
   const [watchlist, watchlistState] = useTrackingList("/api/tracking/watchlist");
   const [ratings, ratingsState] = useTrackingList("/api/tracking/ratings");
@@ -994,7 +1012,7 @@ function Profile({ user, userProfile, totalRequests, onSelectMedia }: { user: { 
         <div><dt>Mitglied seit</dt><dd>{userProfile ? formatFullDate(userProfile.memberSince) : "—"}</dd></div>
         <div><dt>Zuletzt aktiv</dt><dd>{userProfile ? formatFullDate(userProfile.lastActiveDate) : "—"}</dd></div>
         <div><dt>Letzter Login</dt><dd>{userProfile ? formatFullDate(userProfile.lastLoginDate) : "—"}</dd></div>
-        <div><dt>Anfragen insgesamt</dt><dd>{totalRequests !== null ? totalRequests : "—"}</dd></div>
+        {user.features.requests && <div><dt>Anfragen insgesamt</dt><dd>{totalRequests !== null ? totalRequests : "—"}</dd></div>}
         <div><dt>Version</dt><dd>v{APP_VERSION}</dd></div>
       </dl>
     </section>
@@ -1002,6 +1020,181 @@ function Profile({ user, userProfile, totalRequests, onSelectMedia }: { user: { 
     <PosterRow title="Meine Bewertungen" items={withId(ratings)} state={ratingsState} emptyLabel="Noch keine Bewertungen." detail={(item) => "★".repeat(item.rating ?? 0)} onSelect={(item) => onSelectMedia(toSelection(item))} />
     <button className="logout-button" onClick={logout} disabled={signingOut}>{signingOut ? "Abmeldung läuft …" : "Abmelden"}</button>
   </div>;
+}
+
+type EmbyLibrary = { id: string; name: string };
+type ServiceView = { enabled: boolean; baseUrl?: string; apiKeySet: boolean; apiKeyPreview?: string };
+type AdminSettingsView = {
+  newForYouLibraryIds: string[]; watchedLibraryIds: string[];
+  seerr: ServiceView; radarr: ServiceView; sonarr: ServiceView; tmdb: ServiceView;
+  comingSoonRegion: string; comingSoonDaysAhead: number;
+};
+type ServiceDraft = { enabled: boolean; baseUrl: string; apiKey: string };
+const SETUP_INTRO_SEEN_KEY = "emby-insights-setup-intro-seen";
+
+// AdminSettings is the Verwaltung page: it replaces manually editing .env
+// with a GUI for library selection and the four optional integrations.
+// Nothing here is enforced client-side only — every /api/admin/* call is
+// re-checked server-side (see requireAdmin in the backend).
+function AdminSettings() {
+  const [settings, settingsState, refetchSettings] = useApiResource<AdminSettingsView | null>("/api/admin/settings", null);
+  const [libraries, librariesState] = useApiResource<EmbyLibrary[]>("/api/admin/libraries", []);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(false);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [showIntro, setShowIntro] = useState(() => typeof window !== "undefined" && !window.localStorage.getItem(SETUP_INTRO_SEEN_KEY));
+
+  const [newForYouIds, setNewForYouIds] = useState<string[]>([]);
+  const [watchedIds, setWatchedIds] = useState<string[]>([]);
+  const [seerr, setSeerr] = useState<ServiceDraft>({ enabled: false, baseUrl: "", apiKey: "" });
+  const [radarr, setRadarr] = useState<ServiceDraft>({ enabled: false, baseUrl: "", apiKey: "" });
+  const [sonarr, setSonarr] = useState<ServiceDraft>({ enabled: false, baseUrl: "", apiKey: "" });
+  const [tmdb, setTmdb] = useState<ServiceDraft>({ enabled: false, baseUrl: "", apiKey: "" });
+
+  useEffect(() => {
+    if (!settings) return;
+    setNewForYouIds(settings.newForYouLibraryIds);
+    setWatchedIds(settings.watchedLibraryIds);
+    setSeerr({ enabled: settings.seerr.enabled, baseUrl: settings.seerr.baseUrl ?? "", apiKey: "" });
+    setRadarr({ enabled: settings.radarr.enabled, baseUrl: settings.radarr.baseUrl ?? "", apiKey: "" });
+    setSonarr({ enabled: settings.sonarr.enabled, baseUrl: settings.sonarr.baseUrl ?? "", apiKey: "" });
+    setTmdb({ enabled: settings.tmdb.enabled, baseUrl: "", apiKey: "" });
+  }, [settings]);
+
+  const dismissIntro = () => {
+    window.localStorage.setItem(SETUP_INTRO_SEEN_KEY, "1");
+    setShowIntro(false);
+  };
+
+  const toggleLibrary = (list: string[], setList: (next: string[]) => void, id: string) => {
+    setList(list.includes(id) ? list.filter((entry) => entry !== id) : [...list, id]);
+  };
+
+  const save = async () => {
+    setSaving(true);
+    setSaveError(false);
+    try {
+      const response = await fetch("/api/admin/settings", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          newForYouLibraryIds: newForYouIds,
+          watchedLibraryIds: watchedIds,
+          seerr, radarr, sonarr,
+          tmdb: { enabled: tmdb.enabled, apiKey: tmdb.apiKey },
+          comingSoonRegion: settings?.comingSoonRegion ?? "DE",
+          comingSoonDaysAhead: settings?.comingSoonDaysAhead ?? 28,
+        }),
+      });
+      if (!response.ok) throw new Error("saving settings failed");
+      setSavedAt(Date.now());
+      refetchSettings();
+    } catch {
+      setSaveError(true);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (settingsState === "loading") return <div className="content page-view admin-page"><p className="poster-status" role="status">Wird geladen …</p></div>;
+  if (settingsState === "error" || !settings) return <div className="content page-view admin-page"><p className="poster-status">Einstellungen nicht verfügbar.</p></div>;
+
+  return <div className="content page-view admin-page">
+    {showIntro && <section className="admin-intro-banner">
+      <p className="eyebrow">WILLKOMMEN</p>
+      <h2>Du bist jetzt Admin von Emby Insights</h2>
+      <p>Richte hier ein, welche Bibliotheken genutzt werden und welche optionalen Dienste (Seerr, Radarr, Sonarr, TMDB) angebunden sind. Alles ist optional — ohne Einrichtung bleiben die zugehörigen Bereiche einfach ausgeblendet.</p>
+      <button type="button" className="request-button" onClick={dismissIntro}>Verstanden</button>
+    </section>}
+
+    <section className="admin-section" aria-label="Bibliotheken">
+      <div className="section-heading"><div><p className="eyebrow">BIBLIOTHEKEN</p><h2>Welche Bibliotheken sollen genutzt werden?</h2></div></div>
+      {librariesState === "loading" && <p className="poster-status" role="status">Bibliotheken werden geladen …</p>}
+      {librariesState === "error" && <p className="poster-status">Emby-Bibliotheken nicht verfügbar.</p>}
+      {librariesState === "ready" && libraries.length === 0 && <p className="poster-status">Keine Bibliotheken gefunden.</p>}
+      {libraries.length > 0 && <div className="admin-library-groups">
+        <div className="admin-library-group">
+          <h3>Neu für dich</h3>
+          <p className="admin-hint">Bibliotheken, aus denen kürzlich hinzugefügte, ungesehene Titel vorgeschlagen werden.</p>
+          <ul className="admin-library-list">{libraries.map((library) => <li key={library.id}>
+            <label className="admin-library-checkbox">
+              <input type="checkbox" checked={newForYouIds.includes(library.id)} onChange={() => toggleLibrary(newForYouIds, setNewForYouIds, library.id)} />
+              <span>{library.name}</span>
+            </label>
+          </li>)}</ul>
+        </div>
+        <div className="admin-library-group">
+          <h3>Gesehene Filme und Serien</h3>
+          <p className="admin-hint">Bibliotheken, aus denen die Statistik- und Verlaufslisten gespeist werden.</p>
+          <ul className="admin-library-list">{libraries.map((library) => <li key={library.id}>
+            <label className="admin-library-checkbox">
+              <input type="checkbox" checked={watchedIds.includes(library.id)} onChange={() => toggleLibrary(watchedIds, setWatchedIds, library.id)} />
+              <span>{library.name}</span>
+            </label>
+          </li>)}</ul>
+        </div>
+      </div>}
+    </section>
+
+    <section className="admin-section" aria-label="Optionale Dienste">
+      <div className="section-heading"><div><p className="eyebrow">OPTIONALE DIENSTE</p><h2>Verbindungen</h2></div></div>
+      <div className="admin-service-grid">
+        <ServiceCard
+          title="Seerr" description="Für Medienanfragen, Suche, Trends und Streaming-Anbieter."
+          shows="Schaltet die Seite „Anfragen“ frei, inklusive Suche, Trends, Streaming-Anbieter und die Anfrage-Zahl im Profil."
+          draft={seerr} onChange={setSeerr} existing={settings.seerr} showsBaseUrl
+        />
+        <ServiceCard
+          title="Radarr" description="Für Filmtermine unter „Demnächst“ und „Im Kino“."
+          shows="Schaltet Filmtermine unter „Demnächst“ und die Reihe „Im Kino“ frei."
+          draft={radarr} onChange={setRadarr} existing={settings.radarr} showsBaseUrl
+        />
+        <ServiceCard
+          title="Sonarr" description="Für Serien- und Folgentermine unter „Demnächst“."
+          shows="Schaltet Serien- und Folgentermine unter „Demnächst“ frei."
+          draft={sonarr} onChange={setSonarr} existing={settings.sonarr} showsBaseUrl
+        />
+        <ServiceCard
+          title="TMDB" description="Für genauere regionale Filmtermine."
+          shows="Ohne TMDB bleiben Termine aus Radarr/Sonarr nutzbar, nur etwas ungenauer."
+          draft={tmdb} onChange={setTmdb} existing={settings.tmdb} showsBaseUrl={false}
+        />
+      </div>
+    </section>
+
+    <div className="admin-save-bar">
+      {saveError && <p className="request-error">Speichern fehlgeschlagen. Bitte erneut versuchen.</p>}
+      {savedAt !== null && !saveError && <p className="request-confirmation">Gespeichert ✓</p>}
+      <button type="button" className="request-button" disabled={saving} onClick={save}>{saving ? "Wird gespeichert …" : "Einstellungen speichern"}</button>
+    </div>
+  </div>;
+}
+
+function ServiceCard({ title, description, shows, draft, onChange, existing, showsBaseUrl }: {
+  title: string; description: string; shows: string;
+  draft: ServiceDraft; onChange: (next: ServiceDraft) => void; existing: ServiceView; showsBaseUrl: boolean;
+}) {
+  return <article className="admin-service-card">
+    <div className="admin-service-head">
+      <div><strong>{title}</strong><p className="admin-hint">{description}</p></div>
+      <label className="toggle-switch">
+        <input type="checkbox" checked={draft.enabled} onChange={(event) => onChange({ ...draft, enabled: event.target.checked })} aria-label={`${title} aktivieren`} />
+        <span className="toggle-track"><span className="toggle-thumb" /></span>
+      </label>
+    </div>
+    {draft.enabled && <div className="admin-service-body">
+      {showsBaseUrl && <label className="admin-field">
+        <span>Server-Adresse</span>
+        <input type="text" className="search-input" placeholder="https://…" value={draft.baseUrl} onChange={(event) => onChange({ ...draft, baseUrl: event.target.value })} />
+      </label>}
+      <label className="admin-field">
+        <span>API-Schlüssel{existing.apiKeySet ? ` (aktuell ${existing.apiKeyPreview})` : ""}</span>
+        <input type="password" className="search-input" placeholder={existing.apiKeySet ? "Neuen Schlüssel eingeben, um ihn zu ersetzen" : "API-Schlüssel eingeben"} value={draft.apiKey} onChange={(event) => onChange({ ...draft, apiKey: event.target.value })} autoComplete="off" />
+      </label>
+    </div>}
+    <p className="admin-service-shows">{shows}</p>
+  </article>;
 }
 
 const chatTimeFormatter = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit" });

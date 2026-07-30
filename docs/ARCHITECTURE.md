@@ -79,6 +79,6 @@ Emby Insights wird als einzelner Unraid-Container ausgeliefert. Der Container en
 
 Änderungen sollen im geöffneten Dashboard nahezu sofort erscheinen. Deshalb werden Ereignis- oder Webhook-Schnittstellen den reinen Intervallabfragen vorgezogen; die konkret verfügbaren Schnittstellen von Emby, Seerr, Radarr und Sonarr werden vor der Umsetzung geprüft.
 
-Die Basis-URLs und geheimen Token für Emby, Radarr, Sonarr, TMDB und Seerr werden serverseitig über eine `.env`-Datei konfiguriert und nie an den Browser übertragen.
+Nur Emby selbst (Basis-URL, Admin-API-Key) sowie Datenbank-/Verschlüsselungswerte werden über `.env` konfiguriert. Radarr, Sonarr, TMDB und Seerr werden stattdessen serverseitig in Postgres gespeichert (API-Schlüssel verschlüsselt) und über die Verwaltungsoberfläche vom Emby-Insights-Admin verwaltet — der erste erfolgreich angemeldete Emby-Nutzer wird dazu automatisch. Geheime Werte werden in beiden Fällen nie an den Browser übertragen.
 
 Die geprüften Datenquellen, Endpunkte und noch erforderlichen Live-Tests stehen in `docs/INTEGRATIONS.md`.

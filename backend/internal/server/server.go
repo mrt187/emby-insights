@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"regexp"
 	"sort"
@@ -12,9 +13,11 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/mrt187/EmbyInsights/internal/appconfig"
 	"github.com/mrt187/EmbyInsights/internal/comingsoon"
 	"github.com/mrt187/EmbyInsights/internal/config"
 	"github.com/mrt187/EmbyInsights/internal/emby"
+	"github.com/mrt187/EmbyInsights/internal/secretbox"
 	"github.com/mrt187/EmbyInsights/internal/seerr"
 	"github.com/mrt187/EmbyInsights/internal/session"
 	"github.com/mrt187/EmbyInsights/internal/store"
@@ -27,6 +30,19 @@ const discoverCacheTTL = 1 * time.Hour
 const statsCacheTTL = 5 * time.Minute
 const requestsCacheTTL = 5 * time.Minute
 
+// ConfigStore is the subset of appconfig.Store that App depends on, kept as
+// an interface (like every other store dependency here — MessageStore,
+// TrackingStore, etc.) so admin-gating and features-matrix behavior can be
+// unit-tested with an in-memory fake instead of a real Postgres instance.
+type ConfigStore interface {
+	Get(ctx context.Context) (appconfig.Settings, error)
+	Update(ctx context.Context, settings appconfig.Settings) error
+	EnsureDeviceID(ctx context.Context) (string, error)
+	ClaimAdminOwner(ctx context.Context, candidateUserID string) (string, error)
+	CurrentAdminOwner(ctx context.Context) (string, error)
+	SeedFromEnvIfEmpty(ctx context.Context) error
+}
+
 type App struct {
 	database            *pgxpool.Pool
 	redis               *redis.Client
@@ -38,10 +54,8 @@ type App struct {
 	avatars             emby.AvatarReader
 	comingSoon          comingsoon.Reader
 	newForYou           emby.NewForYouReader
-	newForYouLibraryIDs []string
 	continueWatching    emby.ContinueWatchingReader
 	watched             emby.WatchedReader
-	watchedLibraryIDs   []string
 	seriesInProgress    emby.SeriesInProgressReader
 	completed           emby.CompletedReader
 	profile             emby.ProfileReader
@@ -49,7 +63,6 @@ type App struct {
 	availableRequests   seerr.AvailableRequestsReader
 	requestStats        seerr.RequestStatsReader
 	discover            seerr.DiscoverReader
-	discoverRegion      string
 	embyMediaDetail     emby.MediaDetailReader
 	seerrMediaDetail    seerr.MediaDetailReader
 	seerrRequestCreator seerr.RequestCreator
@@ -58,9 +71,11 @@ type App struct {
 	sessions            session.Store
 	cookieSecure        bool
 	messages            store.MessageStore
-	adminUserID         string
 	directory           emby.UserDirectoryReader
 	adminAvatars        emby.AdminAvatarReader
+	embyClient          *emby.Client
+	appconfig           ConfigStore
+	live                *liveConfig
 }
 
 func New(cfg config.Config) (*App, error) {
@@ -74,8 +89,43 @@ func New(cfg config.Config) (*App, error) {
 		return nil, err
 	}
 	cache := redis.NewClient(options)
-	embyClient := emby.NewClient(cfg.EmbyBaseURL, cfg.EmbyDeviceID, cfg.EmbyAdminAPIKey)
-	seerrClient := seerr.NewClient(cfg.SeerrBaseURL, cfg.SeerrAPIKey)
+
+	box, err := secretbox.New(cfg.AppEncryptionKey)
+	if err != nil {
+		database.Close()
+		return nil, err
+	}
+	appconfigStore := appconfig.NewStore(database, box)
+
+	ctx := context.Background()
+	if err := appconfigStore.SeedFromEnvIfEmpty(ctx); err != nil {
+		log.Printf("warning: seeding app_config from legacy env vars failed: %v", err)
+	}
+	settings, err := appconfigStore.Get(ctx)
+	if err != nil {
+		// A settings-read failure must never block startup — every
+		// integration it configures is already optional/nil-safe, so the
+		// dashboard still boots with everything but Emby itself disabled.
+		log.Printf("warning: reading app_config failed, starting with integrations disabled: %v", err)
+	}
+	deviceID, err := appconfigStore.EnsureDeviceID(ctx)
+	if err != nil {
+		log.Printf("warning: generating Emby device id failed: %v", err)
+	}
+
+	embyClient := emby.NewClient(cfg.EmbyBaseURL, deviceID, cfg.EmbyAdminAPIKey)
+
+	live := &liveConfig{}
+	live.set(
+		seerr.NewClient(settings.Seerr.EnabledBaseURL(), settings.Seerr.EnabledAPIKey()),
+		comingsoon.NewClient(settings.Radarr.EnabledBaseURL(), settings.Radarr.EnabledAPIKey(), settings.Sonarr.EnabledBaseURL(), settings.Sonarr.EnabledAPIKey(), settings.TMDB.EnabledAPIKey(), settings.ComingSoonRegion, settings.ComingSoonDaysAhead),
+		settings.ComingSoonRegion,
+		settings.NewForYouLibraryIDs,
+		settings.WatchedLibraryIDs,
+	)
+	seerrFacade := liveSeerr{live: live}
+	comingSoonFacade := liveComingSoon{live: live}
+
 	return &App{
 		database:            database,
 		redis:               cache,
@@ -85,32 +135,48 @@ func New(cfg config.Config) (*App, error) {
 		deviceStatistics:    embyClient,
 		sessionStatistics:   embyClient,
 		avatars:             embyClient,
-		comingSoon:          comingsoon.NewClient(cfg.RadarrBaseURL, cfg.RadarrAPIKey, cfg.SonarrBaseURL, cfg.SonarrAPIKey, cfg.TmdbAPIKey, cfg.ComingSoonRegion, cfg.ComingSoonDaysAhead),
+		comingSoon:          comingSoonFacade,
 		newForYou:           embyClient,
-		newForYouLibraryIDs: cfg.EmbyNewForYouLibraryIDs,
 		continueWatching:    embyClient,
 		watched:             embyClient,
-		watchedLibraryIDs:   cfg.EmbyWatchedLibraryIDs,
 		seriesInProgress:    embyClient,
 		completed:           embyClient,
 		profile:             embyClient,
-		requests:            seerrClient,
-		availableRequests:   seerrClient,
-		requestStats:        seerrClient,
-		discover:            seerrClient,
-		discoverRegion:      cfg.ComingSoonRegion,
+		requests:            seerrFacade,
+		availableRequests:   seerrFacade,
+		requestStats:        seerrFacade,
+		discover:            seerrFacade,
 		embyMediaDetail:     embyClient,
-		seerrMediaDetail:    seerrClient,
-		seerrRequestCreator: seerrClient,
+		seerrMediaDetail:    seerrFacade,
+		seerrRequestCreator: seerrFacade,
 		tracking:            store.NewPostgresTrackingStore(database),
 		favorites:           embyClient,
 		sessions:            session.NewRedisStore(cache),
 		cookieSecure:        cfg.CookieSecure,
 		messages:            store.NewPostgresMessageStore(database),
-		adminUserID:         cfg.AdminEmbyUserID,
 		directory:           embyClient,
 		adminAvatars:        embyClient,
+		embyClient:          embyClient,
+		appconfig:           appconfigStore,
+		live:                live,
 	}, nil
+}
+
+// applySettings persists new setup-wizard settings and immediately swaps the
+// live Seerr/Radarr/Sonarr/TMDB clients and library selections in place, so
+// the admin never has to restart the container after a Verwaltung change.
+func (app *App) applySettings(ctx context.Context, settings appconfig.Settings) error {
+	if err := app.appconfig.Update(ctx, settings); err != nil {
+		return err
+	}
+	app.live.set(
+		seerr.NewClient(settings.Seerr.EnabledBaseURL(), settings.Seerr.EnabledAPIKey()),
+		comingsoon.NewClient(settings.Radarr.EnabledBaseURL(), settings.Radarr.EnabledAPIKey(), settings.Sonarr.EnabledBaseURL(), settings.Sonarr.EnabledAPIKey(), settings.TMDB.EnabledAPIKey(), settings.ComingSoonRegion, settings.ComingSoonDaysAhead),
+		settings.ComingSoonRegion,
+		settings.NewForYouLibraryIDs,
+		settings.WatchedLibraryIDs,
+	)
+	return nil
 }
 
 func (app *App) Close() { app.redis.Close(); app.database.Close() }
@@ -182,6 +248,9 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/admin/users", app.adminUserDirectory)
 	mux.HandleFunc("GET /api/admin/users/avatar", app.adminUserAvatar)
 	mux.HandleFunc("POST /api/admin/messages/broadcast", app.adminBroadcastMessage)
+	mux.HandleFunc("GET /api/admin/libraries", app.adminLibraries)
+	mux.HandleFunc("GET /api/admin/settings", app.adminGetSettings)
+	mux.HandleFunc("PUT /api/admin/settings", app.adminPutSettings)
 	return mux
 }
 
@@ -222,13 +291,21 @@ func (app *App) login(writer http.ResponseWriter, request *http.Request) {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "Emby is unavailable"})
 		return
 	}
+	// The first Emby account to ever log in successfully becomes the Emby
+	// Insights admin, atomically — see appconfig.Store.ClaimAdminOwner. A
+	// failure here is best-effort: it must never block a login, it just means
+	// nobody becomes admin from this particular request.
+	if app.appconfig != nil {
+		_, _ = app.appconfig.ClaimAdminOwner(request.Context(), identity.UserID)
+	}
+
 	sessionID, err := app.sessions.Create(request.Context(), identity)
 	if err != nil {
 		respondJSON(writer, http.StatusServiceUnavailable, map[string]string{"error": "session storage is unavailable"})
 		return
 	}
 	http.SetCookie(writer, &http.Cookie{Name: sessionCookieName, Value: sessionID, Path: "/", MaxAge: int(session.Duration.Seconds()), HttpOnly: true, Secure: app.cookieSecure, SameSite: http.SameSiteLaxMode})
-	respondJSON(writer, http.StatusOK, app.identityProfile(identity))
+	respondJSON(writer, http.StatusOK, app.identityProfile(request.Context(), identity))
 }
 
 func (app *App) me(writer http.ResponseWriter, request *http.Request) {
@@ -236,7 +313,7 @@ func (app *App) me(writer http.ResponseWriter, request *http.Request) {
 	if !ok {
 		return
 	}
-	respondJSON(writer, http.StatusOK, app.identityProfile(identity))
+	respondJSON(writer, http.StatusOK, app.identityProfile(request.Context(), identity))
 }
 
 func (app *App) meProfile(writer http.ResponseWriter, request *http.Request) {
@@ -540,7 +617,7 @@ func (app *App) discoverByProvider(writer http.ResponseWriter, request *http.Req
 		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "id is required"})
 		return
 	}
-	items, err := app.discover.DiscoverByProvider(request.Context(), providerID, app.discoverRegion)
+	items, err := app.discover.DiscoverByProvider(request.Context(), providerID, app.live.discoverRegion())
 	if err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "discover list is unavailable"})
 		return
@@ -719,11 +796,28 @@ func (app *App) trackingRatings(writer http.ResponseWriter, request *http.Reques
 
 const maxMessageBodyLength = 4000
 
-// requireAdmin rejects the request unless ADMIN_EMBY_USER_ID is configured
-// and matches the caller. Chat is a closed loop between each user and this
-// one fixed admin identity — there is no broader role system.
-func (app *App) requireAdmin(writer http.ResponseWriter, identity emby.Identity) bool {
-	if app.adminUserID == "" || identity.UserID != app.adminUserID {
+// currentAdminOwner returns the Emby user id of whoever became the Emby
+// Insights admin on their first successful login (see login and
+// appconfig.Store.ClaimAdminOwner), or "" if nobody has logged in yet. A
+// lookup failure is treated the same as "no admin yet" rather than a fatal
+// error — it never blocks a request, it just denies admin access.
+func (app *App) currentAdminOwner(ctx context.Context) string {
+	if app.appconfig == nil {
+		return ""
+	}
+	ownerID, err := app.appconfig.CurrentAdminOwner(ctx)
+	if err != nil {
+		return ""
+	}
+	return ownerID
+}
+
+// requireAdmin rejects the request unless the caller is the Emby Insights
+// admin — the single Emby account that became admin by logging in first (see
+// login). Chat and the Verwaltung admin endpoints are the only things this
+// gates; there is no broader role system.
+func (app *App) requireAdmin(writer http.ResponseWriter, request *http.Request, identity emby.Identity) bool {
+	if ownerID := app.currentAdminOwner(request.Context()); ownerID == "" || identity.UserID != ownerID {
 		respondJSON(writer, http.StatusForbidden, map[string]string{"error": "admin access required"})
 		return false
 	}
@@ -776,7 +870,7 @@ func (app *App) getMessages(writer http.ResponseWriter, request *http.Request) {
 	if !ok {
 		return
 	}
-	if identity.UserID == app.adminUserID {
+	if identity.UserID == app.currentAdminOwner(request.Context()) {
 		respondJSON(writer, http.StatusForbidden, map[string]string{"error": "the admin account has no thread of its own"})
 		return
 	}
@@ -793,7 +887,7 @@ func (app *App) sendMessage(writer http.ResponseWriter, request *http.Request) {
 	if !ok {
 		return
 	}
-	if identity.UserID == app.adminUserID {
+	if identity.UserID == app.currentAdminOwner(request.Context()) {
 		respondJSON(writer, http.StatusForbidden, map[string]string{"error": "the admin account has no thread of its own"})
 		return
 	}
@@ -830,7 +924,7 @@ func (app *App) unreadMessageCount(writer http.ResponseWriter, request *http.Req
 	}
 	var count int
 	var err error
-	if identity.UserID == app.adminUserID {
+	if identity.UserID == app.currentAdminOwner(request.Context()) {
 		count, err = app.messages.UnreadCountForAdmin(request.Context())
 	} else {
 		count, err = app.messages.UnreadCountForUser(request.Context(), identity.UserID)
@@ -850,11 +944,12 @@ func (app *App) adminAvatarForUser(writer http.ResponseWriter, request *http.Req
 	if _, ok := app.identityFromRequest(writer, request); !ok {
 		return
 	}
-	if app.adminUserID == "" {
+	ownerID := app.currentAdminOwner(request.Context())
+	if ownerID == "" {
 		http.NotFound(writer, request)
 		return
 	}
-	image, err := app.adminAvatars.UserPrimaryImageByID(request.Context(), app.adminUserID)
+	image, err := app.adminAvatars.UserPrimaryImageByID(request.Context(), ownerID)
 	if errors.Is(err, emby.ErrPrimaryImageUnavailable) {
 		http.NotFound(writer, request)
 		return
@@ -874,7 +969,7 @@ func (app *App) adminMessageThreads(writer http.ResponseWriter, request *http.Re
 	if !ok {
 		return
 	}
-	if !app.requireAdmin(writer, identity) {
+	if !app.requireAdmin(writer, request, identity) {
 		return
 	}
 	threads, err := app.messages.Threads(request.Context())
@@ -890,7 +985,7 @@ func (app *App) adminMessageThread(writer http.ResponseWriter, request *http.Req
 	if !ok {
 		return
 	}
-	if !app.requireAdmin(writer, identity) {
+	if !app.requireAdmin(writer, request, identity) {
 		return
 	}
 	userID := request.URL.Query().Get("userId")
@@ -911,7 +1006,7 @@ func (app *App) adminSendMessage(writer http.ResponseWriter, request *http.Reque
 	if !ok {
 		return
 	}
-	if !app.requireAdmin(writer, identity) {
+	if !app.requireAdmin(writer, request, identity) {
 		return
 	}
 	userID := request.URL.Query().Get("userId")
@@ -938,7 +1033,7 @@ func (app *App) adminUserDirectory(writer http.ResponseWriter, request *http.Req
 	if !ok {
 		return
 	}
-	if !app.requireAdmin(writer, identity) {
+	if !app.requireAdmin(writer, request, identity) {
 		return
 	}
 	users, err := app.directory.Users(request.Context())
@@ -946,9 +1041,10 @@ func (app *App) adminUserDirectory(writer http.ResponseWriter, request *http.Req
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "the user directory is unavailable"})
 		return
 	}
+	ownerID := app.currentAdminOwner(request.Context())
 	contacts := make([]map[string]string, 0, len(users))
 	for _, user := range users {
-		if user.ID == app.adminUserID {
+		if user.ID == ownerID {
 			continue
 		}
 		contacts = append(contacts, map[string]string{"id": user.ID, "name": user.Name})
@@ -962,7 +1058,7 @@ func (app *App) adminUserAvatar(writer http.ResponseWriter, request *http.Reques
 	if !ok {
 		return
 	}
-	if !app.requireAdmin(writer, identity) {
+	if !app.requireAdmin(writer, request, identity) {
 		return
 	}
 	userID := request.URL.Query().Get("userId")
@@ -993,7 +1089,7 @@ func (app *App) adminBroadcastMessage(writer http.ResponseWriter, request *http.
 	if !ok {
 		return
 	}
-	if !app.requireAdmin(writer, identity) {
+	if !app.requireAdmin(writer, request, identity) {
 		return
 	}
 	body, ok := decodeMessageBody(writer, request)
@@ -1005,9 +1101,10 @@ func (app *App) adminBroadcastMessage(writer http.ResponseWriter, request *http.
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "the user directory is unavailable"})
 		return
 	}
+	ownerID := app.currentAdminOwner(request.Context())
 	sent := 0
 	for _, user := range users {
-		if user.ID == app.adminUserID {
+		if user.ID == ownerID {
 			continue
 		}
 		if err := app.messages.Send(request.Context(), user.ID, user.Name, body, true); err != nil {
@@ -1024,7 +1121,7 @@ func (app *App) adminMarkThreadRead(writer http.ResponseWriter, request *http.Re
 	if !ok {
 		return
 	}
-	if !app.requireAdmin(writer, identity) {
+	if !app.requireAdmin(writer, request, identity) {
 		return
 	}
 	userID := request.URL.Query().Get("userId")
@@ -1044,7 +1141,7 @@ func (app *App) adminDeleteThread(writer http.ResponseWriter, request *http.Requ
 	if !ok {
 		return
 	}
-	if !app.requireAdmin(writer, identity) {
+	if !app.requireAdmin(writer, request, identity) {
 		return
 	}
 	userID := request.URL.Query().Get("userId")
@@ -1054,6 +1151,151 @@ func (app *App) adminDeleteThread(writer http.ResponseWriter, request *http.Requ
 	}
 	if err := app.messages.DeleteThread(request.Context(), userID); err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "deleting the thread failed"})
+		return
+	}
+	writer.WriteHeader(http.StatusNoContent)
+}
+
+// adminLibraries lists Emby's libraries by name, for the Verwaltung UI's
+// "Neu für dich" / "Gesehene Filme und Serien" library pickers — the operator
+// never has to look up a library ID manually.
+func (app *App) adminLibraries(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	if !app.requireAdmin(writer, request, identity) {
+		return
+	}
+	libraries, err := app.embyClient.Libraries(request.Context())
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "Emby libraries are unavailable"})
+		return
+	}
+	respondJSON(writer, http.StatusOK, orEmpty(libraries))
+}
+
+// serviceSettingView is the browser-safe view of one optional integration:
+// it never carries the plaintext API key, only whether one is stored and a
+// masked preview, matching the product requirement that a saved key is never
+// shown in full again.
+type serviceSettingView struct {
+	Enabled       bool   `json:"enabled"`
+	BaseURL       string `json:"baseUrl,omitempty"`
+	APIKeySet     bool   `json:"apiKeySet"`
+	APIKeyPreview string `json:"apiKeyPreview,omitempty"`
+}
+
+func maskAPIKey(key string) string {
+	if key == "" {
+		return ""
+	}
+	if len(key) <= 4 {
+		return "••••"
+	}
+	return "••••" + key[len(key)-4:]
+}
+
+func viewOfService(setting appconfig.ServiceSetting) serviceSettingView {
+	return serviceSettingView{
+		Enabled:       setting.Enabled,
+		BaseURL:       setting.BaseURL,
+		APIKeySet:     setting.APIKey != "",
+		APIKeyPreview: maskAPIKey(setting.APIKey),
+	}
+}
+
+func (app *App) adminGetSettings(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	if !app.requireAdmin(writer, request, identity) {
+		return
+	}
+	settings, err := app.appconfig.Get(request.Context())
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "settings are unavailable"})
+		return
+	}
+	respondJSON(writer, http.StatusOK, map[string]any{
+		"newForYouLibraryIds": orEmpty(settings.NewForYouLibraryIDs),
+		"watchedLibraryIds":   orEmpty(settings.WatchedLibraryIDs),
+		"seerr":               viewOfService(settings.Seerr),
+		"radarr":              viewOfService(settings.Radarr),
+		"sonarr":              viewOfService(settings.Sonarr),
+		"tmdb":                viewOfService(settings.TMDB),
+		"comingSoonRegion":    settings.ComingSoonRegion,
+		"comingSoonDaysAhead": settings.ComingSoonDaysAhead,
+	})
+}
+
+// adminPutSettings saves new Verwaltung settings and immediately hot-swaps
+// the live Seerr/Radarr/Sonarr/TMDB clients (see App.applySettings) — the
+// operator never has to restart the container after a change. An omitted or
+// empty apiKey on any service means "keep the currently stored key".
+func (app *App) adminPutSettings(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	if !app.requireAdmin(writer, request, identity) {
+		return
+	}
+
+	var input struct {
+		NewForYouLibraryIDs []string `json:"newForYouLibraryIds"`
+		WatchedLibraryIDs   []string `json:"watchedLibraryIds"`
+		Seerr               struct {
+			Enabled bool   `json:"enabled"`
+			BaseURL string `json:"baseUrl"`
+			APIKey  string `json:"apiKey"`
+		} `json:"seerr"`
+		Radarr struct {
+			Enabled bool   `json:"enabled"`
+			BaseURL string `json:"baseUrl"`
+			APIKey  string `json:"apiKey"`
+		} `json:"radarr"`
+		Sonarr struct {
+			Enabled bool   `json:"enabled"`
+			BaseURL string `json:"baseUrl"`
+			APIKey  string `json:"apiKey"`
+		} `json:"sonarr"`
+		TMDB struct {
+			Enabled bool   `json:"enabled"`
+			APIKey  string `json:"apiKey"`
+		} `json:"tmdb"`
+		ComingSoonRegion    string `json:"comingSoonRegion"`
+		ComingSoonDaysAhead int    `json:"comingSoonDaysAhead"`
+	}
+	request.Body = http.MaxBytesReader(writer, request.Body, 1<<16)
+	if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	region := strings.TrimSpace(input.ComingSoonRegion)
+	if len(region) != 2 {
+		region = "DE"
+	}
+	daysAhead := input.ComingSoonDaysAhead
+	if daysAhead <= 0 {
+		daysAhead = 28
+	}
+
+	settings := appconfig.Settings{
+		NewForYouLibraryIDs: input.NewForYouLibraryIDs,
+		WatchedLibraryIDs:   input.WatchedLibraryIDs,
+		Seerr:               appconfig.ServiceSetting{Enabled: input.Seerr.Enabled, BaseURL: strings.TrimSpace(input.Seerr.BaseURL), APIKey: input.Seerr.APIKey},
+		Radarr:              appconfig.ServiceSetting{Enabled: input.Radarr.Enabled, BaseURL: strings.TrimSpace(input.Radarr.BaseURL), APIKey: input.Radarr.APIKey},
+		Sonarr:              appconfig.ServiceSetting{Enabled: input.Sonarr.Enabled, BaseURL: strings.TrimSpace(input.Sonarr.BaseURL), APIKey: input.Sonarr.APIKey},
+		TMDB:                appconfig.ServiceSetting{Enabled: input.TMDB.Enabled, APIKey: input.TMDB.APIKey},
+		ComingSoonRegion:    region,
+		ComingSoonDaysAhead: daysAhead,
+	}
+
+	if err := app.applySettings(request.Context(), settings); err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "saving settings failed"})
 		return
 	}
 	writer.WriteHeader(http.StatusNoContent)
@@ -1095,7 +1337,7 @@ func (app *App) newForYouItems(writer http.ResponseWriter, request *http.Request
 	if !ok {
 		return
 	}
-	items, err := app.newForYou.NewForYou(request.Context(), identity.UserID, app.newForYouLibraryIDs)
+	items, err := app.newForYou.NewForYou(request.Context(), identity.UserID, app.live.newForYouLibraries())
 	if err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "new items are unavailable"})
 		return
@@ -1121,7 +1363,7 @@ func (app *App) watchedMovies(writer http.ResponseWriter, request *http.Request)
 	if !ok {
 		return
 	}
-	items, err := app.watched.WatchedMovies(request.Context(), identity.UserID, app.watchedLibraryIDs)
+	items, err := app.watched.WatchedMovies(request.Context(), identity.UserID, app.live.watchedLibraries())
 	if err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "watched movies are unavailable"})
 		return
@@ -1134,7 +1376,7 @@ func (app *App) watchedSeries(writer http.ResponseWriter, request *http.Request)
 	if !ok {
 		return
 	}
-	items, err := app.watched.WatchedSeries(request.Context(), identity.UserID, app.watchedLibraryIDs)
+	items, err := app.watched.WatchedSeries(request.Context(), identity.UserID, app.live.watchedLibraries())
 	if err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "watched series are unavailable"})
 		return
@@ -1147,7 +1389,7 @@ func (app *App) seriesInProgressHandler(writer http.ResponseWriter, request *htt
 	if !ok {
 		return
 	}
-	items, err := app.seriesInProgress.SeriesInProgress(request.Context(), identity.UserID, app.watchedLibraryIDs)
+	items, err := app.seriesInProgress.SeriesInProgress(request.Context(), identity.UserID, app.live.watchedLibraries())
 	if err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "series in progress are unavailable"})
 		return
@@ -1165,7 +1407,7 @@ func (app *App) completedMovies(writer http.ResponseWriter, request *http.Reques
 		return
 	}
 	from, to := emby.PeriodBounds(period, time.Now())
-	items, err := app.completed.CompletedMovies(request.Context(), identity.UserID, app.watchedLibraryIDs, from, to)
+	items, err := app.completed.CompletedMovies(request.Context(), identity.UserID, app.live.watchedLibraries(), from, to)
 	if err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "completed movies are unavailable"})
 		return
@@ -1183,7 +1425,7 @@ func (app *App) completedSeries(writer http.ResponseWriter, request *http.Reques
 		return
 	}
 	from, to := emby.PeriodBounds(period, time.Now())
-	items, err := app.completed.CompletedSeries(request.Context(), identity.UserID, app.watchedLibraryIDs, from, to)
+	items, err := app.completed.CompletedSeries(request.Context(), identity.UserID, app.live.watchedLibraries(), from, to)
 	if err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "completed series are unavailable"})
 		return
@@ -1222,11 +1464,41 @@ func (app *App) identityFromRequest(writer http.ResponseWriter, request *http.Re
 	return identity, true
 }
 
-func (app *App) identityProfile(identity emby.Identity) map[string]any {
+// hasTrackedWatchData reports whether the Emby Insights connector / Playback
+// Reporting has ever recorded a watched item, the cheapest available signal
+// that personal watch-time statistics exist at all. A query failure is
+// treated as "no data yet" rather than an error — Statistik simply stays
+// hidden rather than breaking the rest of the dashboard.
+func (app *App) hasTrackedWatchData(ctx context.Context) bool {
+	if app.database == nil {
+		return false
+	}
+	var exists bool
+	if err := app.database.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM media_tracking WHERE watched_on IS NOT NULL)`).Scan(&exists); err != nil {
+		return false
+	}
+	return exists
+}
+
+func (app *App) identityProfile(ctx context.Context, identity emby.Identity) map[string]any {
+	var settings appconfig.Settings
+	if app.appconfig != nil {
+		if got, err := app.appconfig.Get(ctx); err == nil {
+			settings = got
+		}
+	}
+	ownerID := app.currentAdminOwner(ctx)
 	return map[string]any{
 		"id":      identity.UserID,
 		"name":    identity.DisplayName,
-		"isAdmin": app.adminUserID != "" && identity.UserID == app.adminUserID,
+		"isAdmin": ownerID != "" && identity.UserID == ownerID,
+		"features": map[string]bool{
+			"requests":    settings.Seerr.Enabled,
+			"movieDates":  settings.Radarr.Enabled,
+			"seriesDates": settings.Sonarr.Enabled,
+			"upcoming":    settings.Radarr.Enabled || settings.Sonarr.Enabled,
+			"statistics":  app.hasTrackedWatchData(ctx),
+		},
 	}
 }
 

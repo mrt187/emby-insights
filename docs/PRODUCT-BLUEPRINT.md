@@ -31,7 +31,7 @@ Normale Emby-Nutzer in einem privaten oder Familien-Server. Administratoren konf
 5. Persönliche Ansicht kommender Veröffentlichungen aus Radarr, Sonarr und TMDB.
 6. Benachrichtigungen über eine anklickbare Glocke mit Anzahl ungelesener Nachrichten. Quellen: Seerr, Release-Kalender und Emby; Beispiele sind „Anfrage genehmigt“, „Neue Folge erscheint morgen“ oder „Deine Anfrage ist jetzt in Emby verfügbar“. Eine Verfügbarkeits-Benachrichtigung erhält nur der Nutzer, der den Titel angefragt hat. Beim Öffnen werden sie als gelesen markiert.
 7. Responsive Oberfläche: Smartphone zuerst, Tablet optimiert, Desktop ergänzt.
-8. Serverseitige Konfiguration der Verbindungen über eine `.env`-Datei; API-Schlüssel werden niemals an den Browser übertragen.
+8. Einrichtungsassistent statt manueller `.env`-Konfiguration: der erste erfolgreich angemeldete Emby-Nutzer wird automatisch Admin und richtet Bibliotheken sowie optionale Dienste (Seerr, Radarr, Sonarr, TMDB) über eine Verwaltungsoberfläche ein. API-Schlüssel werden serverseitig verschlüsselt gespeichert und niemals an den Browser übertragen.
 
 ## Home
 

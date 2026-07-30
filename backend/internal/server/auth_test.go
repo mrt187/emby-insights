@@ -573,7 +573,7 @@ func TestWatchedMoviesAndSeriesUseSessionIdentity(t *testing.T) {
 		movies: []emby.WatchedItem{{ID: "1", Title: "Dune"}},
 		series: []emby.WatchedItem{{ID: "2", Title: "Severance"}},
 	}
-	app := &App{sessions: store, watched: reader, watchedLibraryIDs: []string{"3", "5", "123857"}}
+	app := &App{sessions: store, watched: reader, live: &liveConfig{watchedLibraryIDs: []string{"3", "5", "123857"}}}
 
 	moviesRequest := httptest.NewRequest(http.MethodGet, "/api/watched-movies", nil)
 	moviesRequest.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
@@ -607,7 +607,7 @@ func TestCompletedMoviesAndSeriesUsePeriodAndSessionIdentity(t *testing.T) {
 		movies: []emby.WatchedItem{{ID: "1", Title: "Dune"}},
 		series: []emby.WatchedItem{{ID: "2", Title: "Severance"}},
 	}
-	app := &App{sessions: store, completed: reader, watchedLibraryIDs: []string{"3", "5"}}
+	app := &App{sessions: store, completed: reader, live: &liveConfig{watchedLibraryIDs: []string{"3", "5"}}}
 
 	moviesRequest := httptest.NewRequest(http.MethodGet, "/api/completed-movies?period=month", nil)
 	moviesRequest.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
