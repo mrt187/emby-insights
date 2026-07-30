@@ -19,6 +19,7 @@ type RequestItem = { id: string; title: string; posterUrl: string; status: strin
 type NewForYouItem = { id: string; title: string; posterUrl: string };
 type ContinueWatchingItem = { id: string; title: string; posterUrl: string; progressPercent: number };
 type WatchedItem = { id: string; title: string; posterUrl: string; genres: string[]; lastPlayedDate: string };
+type SeriesProgress = { id: string; title: string; posterUrl: string; watchedEpisodes: number; totalEpisodes: number };
 type DiscoverItem = { id: string; title: string; posterUrl: string; mediaType: string };
 type MediaSelection = { source: "emby"; id: string } | { source: "seerr"; id: string; mediaType: string };
 type MediaPerson = { name: string; role: string; imageUrl: string };
@@ -52,7 +53,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Chats", icon: "chat" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.38";
+const APP_VERSION = "0.8.39";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -517,6 +518,7 @@ function Stats({ user, onSelectMedia }: { user: { name: string }; onSelectMedia:
   const [continueWatching, continueWatchingState] = useApiResource<ContinueWatchingItem[]>("/api/continue-watching", []);
   const [watchedMovies, watchedMoviesState] = useApiResource<WatchedItem[]>("/api/watched-movies", []);
   const [watchedSeries, watchedSeriesState] = useApiResource<WatchedItem[]>("/api/watched-series", []);
+  const [seriesInProgress, seriesInProgressState] = useApiResource<SeriesProgress[]>("/api/series-in-progress", []);
   const [completedMovies, completedMoviesState] = useApiResource<WatchedItem[]>(`/api/completed-movies?period=${apiPeriod[period]}`, []);
   const [completedSeries, completedSeriesState] = useApiResource<WatchedItem[]>(`/api/completed-series?period=${apiPeriod[period]}`, []);
   const [deviceStats, deviceStatsState] = useApiResource<DeviceWatchTime[]>(`/api/stats/devices?period=${apiPeriod[period]}`, []);
@@ -537,6 +539,7 @@ function Stats({ user, onSelectMedia }: { user: { name: string }; onSelectMedia:
     <PosterRow title="Was ich gerade schaue" eyebrow="WEITERSCHAUEN" items={continueWatching} state={continueWatchingState} emptyLabel="Nichts in Bearbeitung." detail={(item) => `${item.progressPercent} % gesehen`} progress={(item) => item.progressPercent} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
     <PosterRow title="Gesehene Filme" eyebrow="ALLE" items={watchedMovies} state={watchedMoviesState} emptyLabel="Noch keine Filme abgeschlossen." detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
     <PosterRow title="Gesehene Serien" eyebrow="ALLE" items={watchedSeries} state={watchedSeriesState} emptyLabel="Noch keine Serien abgeschlossen." detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
+    <PosterRow title="Offene Staffeln" eyebrow="TEILWEISE GESEHEN" items={seriesInProgress} state={seriesInProgressState} emptyLabel="Keine Serien mit offenen Folgen." detail={(item) => `${item.watchedEpisodes} von ${item.totalEpisodes} Folgen`} progress={(item) => Math.round((item.watchedEpisodes / item.totalEpisodes) * 100)} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
 
     <section className="chart-grid">
       <BarChart title="Meistgesehene Genres" data={topGenres(watchedMovies, watchedSeries)} loading={watchedMoviesState === "loading" || watchedSeriesState === "loading"} />
@@ -603,6 +606,14 @@ function useDiscoverList(path: string) {
   return [items, state] as const;
 }
 
+const STREAMING_PROVIDERS: { id: string; name: string; className: string }[] = [
+  { id: "8", name: "Netflix", className: "provider-netflix" },
+  { id: "337", name: "Disney+", className: "provider-disneyplus" },
+  { id: "9", name: "Prime Video", className: "provider-primevideo" },
+  { id: "350", name: "Apple TV+", className: "provider-appletv" },
+  { id: "15", name: "Hulu", className: "provider-hulu" },
+];
+
 function Requests({ onSelectMedia }: { onSelectMedia: (selection: MediaSelection) => void }) {
   const [trending, trendingState] = useDiscoverList("/api/discover/trending");
   const [popularMovies, popularMoviesState] = useDiscoverList("/api/discover/movies/popular");
@@ -614,6 +625,10 @@ function Requests({ onSelectMedia }: { onSelectMedia: (selection: MediaSelection
   const [searchResults, setSearchResults] = useState<DiscoverItem[]>([]);
   const [searchState, setSearchState] = useState<LoadState>("loading");
   const [searchScreenQuery, setSearchScreenQuery] = useState<string | null>(null);
+
+  const [providerId, setProviderId] = useState<string | null>(null);
+  const [providerItems, providerItemsState] = useApiResource<DiscoverItem[]>(providerId ? `/api/discover/provider?id=${encodeURIComponent(providerId)}` : null, []);
+  const selectedProvider = STREAMING_PROVIDERS.find((provider) => provider.id === providerId) ?? null;
 
   const runSearch = (searchQuery: string) => {
     const trimmed = searchQuery.trim();
@@ -661,6 +676,22 @@ function Requests({ onSelectMedia }: { onSelectMedia: (selection: MediaSelection
     <PosterRow title="Demnächst erscheinende Filme" eyebrow="SEERR · TMDB" items={upcomingMovies} state={upcomingMoviesState} emptyLabel="Keine Daten." detail={() => "Demnächst"} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />
     <PosterRow title="Beliebte Serien" eyebrow="SEERR · TMDB" items={popularSeries} state={popularSeriesState} emptyLabel="Keine Daten." detail={() => "Beliebt"} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />
     <PosterRow title="Demnächst erscheinende Serien" eyebrow="SEERR · TMDB" items={upcomingSeries} state={upcomingSeriesState} emptyLabel="Keine Daten." detail={() => "Demnächst"} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />
+
+    <section className="poster-section">
+      <div className="section-heading"><div><p className="eyebrow">WO STREAMEN?</p><h2>Anbieter</h2></div></div>
+      <div className="provider-scroller">
+        {STREAMING_PROVIDERS.map((provider) => <button type="button" key={provider.id} className={`provider-chip ${provider.className}`} onClick={() => setProviderId(provider.id)}>{provider.name}</button>)}
+      </div>
+    </section>
+    {selectedProvider && <MediaGridScreen
+      title={selectedProvider.name}
+      items={providerItems}
+      state={providerItemsState}
+      emptyLabel="Keine Titel gefunden."
+      detail={(item) => item.mediaType === "tv" ? "Serie" : "Film"}
+      onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })}
+      onClose={() => setProviderId(null)}
+    />}
   </div>;
 }
 
@@ -968,14 +999,23 @@ function formatChatTime(value: string) {
   return Number.isNaN(date.getTime()) ? "" : chatTimeFormatter.format(date);
 }
 
-function ChatMessageList({ messages, mineWhenFromAdmin }: { messages: ChatMessage[]; mineWhenFromAdmin: boolean }) {
+function ChatMessageList({ messages, mineWhenFromAdmin, mineName, mineAvatarSrc, theirsName, theirsAvatarSrc }: {
+  messages: ChatMessage[]; mineWhenFromAdmin: boolean;
+  mineName: string; mineAvatarSrc: string; theirsName: string; theirsAvatarSrc: string;
+}) {
   const listRef = useRef<HTMLDivElement>(null);
   useEffect(() => { listRef.current?.scrollTo({ top: listRef.current.scrollHeight }); }, [messages]);
   return <div className="chat-messages" ref={listRef}>
-    {messages.map((message) => <div key={message.id} className={message.fromAdmin === mineWhenFromAdmin ? "chat-bubble mine" : "chat-bubble theirs"}>
-      <p>{message.body}</p>
-      <small>{formatChatTime(message.createdAt)}</small>
-    </div>)}
+    {messages.map((message) => {
+      const isMine = message.fromAdmin === mineWhenFromAdmin;
+      return <div key={message.id} className={isMine ? "chat-bubble mine" : "chat-bubble theirs"}>
+        <span className="chat-bubble-avatar"><PersonAvatar name={isMine ? mineName : theirsName} src={isMine ? mineAvatarSrc : theirsAvatarSrc} /></span>
+        <div className="chat-bubble-body">
+          <p>{message.body}</p>
+          <small>{formatChatTime(message.createdAt)}</small>
+        </div>
+      </div>;
+    })}
   </div>;
 }
 
@@ -996,10 +1036,10 @@ function ChatComposer({ placeholder, onSend }: { placeholder: string; onSend: (b
 }
 
 function Chats({ user }: { user: { id: string; name: string; isAdmin: boolean } }) {
-  return user.isAdmin ? <AdminChats /> : <UserChat />;
+  return user.isAdmin ? <AdminChats adminName={user.name} /> : <UserChat userName={user.name} />;
 }
 
-function UserChat() {
+function UserChat({ userName }: { userName: string }) {
   const [messages, state, refetch] = useApiResource<ChatMessage[]>("/api/messages", [], CHAT_POLL_MS);
 
   useEffect(() => { fetch("/api/messages/read", { method: "POST", credentials: "include" }).catch(() => null); }, []);
@@ -1019,13 +1059,13 @@ function UserChat() {
       {state === "loading" && <p className="poster-status" role="status">Wird geladen …</p>}
       {state === "error" && <p className="poster-status">Nicht verfügbar</p>}
       {state === "ready" && messages.length === 0 && <p className="chat-empty">Schreib mir gern, wenn du eine Frage oder einen Wunsch hast.</p>}
-      <ChatMessageList messages={messages} mineWhenFromAdmin={false} />
+      <ChatMessageList messages={messages} mineWhenFromAdmin={false} mineName={userName} mineAvatarSrc="/api/me/avatar" theirsName="Admin" theirsAvatarSrc="/api/messages/admin-avatar" />
       <ChatComposer placeholder="Nachricht schreiben …" onSend={send} />
     </section>
   </div>;
 }
 
-function AdminChats() {
+function AdminChats({ adminName }: { adminName: string }) {
   const [threads, threadsState, refetchThreads] = useApiResource<ChatThread[]>("/api/admin/messages/threads", [], CHAT_POLL_MS);
   const [contacts] = useApiResource<Contact[]>("/api/admin/users", []);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -1067,7 +1107,7 @@ function AdminChats() {
     </section>
     {pickerOpen && <ContactPickerScreen contacts={availableContacts} onSelect={startNewThread} onClose={() => setPickerOpen(false)} />}
     {broadcastOpen && <BroadcastScreen onClose={() => setBroadcastOpen(false)} onSent={() => { setBroadcastOpen(false); refetchThreads(); }} />}
-    {selectedThread && <AdminChatThreadScreen thread={selectedThread} onClose={closeThread} />}
+    {selectedThread && <AdminChatThreadScreen thread={selectedThread} adminName={adminName} onClose={closeThread} />}
   </div>;
 }
 
@@ -1137,9 +1177,11 @@ function ContactPickerScreen({ contacts, onSelect, onClose }: { contacts: Contac
   </div>;
 }
 
-function AdminChatThreadScreen({ thread, onClose }: { thread: ChatThread; onClose: () => void }) {
+function AdminChatThreadScreen({ thread, adminName, onClose }: { thread: ChatThread; adminName: string; onClose: () => void }) {
   useEscapeKey(onClose);
   const [messages, state, refetch] = useApiResource<ChatMessage[]>(`/api/admin/messages/thread?userId=${encodeURIComponent(thread.userId)}`, [], CHAT_POLL_MS);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetch(`/api/admin/messages/thread/read?userId=${encodeURIComponent(thread.userId)}`, { method: "POST", credentials: "include" }).catch(() => null);
@@ -1155,15 +1197,38 @@ function AdminChatThreadScreen({ thread, onClose }: { thread: ChatThread; onClos
     return response.ok;
   };
 
+  const deleteThread = async () => {
+    setDeleting(true);
+    try {
+      const response = await fetch(`/api/admin/messages/thread?userId=${encodeURIComponent(thread.userId)}`, { method: "DELETE", credentials: "include" });
+      if (response.ok) onClose();
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return <div className="media-detail-overlay media-grid-overlay" role="dialog" aria-modal="true" aria-label={`Chat mit ${thread.displayName}`}>
-    <div className="media-detail-scroll">
+    <div className="media-detail-scroll chat-overlay-scroll">
       <button type="button" className="media-detail-close" onClick={onClose} aria-label="Schließen"><Icon name="close" /></button>
-      <h1 className="media-grid-title">{thread.displayName || "Unbekannt"}</h1>
+      <div className="chat-thread-header">
+        <h1 className="media-grid-title">{thread.displayName || "Unbekannt"}</h1>
+        <button type="button" className="chat-delete-button" onClick={() => setConfirmDelete(true)} aria-label="Chat löschen"><Icon name="close" /></button>
+      </div>
       {state === "loading" && <p className="poster-status" role="status">Wird geladen …</p>}
       {state === "error" && <p className="poster-status">Nicht verfügbar</p>}
-      <ChatMessageList messages={messages} mineWhenFromAdmin={true} />
+      <ChatMessageList messages={messages} mineWhenFromAdmin={true} mineName={adminName} mineAvatarSrc="/api/me/avatar" theirsName={thread.displayName || "Unbekannt"} theirsAvatarSrc={`/api/admin/users/avatar?userId=${encodeURIComponent(thread.userId)}`} />
       <ChatComposer placeholder="Antwort schreiben …" onSend={send} />
     </div>
+    {confirmDelete && <div className="request-modal-backdrop" role="presentation" onClick={() => !deleting && setConfirmDelete(false)}>
+      <div className="request-modal" role="dialog" aria-modal="true" aria-label="Chat löschen" onClick={(event) => event.stopPropagation()}>
+        <div><p className="eyebrow">LÖSCHEN</p><h3>Chat mit {thread.displayName || "diesem Nutzer"} löschen?</h3></div>
+        <p className="request-error">Das entfernt den kompletten Verlauf unwiderruflich.</p>
+        <div className="request-modal-actions">
+          <button type="button" className="request-button secondary" disabled={deleting} onClick={() => setConfirmDelete(false)}>Abbrechen</button>
+          <button type="button" className="request-button" disabled={deleting} onClick={deleteThread}>{deleting ? "Wird gelöscht …" : "Endgültig löschen"}</button>
+        </div>
+      </div>
+    </div>}
   </div>;
 }
 

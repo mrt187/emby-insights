@@ -218,6 +218,9 @@ func (reader *fakeDiscoverReader) Search(_ context.Context, query string) ([]see
 	reader.searchQuery = query
 	return reader.searchResults, nil
 }
+func (reader *fakeDiscoverReader) DiscoverByProvider(context.Context, string, string) ([]seerr.DiscoverItem, error) {
+	return nil, nil
+}
 
 type fakeEmbyMediaDetailReader struct {
 	detail emby.MediaDetail

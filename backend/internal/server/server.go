@@ -39,12 +39,14 @@ type App struct {
 	continueWatching    emby.ContinueWatchingReader
 	watched             emby.WatchedReader
 	watchedLibraryIDs   []string
+	seriesInProgress    emby.SeriesInProgressReader
 	completed           emby.CompletedReader
 	profile             emby.ProfileReader
 	requests            seerr.RequestsReader
 	availableRequests   seerr.AvailableRequestsReader
 	requestStats        seerr.RequestStatsReader
 	discover            seerr.DiscoverReader
+	discoverRegion      string
 	embyMediaDetail     emby.MediaDetailReader
 	seerrMediaDetail    seerr.MediaDetailReader
 	seerrRequestCreator seerr.RequestCreator
@@ -86,12 +88,14 @@ func New(cfg config.Config) (*App, error) {
 		continueWatching:    embyClient,
 		watched:             embyClient,
 		watchedLibraryIDs:   cfg.EmbyWatchedLibraryIDs,
+		seriesInProgress:    embyClient,
 		completed:           embyClient,
 		profile:             embyClient,
 		requests:            seerrClient,
 		availableRequests:   seerrClient,
 		requestStats:        seerrClient,
 		discover:            seerrClient,
+		discoverRegion:      cfg.ComingSoonRegion,
 		embyMediaDetail:     embyClient,
 		seerrMediaDetail:    seerrClient,
 		seerrRequestCreator: seerrClient,
@@ -133,6 +137,7 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/continue-watching", app.continueWatchingItems)
 	mux.HandleFunc("GET /api/watched-movies", app.watchedMovies)
 	mux.HandleFunc("GET /api/watched-series", app.watchedSeries)
+	mux.HandleFunc("GET /api/series-in-progress", app.seriesInProgressHandler)
 	mux.HandleFunc("GET /api/completed-movies", app.completedMovies)
 	mux.HandleFunc("GET /api/completed-series", app.completedSeries)
 	mux.HandleFunc("GET /api/discover/trending", app.discoverHandler(func(ctx context.Context, discover seerr.DiscoverReader) ([]seerr.DiscoverItem, error) {
@@ -151,6 +156,7 @@ func (app *App) Handler() http.Handler {
 		return discover.UpcomingSeries(ctx)
 	}))
 	mux.HandleFunc("GET /api/discover/search", app.discoverSearch)
+	mux.HandleFunc("GET /api/discover/provider", app.discoverByProvider)
 	mux.HandleFunc("GET /api/media/emby", app.embyMediaDetailHandler)
 	mux.HandleFunc("GET /api/media/seerr", app.seerrMediaDetailHandler)
 	mux.HandleFunc("POST /api/media/seerr/request", app.createSeerrRequestHandler)
@@ -164,10 +170,12 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("POST /api/messages", app.sendMessage)
 	mux.HandleFunc("POST /api/messages/read", app.markOwnThreadRead)
 	mux.HandleFunc("GET /api/messages/unread-count", app.unreadMessageCount)
+	mux.HandleFunc("GET /api/messages/admin-avatar", app.adminAvatarForUser)
 	mux.HandleFunc("GET /api/admin/messages/threads", app.adminMessageThreads)
 	mux.HandleFunc("GET /api/admin/messages/thread", app.adminMessageThread)
 	mux.HandleFunc("POST /api/admin/messages/thread", app.adminSendMessage)
 	mux.HandleFunc("POST /api/admin/messages/thread/read", app.adminMarkThreadRead)
+	mux.HandleFunc("DELETE /api/admin/messages/thread", app.adminDeleteThread)
 	mux.HandleFunc("GET /api/admin/users", app.adminUserDirectory)
 	mux.HandleFunc("GET /api/admin/users/avatar", app.adminUserAvatar)
 	mux.HandleFunc("POST /api/admin/messages/broadcast", app.adminBroadcastMessage)
@@ -488,6 +496,23 @@ func (app *App) discoverSearch(writer http.ResponseWriter, request *http.Request
 	respondJSON(writer, http.StatusOK, orEmpty(items))
 }
 
+func (app *App) discoverByProvider(writer http.ResponseWriter, request *http.Request) {
+	if _, ok := app.identityFromRequest(writer, request); !ok {
+		return
+	}
+	providerID := request.URL.Query().Get("id")
+	if providerID == "" {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "id is required"})
+		return
+	}
+	items, err := app.discover.DiscoverByProvider(request.Context(), providerID, app.discoverRegion)
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "discover list is unavailable"})
+		return
+	}
+	respondJSON(writer, http.StatusOK, orEmpty(items))
+}
+
 // discoverHandler builds a handler for one Seerr discover list. Discover
 // data is not personal, but the endpoint still requires a session like the
 // rest of the API.
@@ -776,6 +801,33 @@ func (app *App) unreadMessageCount(writer http.ResponseWriter, request *http.Req
 	respondJSON(writer, http.StatusOK, map[string]int{"count": count})
 }
 
+// adminAvatarForUser serves the admin's own avatar to any logged-in user —
+// unlike adminUserAvatar (which lets the admin look up anyone), this is the
+// one admin-related image every regular user is allowed to see, since it's
+// their own chat partner's picture.
+func (app *App) adminAvatarForUser(writer http.ResponseWriter, request *http.Request) {
+	if _, ok := app.identityFromRequest(writer, request); !ok {
+		return
+	}
+	if app.adminUserID == "" {
+		http.NotFound(writer, request)
+		return
+	}
+	image, err := app.adminAvatars.UserPrimaryImageByID(request.Context(), app.adminUserID)
+	if errors.Is(err, emby.ErrPrimaryImageUnavailable) {
+		http.NotFound(writer, request)
+		return
+	}
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "profile image is unavailable"})
+		return
+	}
+	writer.Header().Set("Content-Type", image.ContentType)
+	writer.Header().Set("Cache-Control", "private, max-age=3600")
+	writer.WriteHeader(http.StatusOK)
+	_, _ = writer.Write(image.Data)
+}
+
 func (app *App) adminMessageThreads(writer http.ResponseWriter, request *http.Request) {
 	identity, ok := app.identityFromRequest(writer, request)
 	if !ok {
@@ -946,6 +998,26 @@ func (app *App) adminMarkThreadRead(writer http.ResponseWriter, request *http.Re
 	writer.WriteHeader(http.StatusNoContent)
 }
 
+func (app *App) adminDeleteThread(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	if !app.requireAdmin(writer, identity) {
+		return
+	}
+	userID := request.URL.Query().Get("userId")
+	if userID == "" {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "userId is required"})
+		return
+	}
+	if err := app.messages.DeleteThread(request.Context(), userID); err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "deleting the thread failed"})
+		return
+	}
+	writer.WriteHeader(http.StatusNoContent)
+}
+
 // validEmbyItemID matches the shapes Emby actually uses for item IDs — hex
 // GUIDs (with or without dashes) and numeric IDs. Anything else is rejected
 // before it can reach SetFavorite, which interpolates the ID into a URL sent
@@ -1024,6 +1096,19 @@ func (app *App) watchedSeries(writer http.ResponseWriter, request *http.Request)
 	items, err := app.watched.WatchedSeries(request.Context(), identity.UserID, app.watchedLibraryIDs)
 	if err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "watched series are unavailable"})
+		return
+	}
+	respondJSON(writer, http.StatusOK, orEmpty(items))
+}
+
+func (app *App) seriesInProgressHandler(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	items, err := app.seriesInProgress.SeriesInProgress(request.Context(), identity.UserID, app.watchedLibraryIDs)
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "series in progress are unavailable"})
 		return
 	}
 	respondJSON(writer, http.StatusOK, orEmpty(items))

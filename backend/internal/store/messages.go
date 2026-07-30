@@ -34,6 +34,7 @@ type MessageStore interface {
 	UnreadCountForUser(ctx context.Context, embyUserID string) (int, error)
 	UnreadCountForAdmin(ctx context.Context) (int, error)
 	Threads(ctx context.Context) ([]MessageThread, error)
+	DeleteThread(ctx context.Context, embyUserID string) error
 }
 
 type PostgresMessageStore struct {
@@ -146,4 +147,11 @@ func (store *PostgresMessageStore) Threads(ctx context.Context) ([]MessageThread
 	// recently active thread isn't necessarily first in the query result.
 	sort.Slice(threads, func(i, j int) bool { return threads[i].LastAt.After(threads[j].LastAt) })
 	return threads, nil
+}
+
+// DeleteThread removes every message in one user's thread — admin-only, and
+// irreversible; there is no undo or archive.
+func (store *PostgresMessageStore) DeleteThread(ctx context.Context, embyUserID string) error {
+	_, err := store.pool.Exec(ctx, `DELETE FROM messages WHERE emby_user_id = $1`, embyUserID)
+	return err
 }

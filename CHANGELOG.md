@@ -8,6 +8,31 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.39] - 2026-07-30
+
+### Added
+
+- Chat messages now show the sender's profile picture next to each bubble,
+  and the admin's replies use a distinct blue-tinted tone instead of the
+  same neutral background as before.
+- The admin can delete an entire chat thread from within it (with a
+  confirmation step) — irreversible, removes both directions of messages.
+- New "Offene Staffeln" row on the Statistics page: series with some, but
+  not all, episodes watched.
+- New "Anbieter" row under Anfragen with Netflix/Disney+/Prime Video/Apple
+  TV+/Hulu chips; tapping one opens a filtered grid of titles available
+  there (Seerr discover filtered by TMDB watch-provider ID — verify against
+  the live Seerr instance after deploying, this couldn't be tested here).
+
+### Fixed
+
+- The chat composer now always sits at the bottom of the screen instead of
+  floating right under a short message list with empty space beneath it.
+- The reload button was invisible on iPad-width screens (850–1050px,
+  between the two nav breakpoints) — now shows there too.
+- The rank card's value text and internal spacing now match the other
+  statistics cards.
+
 ## [0.8.38] - 2026-07-30
 
 ### Fixed

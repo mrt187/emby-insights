@@ -20,6 +20,34 @@ type DiscoverReader interface {
 	UpcomingMovies(context.Context) ([]DiscoverItem, error)
 	UpcomingSeries(context.Context) ([]DiscoverItem, error)
 	Search(ctx context.Context, query string) ([]DiscoverItem, error)
+	DiscoverByProvider(ctx context.Context, providerID, region string) ([]DiscoverItem, error)
+}
+
+// DiscoverByProvider lists movies and series available on one streaming
+// provider (a TMDB watch-provider ID, e.g. Netflix=8), for the "Streaming-
+// Anbieter" row — Overseerr's discover endpoints mirror TMDB's own discover
+// query parameters, including watchProviders/watchRegion.
+func (client *Client) DiscoverByProvider(ctx context.Context, providerID, region string) ([]DiscoverItem, error) {
+	if client == nil {
+		return nil, nil
+	}
+	query := url.Values{"page": {"1"}, "watchProviders": {providerID}, "watchRegion": {region}}.Encode()
+	movieEntries, err := client.discoverResults(ctx, "/api/v1/discover/movies?"+query)
+	if err != nil {
+		return nil, err
+	}
+	seriesEntries, err := client.discoverResults(ctx, "/api/v1/discover/tv?"+query)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]DiscoverItem, 0, len(movieEntries)+len(seriesEntries))
+	for _, entry := range movieEntries {
+		items = append(items, entry.toDiscoverItem())
+	}
+	for _, entry := range seriesEntries {
+		items = append(items, entry.toDiscoverItem())
+	}
+	return items, nil
 }
 
 func (client *Client) Trending(ctx context.Context) ([]DiscoverItem, error) {
