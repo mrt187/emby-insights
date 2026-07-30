@@ -22,6 +22,38 @@ type PersonalStatisticsReader interface {
 	PersonalWatchTime(context.Context, string, string) (PersonalWatchTime, error)
 }
 
+type WatchTimeRank struct {
+	Rank int `json:"rank"`
+}
+
+type WatchTimeRankReader interface {
+	WatchTimeRank(context.Context, string) (WatchTimeRank, error)
+}
+
+func (client *Client) WatchTimeRank(ctx context.Context, userID string) (WatchTimeRank, error) {
+	query := url.Values{"UserId": {userID}}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, client.baseURL+"/EmbyInsights/PersonalStats/Rank?"+query.Encode(), nil)
+	if err != nil {
+		return WatchTimeRank{}, err
+	}
+	request.Header.Set("X-Emby-Token", client.adminAPIKey)
+
+	response, err := client.httpClient.Do(request)
+	if err != nil {
+		return WatchTimeRank{}, fmt.Errorf("call Emby Insights watch-time rank: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return WatchTimeRank{}, fmt.Errorf("Emby Insights watch-time rank returned %s", response.Status)
+	}
+
+	var rank WatchTimeRank
+	if err := json.NewDecoder(response.Body).Decode(&rank); err != nil {
+		return WatchTimeRank{}, fmt.Errorf("decode Emby Insights watch-time rank: %w", err)
+	}
+	return rank, nil
+}
+
 type DeviceWatchTime struct {
 	DeviceName   string `json:"deviceName"`
 	WatchSeconds int64  `json:"watchSeconds"`

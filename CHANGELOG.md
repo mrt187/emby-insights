@@ -8,6 +8,24 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.25] - 2026-07-30
+
+### Added
+
+- The Home release area uses direct Radarr/Sonarr/TMDB data with a dedicated
+  30-day cinema window. Near-term cinema starts also appear in the personal
+  notification card.
+- Statistics now show each user's all-time watch-time placement. This is
+  supplied by the bundled Emby Insights plugin v0.2.6.0, whose release DLL is
+  attached to this release.
+
+### Changed
+
+- Desktop views use the available content width and responsive poster grids;
+  mobile keeps compact, touch-friendly horizontal poster rows.
+- Ratings use a gold star treatment, and dashboard greetings are casual while
+  remaining time-aware.
+
 ## [0.8.24] - 2026-07-30
 
 ### Fixed

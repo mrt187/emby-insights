@@ -7,6 +7,7 @@ type Page = "Heute" | "Statistik" | "Anfragen" | "Profil";
 type Period = "Woche" | "Monat" | "Jahr";
 type StatisticsPeriod = "week" | "month" | "year";
 type PersonalStats = { watchSeconds: number; previousWatchSeconds: number; completedMovies: number; completedSeries: number; favouriteGenre: string; periodStartsAt: string; periodEndsAt: string };
+type WatchTimeRank = { rank: number };
 type DeviceWatchTime = { deviceName: string; watchSeconds: number };
 type HourWatchTime = { hour: number; watchSeconds: number };
 type WeekdayWatchTime = { weekday: number; watchSeconds: number };
@@ -35,7 +36,7 @@ type MediaDetail = {
 };
 type MediaTrackingEntry = { mediaSource: string; mediaId: string; mediaType: string; title: string; posterUrl: string; rating?: number; onWatchlist: boolean; rewatchCount: number };
 function isRequestableSeason(season: MediaSeason | RequestableSeason): season is RequestableSeason { return !("id" in season); }
-type IconName = "home" | "chart" | "sparkle" | "user" | "bell" | "arrow" | "close" | "clock" | "movie" | "series" | "genre";
+type IconName = "home" | "chart" | "sparkle" | "user" | "bell" | "arrow" | "close" | "clock" | "movie" | "series" | "genre" | "medal";
 type Tone = "blue" | "peach" | "mint" | "lilac";
 type LoadState = "loading" | "ready" | "error";
 
@@ -44,7 +45,7 @@ const nav: { label: Page; icon: IconName }[] = [
   { label: "Anfragen", icon: "sparkle" }, { label: "Profil", icon: "user" },
 ];
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.24";
+const APP_VERSION = "0.8.25";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -242,7 +243,7 @@ export default function Home() {
         </div>
       </header>
       {page === "Heute" && <Today upcoming={upcomingItems} upcomingState={upcomingState} cinema={cinemaItems} cinemaState={cinemaState} requests={requestItems} requestState={requestState} newForYou={newForYouItems} newForYouState={newForYouState} availableRequests={availableRequests} onSelectMedia={setSelectedMedia} />}
-      {page === "Statistik" && <Stats onSelectMedia={setSelectedMedia} />}
+      {page === "Statistik" && <Stats user={user} onSelectMedia={setSelectedMedia} />}
       {page === "Anfragen" && <Requests onSelectMedia={setSelectedMedia} />}
       {page === "Profil" && <Profile user={user} userProfile={userProfile} totalRequests={totalRequests} onSelectMedia={setSelectedMedia} />}
     </section>
@@ -264,6 +265,7 @@ function Icon({ name }: { name: IconName }) {
     movie: <><rect x="3" y="5" width="18" height="15" rx="2" /><path d="M7 5v15m10-15v15M3 10h18" /></>,
     series: <><path d="M5 3h14v18H5z" /><path d="M8 7h8M8 11h8M8 15h5" /></>,
     genre: <><path d="M4 4h8l8 8-8 8-10-10V4Z" /><circle cx="9" cy="9" r="1" /></>,
+    medal: <><circle cx="12" cy="14" r="6" /><path d="m8 3 2.5 5M16 3l-2.5 5M10 14l1.4 1.4L14.5 12" /></>,
   };
   return <svg className="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
@@ -285,6 +287,7 @@ function Today({ upcoming, upcomingState, cinema, cinemaState, requests, request
   const events = relevantEvents({
     availableRequests,
     upcoming: upcomingState === "ready" ? upcoming : [],
+    cinema: cinemaState === "ready" ? cinema : [],
     newForYou: newForYouState === "ready" ? newForYou : [],
     onSelectMedia,
     onShowNewForYou: () => setNewForYouGridOpen(true),
@@ -292,7 +295,7 @@ function Today({ upcoming, upcomingState, cinema, cinemaState, requests, request
 
   return <div className="content today-view">
     <RelevantNow events={events} onShowAll={() => setAllEventsOpen(true)} />
-    <PosterRow title="Demnächst" eyebrow="RADARR · SONARR · NÄCHSTE 4 WOCHEN" items={upcoming} state={upcomingState} emptyLabel="Nichts Neues in den nächsten vier Wochen." itemTitle={upcomingTitle} detail={(item) => availabilityWording(item.availabilityDate)} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />
+    <PosterRow title="Demnächst" eyebrow="IN DEN NÄCHSTEN 4 WOCHEN AUF EMBY" items={upcoming} state={upcomingState} emptyLabel="Nichts Neues in den nächsten vier Wochen." itemTitle={upcomingTitle} detail={(item) => availabilityWording(item.availabilityDate)} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />
     <PosterRow title="Im Kino" eyebrow="KOMMENDE UND AKTUELLE KINOSTARTS" items={cinema} state={cinemaState} emptyLabel="Zurzeit keine Kinostarts." detail={cinemaWording} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />
     <PosterRow title="Meine Anfragen" eyebrow="SEERR · OFFEN" items={requests} state={requestState} emptyLabel="Keine offenen Anfragen." detail={(item) => item.status} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />
     <PosterRow title="Neu für dich" eyebrow="IN DEN LETZTEN 14 TAGEN" items={newForYou} state={newForYouState} emptyLabel="Nichts Neues in den letzten 14 Tagen." detail={() => "Ungesehen"} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
@@ -319,8 +322,8 @@ function releaseWording(premiereDate: string) {
 
 // Builds the prioritised event list: newly available requests first, then
 // releases due within the next two days, then the unseen-titles summary.
-function relevantEvents({ availableRequests, upcoming, newForYou, onSelectMedia, onShowNewForYou }: {
-  availableRequests: RequestItem[]; upcoming: UpcomingItem[]; newForYou: NewForYouItem[];
+function relevantEvents({ availableRequests, upcoming, cinema, newForYou, onSelectMedia, onShowNewForYou }: {
+  availableRequests: RequestItem[]; upcoming: UpcomingItem[]; cinema: UpcomingItem[]; newForYou: NewForYouItem[];
   onSelectMedia: (selection: MediaSelection) => void; onShowNewForYou: () => void;
 }): RelevantEvent[] {
   const events: RelevantEvent[] = [];
@@ -340,6 +343,16 @@ function relevantEvents({ availableRequests, upcoming, newForYou, onSelectMedia,
     events.push({
       key: `release-${item.id}`, tone: "peach", icon: "clock", status: releaseWording(item.availabilityDate),
       detail: upcomingTitle(item),
+      onOpen: () => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType }),
+    });
+  }
+
+  for (const item of cinema) {
+    const premiere = new Date(item.cinemaStartDate ?? item.availabilityDate).getTime();
+    if (Number.isNaN(premiere) || premiere > horizon || premiere < Date.now() - 24 * 60 * 60 * 1000) continue;
+    events.push({
+      key: `cinema-${item.id}`, tone: "peach", icon: "movie", status: premiere <= Date.now() ? "Jetzt im Kino" : "Bald im Kino",
+      detail: item.title,
       onOpen: () => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType }),
     });
   }
@@ -400,6 +413,16 @@ function MetricCard({ icon, tone, value, label, detail, positive, genre = false,
     : <article className={`metric-card tone-${tone}${genre ? " genre-card" : ""}`}>{inner}</article>;
 }
 
+function RankCard({ rank, name }: { rank: number | null; name: string }) {
+  const placement = rank && rank > 0 ? rank : "—";
+  return <article className="metric-card rank-card tone-lilac">
+    <span className="metric-icon"><Icon name="medal" /></span>
+    <span className={`rank-medal${rank === 1 ? " gold" : rank === 2 ? " silver" : rank === 3 ? " bronze" : ""}`}>{placement}</span>
+    <span className="rank-avatar"><UserAvatar name={name} /></span>
+    <p>Dein Platz</p>
+  </article>;
+}
+
 function PosterRow<T extends { id: string; title: string; posterUrl?: string }>({ title, eyebrow, gridTitle, items, detail, itemTitle, state, emptyLabel, progress, onSelect }: {
   title?: string; eyebrow?: string; gridTitle?: string; items: readonly T[]; detail: (item: T) => string; itemTitle?: (item: T) => string; state?: LoadState; emptyLabel?: string; progress?: (item: T) => number; onSelect?: (item: T) => void;
 }) {
@@ -419,7 +442,7 @@ function PosterRow<T extends { id: string; title: string; posterUrl?: string }>(
           {item.posterUrl ? <img src={item.posterUrl} alt="" loading="lazy" /> : <span>{itemTitle?.(item) ?? item.title}</span>}
           {progress && <div className="poster-progress"><div className="poster-progress-fill" style={{ width: `${progress(item)}%` }} /></div>}
         </div>
-        <strong>{itemTitle?.(item) ?? item.title}</strong><small>{detail(item)}</small>
+        <strong>{itemTitle?.(item) ?? item.title}</strong><small className={detail(item).includes("★") ? "rating-stars" : undefined}>{detail(item)}</small>
       </>;
       return onSelect
         ? <button type="button" className="poster-entry poster-entry-button" key={item.id} onClick={() => onSelect(item)}>{inner}</button>
@@ -475,7 +498,7 @@ function BarChart({ title, data, formatValue }: { title: string; data: { label: 
   </section>;
 }
 
-function Stats({ onSelectMedia }: { onSelectMedia: (selection: MediaSelection) => void }) {
+function Stats({ user, onSelectMedia }: { user: { name: string }; onSelectMedia: (selection: MediaSelection) => void }) {
   const [period, setPeriod] = useState<Period>("Woche");
   const [statistics, setStatistics] = useState<PersonalStats | null>(null);
   const [state, setState] = useState<LoadState>("loading");
@@ -500,6 +523,7 @@ function Stats({ onSelectMedia }: { onSelectMedia: (selection: MediaSelection) =
   const [longestSessionState, setLongestSessionState] = useState<LoadState>("loading");
   const [mostActiveDay, setMostActiveDay] = useState<MostActiveDay | null>(null);
   const [mostActiveDayState, setMostActiveDayState] = useState<LoadState>("loading");
+  const [watchTimeRank, setWatchTimeRank] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -508,6 +532,14 @@ function Stats({ onSelectMedia }: { onSelectMedia: (selection: MediaSelection) =
       .catch(() => active && setState("error"));
     return () => { active = false; };
   }, [period]);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/stats/rank", { credentials: "include" })
+      .then(async (response) => { if (!response.ok) throw new Error("watch-time rank unavailable"); const data: WatchTimeRank = await response.json(); if (active) setWatchTimeRank(data.rank); })
+      .catch(() => active && setWatchTimeRank(null));
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -595,7 +627,7 @@ function Stats({ onSelectMedia }: { onSelectMedia: (selection: MediaSelection) =
       <MetricCard icon="clock" tone="blue" value={statistics ? formatDuration(statistics.watchSeconds) : "—"} label="Sehzeit" detail={statistics ? comparisonText(statistics) : loadingCopy(state)} />
       <MetricCard icon="movie" tone="peach" value={statistics ? statistics.completedMovies : "—"} label="Filme abgeschlossen" detail={statistics ? period : loadingCopy(state)} onClick={statistics && statistics.completedMovies > 0 && completedMoviesState === "ready" ? () => setCompletedGridView("movies") : undefined} />
       <MetricCard icon="series" tone="mint" value={statistics ? statistics.completedSeries : "—"} label="Serien abgeschlossen" detail={statistics ? period : loadingCopy(state)} onClick={statistics && statistics.completedSeries > 0 && completedSeriesState === "ready" ? () => setCompletedGridView("series") : undefined} />
-      <MetricCard icon="genre" tone="lilac" value={statistics?.favouriteGenre || "—"} label="Lieblingsgenre" detail={statistics ? "Nach Sehzeit" : loadingCopy(state)} genre />
+      <RankCard rank={watchTimeRank} name={user.name} />
     </section>
 
     <PosterRow title="Was ich gerade schaue" eyebrow="WEITERSCHAUEN" items={continueWatching} state={continueWatchingState} emptyLabel="Nichts in Bearbeitung." detail={(item) => `${item.progressPercent} % gesehen`} progress={(item) => item.progressPercent} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
@@ -1007,7 +1039,10 @@ function Profile({ user, userProfile, totalRequests, onSelectMedia }: { user: { 
     <button className="logout-button" onClick={logout} disabled={signingOut}>{signingOut ? "Abmeldung läuft …" : "Abmelden"}</button>
   </div>;
 }
-function greeting() { const hour = new Date().getHours(); return hour < 12 ? "Guten Morgen" : hour < 18 ? "Guten Tag" : "Guten Abend"; }
+function greeting() {
+  const hour = new Date().getHours();
+  return hour < 12 ? "Moin" : hour < 18 ? "Mahlzeit" : "Nabend";
+}
 function loadingCopy(state: LoadState) { return state === "error" ? "Nicht verfügbar" : "Wird geladen …"; }
 function formatDuration(seconds: number) { const hours = Math.floor(seconds / 3600); const minutes = Math.floor((seconds % 3600) / 60); return hours > 0 ? `${hours}\u00a0Std. ${minutes}\u00a0Min.` : `${minutes}\u00a0Min.`; }
 function comparisonText(statistics: PersonalStats) { if (statistics.previousWatchSeconds === 0) return "Keine Vergleichsdaten"; const change = Math.round(((statistics.watchSeconds - statistics.previousWatchSeconds) / statistics.previousWatchSeconds) * 100); return `${change >= 0 ? "Mehr" : "Weniger"} als im vorherigen Zeitraum: ${new Intl.NumberFormat("de-DE").format(Math.abs(change))}\u00a0%`; }

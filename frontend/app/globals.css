@@ -304,15 +304,23 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .metric-card .up { color: #6edba5; }
 .genre-card strong { font-size: 15px; line-height: 1.15; overflow-wrap: anywhere; }
 .genre-card .metric-icon { position: absolute; right: 14px; top: 14px; }
+.rank-card { display: grid; grid-template-columns: auto 1fr; grid-template-rows: 1fr auto; align-items: center; column-gap: 12px; }
+.rank-card .metric-icon { position: absolute; right: 14px; top: 14px; color: var(--violet); }
+.rank-medal {
+  grid-row: 1 / 3; display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%;
+  color: #15191d; font-size: 17px; font-weight: 900; font-variant-numeric: tabular-nums;
+  background: linear-gradient(145deg, #cdd3d7, #818a91); box-shadow: inset 0 2px 2px rgb(255 255 255 / 55%), 0 5px 12px rgb(0 0 0 / 28%);
+}
+.rank-medal.gold { background: linear-gradient(145deg, #ffe69a, #c59124); }
+.rank-medal.bronze { background: linear-gradient(145deg, #e4a77d, #9a5836); }
+.rank-avatar { position: relative; width: 44px; height: 44px; border: 2px solid rgb(241 246 243 / 66%); border-radius: 50%; overflow: hidden; background: var(--ink); }
+.rank-card p { align-self: start; margin: 4px 0 0; }
 
 /* --------------------------------------------------------- poster rows */
 
 .poster-section { display: grid; gap: 18px; }
-.poster-scroller {
-  display: flex; gap: 16px; overflow-x: auto; padding: 4px 3px 18px;
-  scroll-snap-type: x proximity; scrollbar-width: thin; scrollbar-color: #405148 transparent;
-}
-.poster-entry { flex: 0 0 158px; min-width: 0; scroll-snap-align: start; }
+.poster-scroller { display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); gap: 16px; padding: 4px 3px 6px; }
+.poster-entry { min-width: 0; }
 .poster-entry-button {
   display: block; box-sizing: border-box; width: 100%; padding: 0; border: 0; margin: 0;
   background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer;
@@ -329,7 +337,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .poster span { position: relative; z-index: 1; }
 .poster img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
 .poster.wide {
-  height: 226px; border: 1px solid rgb(255 255 255 / 10%); border-radius: 18px;
+  height: auto; aspect-ratio: 2 / 3; border: 1px solid rgb(255 255 255 / 10%); border-radius: 18px;
   box-shadow: 0 14px 26px rgb(0 0 0 / 18%);
   transition: transform 220ms var(--ease-out), border-color 220ms ease, box-shadow 220ms ease;
 }
@@ -342,6 +350,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 }
 .poster-entry strong { margin-top: 2px; color: #f1f6f3; font-size: 13px; }
 .poster-entry small { margin-top: 4px; color: #98dcb2; font-size: 11px; }
+.poster-entry .rating-stars { color: #f6cf6b; letter-spacing: 1px; }
 .poster-status { color: #9db3a7; font-size: 13px; padding: 4px 2px; }
 
 .poster-progress {
@@ -352,7 +361,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 
 /* ------------------------------------------------------- statistics page */
 
-.page-view { max-width: 940px; }
+.page-view { max-width: none; }
 
 .period-tabs {
   width: max-content; padding: 4px; border: 1px solid var(--line);
@@ -468,7 +477,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   min-width: 32px; min-height: 32px; padding: 0; border: 0; background: none; cursor: pointer;
   font-size: 20px; line-height: 1; color: var(--muted); transition: color 160ms var(--ease-out);
 }
-.star-button.filled { color: var(--mint-bright); }
+.star-button.filled { color: #f6cf6b; }
 .icon-toggle-button {
   display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid var(--line); border-radius: 999px;
   background: transparent; color: var(--muted); cursor: pointer; transition: color 160ms var(--ease-out), border-color 160ms var(--ease-out);
@@ -635,6 +644,11 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   .side-nav { display: none; }
   .screen { margin-left: 0; padding: 22px 18px 108px; }
   .topbar { padding-bottom: 27px; }
+  .poster-scroller {
+    display: flex; gap: 16px; overflow-x: auto; padding: 4px 3px 18px;
+    scroll-snap-type: x proximity; scrollbar-width: thin; scrollbar-color: #405148 transparent;
+  }
+  .poster-entry { flex: 0 0 158px; scroll-snap-align: start; }
 
   .bottom-nav {
     position: fixed; z-index: var(--z-navigation); bottom: 0; left: 0; right: 0;

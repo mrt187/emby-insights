@@ -50,3 +50,27 @@ func TestNewClientDisablesCalendarWithoutSources(t *testing.T) {
 		t.Fatal("NewClient() = non-nil without a source")
 	}
 }
+
+func TestInCinemasUsesThirtyDayWindow(t *testing.T) {
+	now := time.Now().UTC()
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		fmt.Fprintf(writer, `[
+			{"title":"Recent","tmdbId":1,"inCinemas":%q,"digitalRelease":%q},
+			{"title":"Too old","tmdbId":2,"inCinemas":%q,"digitalRelease":%q},
+			{"title":"Soon","tmdbId":3,"inCinemas":%q,"digitalRelease":%q}
+		]`,
+			now.AddDate(0, 0, -29).Format(time.RFC3339), now.AddDate(0, 0, 10).Format(time.RFC3339),
+			now.AddDate(0, 0, -31).Format(time.RFC3339), now.AddDate(0, 0, 10).Format(time.RFC3339),
+			now.AddDate(0, 0, 29).Format(time.RFC3339), now.AddDate(0, 0, 40).Format(time.RFC3339),
+		)
+	}))
+	defer server.Close()
+
+	items, err := NewClient(server.URL, "calendar-key", "", "", "", "DE", 28).InCinemas(context.Background())
+	if err != nil {
+		t.Fatalf("InCinemas() error = %v", err)
+	}
+	if len(items) != 2 || items[0].Title != "Recent" || items[1].Title != "Soon" {
+		t.Fatalf("InCinemas() = %#v", items)
+	}
+}

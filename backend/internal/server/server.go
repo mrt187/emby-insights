@@ -27,6 +27,7 @@ type App struct {
 	redis               *redis.Client
 	authenticator       emby.Authenticator
 	statistics          emby.PersonalStatisticsReader
+	watchTimeRank       emby.WatchTimeRankReader
 	deviceStatistics    emby.DeviceStatisticsReader
 	sessionStatistics   emby.SessionStatisticsReader
 	avatars             emby.AvatarReader
@@ -69,6 +70,7 @@ func New(cfg config.Config) (*App, error) {
 		redis:               cache,
 		authenticator:       embyClient,
 		statistics:          embyClient,
+		watchTimeRank:       embyClient,
 		deviceStatistics:    embyClient,
 		sessionStatistics:   embyClient,
 		avatars:             embyClient,
@@ -106,6 +108,7 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/me/avatar", app.avatar)
 	mux.HandleFunc("GET /api/me/profile", app.meProfile)
 	mux.HandleFunc("GET /api/stats", app.stats)
+	mux.HandleFunc("GET /api/stats/rank", app.watchTimeRankStats)
 	mux.HandleFunc("GET /api/stats/devices", app.deviceStats)
 	mux.HandleFunc("GET /api/stats/hours", app.hourStats)
 	mux.HandleFunc("GET /api/stats/weekdays", app.weekdayStats)
@@ -232,6 +235,23 @@ func (app *App) stats(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	respondJSON(writer, http.StatusOK, statistics)
+}
+
+func (app *App) watchTimeRankStats(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	if app.watchTimeRank == nil {
+		respondJSON(writer, http.StatusServiceUnavailable, map[string]string{"error": "watch-time rank is unavailable"})
+		return
+	}
+	rank, err := app.watchTimeRank.WatchTimeRank(request.Context(), identity.UserID)
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "watch-time rank is unavailable"})
+		return
+	}
+	respondJSON(writer, http.StatusOK, rank)
 }
 
 func (app *App) deviceStats(writer http.ResponseWriter, request *http.Request) {

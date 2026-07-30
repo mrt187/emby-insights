@@ -14,6 +14,7 @@ import (
 )
 
 const posterBaseURL = "https://image.tmdb.org/t/p/w500"
+const cinemaWindowDays = 30
 
 type Item struct {
 	ID               string `json:"id"`
@@ -113,7 +114,12 @@ func (client *Client) InCinemas(ctx context.Context) ([]Item, error) {
 		if err != nil {
 			return nil, err
 		}
-		if !dates.cinema.IsZero() && !dates.cinema.After(now.AddDate(0, 0, client.daysAhead)) && dates.digital.After(now) {
+		// Cinema is its own, deliberately shorter window than the Radarr/Sonarr
+		// availability calendar. This keeps both imminent starts and films that
+		// only recently opened in the cinema visible without growing indefinitely.
+		windowStart := now.AddDate(0, 0, -cinemaWindowDays)
+		windowEnd := now.AddDate(0, 0, cinemaWindowDays)
+		if !dates.cinema.IsZero() && !dates.cinema.Before(windowStart) && !dates.cinema.After(windowEnd) && dates.digital.After(now) {
 			items = append(items, movie.item(dates.cinema, dates.digital, "movie"))
 		}
 	}
