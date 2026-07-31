@@ -221,7 +221,10 @@ func poster(images []struct {
 }) string {
 	for _, image := range images {
 		if image.CoverType == "poster" {
-			return image.RemoteURL
+			// Radarr/Sonarr often hand back plain http:// URLs for these —
+			// harmless over a bare HTTP LAN connection, but a browser on a
+			// HTTPS reverse proxy blocks loading them as mixed content.
+			return strings.Replace(image.RemoteURL, "http://", "https://", 1)
 		}
 	}
 	return ""

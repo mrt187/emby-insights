@@ -8,6 +8,15 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.67] - 2026-07-31
+
+### Fixed
+
+- Posters in "Demnächst" (Radarr/Sonarr calendar) didn't load behind a
+  HTTPS reverse proxy — Radarr/Sonarr often hand back plain `http://`
+  poster URLs, which browsers block as mixed content on a HTTPS page.
+  These are now upgraded to `https://` before being sent to the browser.
+
 ## [0.8.66] - 2026-07-31
 
 ### Fixed
