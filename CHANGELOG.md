@@ -8,6 +8,16 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.58] - 2026-07-31
+
+### Fixed
+
+- Seasons with an already-open Seerr request (status "pending" or
+  "processing") stayed selectable in the request picker, because the
+  backend only distinguished "available" (status 5) from everything
+  else. Already-requested seasons are now recognized separately and
+  excluded from the picker.
+
 ## [0.8.57] - 2026-07-31
 
 ### Fixed
