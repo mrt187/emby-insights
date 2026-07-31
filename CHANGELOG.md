@@ -8,6 +8,35 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.70] - 2026-07-31
+
+### Fixed
+
+- "Im Kino" could silently miss movies that started their cinema run more
+  than a day or two ago — the Radarr calendar query itself only looked
+  back 1 day, so the intended 30-day trailing window never had data to
+  work with. Now looks back the full 30 days.
+- Every JSON API response now sends `Cache-Control: no-store` — none of it
+  should ever be reused from a browser or intermediate cache.
+- A season/movie request's "Angefragt ✓" confirmation could flip back to
+  a re-requestable button if Seerr's own status sync lagged behind the
+  request by a few seconds/minutes. The app now remembers what it itself
+  just requested and keeps the confirmation up until Seerr's own data
+  catches up — then it hands off to the normal status display
+  automatically, same as any other already-requested title.
+
+### Changed
+
+- Statistik-Seite: "Längste Session" und "Aktivster Tag" sind jetzt eine
+  gemeinsame 4. Kachel oben statt einer eigenen Zeile darunter; neue
+  Überschrift "Komplett angeschaut" über den Filme/Serien-Kacheln.
+
+### Removed
+
+- The "Erneut gesehen" rewatch counter — nothing ever read the count back
+  (no stats view, no list), so it was just a confusing button with no
+  visible effect.
+
 ## [0.8.69] - 2026-07-31
 
 ### Changed

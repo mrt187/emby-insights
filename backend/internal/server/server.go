@@ -1786,6 +1786,10 @@ func (app *App) identityProfile(ctx context.Context, identity emby.Identity) map
 
 func respondJSON(writer http.ResponseWriter, status int, body any) {
 	writer.Header().Set("Content-Type", "application/json; charset=utf-8")
+	// Every JSON response here is per-user or reflects live upstream state
+	// (Seerr request/season status, watch stats, ...) — none of it may be
+	// reused from a browser or intermediate cache for a later request.
+	writer.Header().Set("Cache-Control", "no-store")
 	writer.WriteHeader(status)
 	_ = json.NewEncoder(writer).Encode(body)
 }

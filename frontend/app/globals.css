@@ -281,9 +281,9 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 
 /* ---------------------------------------------------------- metric cards */
 
-.week-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
-.records-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.week-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
 .watched-tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.watched-tiles-heading { margin: 0 0 12px; font-size: 18px; font-weight: 800; letter-spacing: -.3px; }
 .watched-tile {
   position: relative; overflow: hidden; min-height: 160px; padding: 0; border: 1px solid var(--line); border-radius: 14px;
   background-color: var(--ink-raised); background-position: center; background-size: cover;
@@ -326,6 +326,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   padding: 12px 14px; border: 0; background: transparent; font: inherit; color: inherit; text-align: left; cursor: pointer;
 }
 .completed-card-segment:disabled { cursor: default; opacity: .6; }
+.completed-card-segment.static { cursor: default; }
 .completed-card-segment strong { position: relative; z-index: 1; display: block; line-height: 1; font-size: clamp(20px, 2vw, 27px); letter-spacing: -1px; font-variant-numeric: tabular-nums; }
 .completed-card-segment small { position: relative; z-index: 1; display: block; margin-top: 4px; color: var(--muted); font-size: 10px; }
 .completed-card-segment .skeleton-value { display: block; width: 46%; height: 22px; margin: 2px 0 4px; }

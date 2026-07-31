@@ -157,9 +157,15 @@ func (client *Client) movies(ctx context.Context) ([]movie, error) {
 	if client.radarrURL == "" || client.radarrKey == "" {
 		return nil, nil
 	}
-	today := time.Now().UTC().AddDate(0, 0, -1).Format("2006-01-02")
+	// InCinemas keeps a film visible for cinemaWindowDays after its cinema
+	// release, but Radarr's own calendar only returns entries whose release
+	// dates fall inside [start, end] — a film that opened, say, 10 days ago
+	// with no digital date yet would already have fallen out of that window
+	// and silently vanish from "Im Kino" if start only reached back 1 day,
+	// no matter how generous the filtering further down is.
+	start := time.Now().UTC().AddDate(0, 0, -cinemaWindowDays).Format("2006-01-02")
 	end := time.Now().UTC().AddDate(0, 0, client.daysAhead+120).Format("2006-01-02")
-	path := client.radarrURL + "/api/v3/calendar?start=" + today + "&end=" + end + "&unmonitored=false"
+	path := client.radarrURL + "/api/v3/calendar?start=" + start + "&end=" + end + "&unmonitored=false"
 	var result []struct {
 		Title          string    `json:"title"`
 		TmdbID         int       `json:"tmdbId"`

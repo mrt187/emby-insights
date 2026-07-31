@@ -39,7 +39,7 @@ type MediaDetail = {
   status?: string; releaseDate?: string; studios?: string[];
   imdbRating?: string; rottenTomatoesRating?: string;
 };
-type MediaTrackingEntry = { mediaSource: string; mediaId: string; mediaType: string; title: string; posterUrl: string; rating?: number; onWatchlist: boolean; rewatchCount: number; hiddenInProgress?: boolean };
+type MediaTrackingEntry = { mediaSource: string; mediaId: string; mediaType: string; title: string; posterUrl: string; rating?: number; onWatchlist: boolean; hiddenInProgress?: boolean };
 function isRequestableSeason(season: MediaSeason | RequestableSeason): season is RequestableSeason { return !("id" in season); }
 type IconName = "home" | "chart" | "sparkle" | "heart" | "user" | "bell" | "arrow" | "close" | "clock" | "movie" | "series" | "genre" | "medal" | "refresh" | "chat" | "settings";
 type Tone = "blue" | "peach" | "mint" | "lilac";
@@ -64,7 +64,7 @@ function visibleNav(user: CurrentUser): { label: Page; icon: IconName }[] {
   return items;
 }
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.69";
+const APP_VERSION = "0.8.70";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -475,6 +475,37 @@ function CompletedCard({ movies, series, loading, onOpenMovies, onOpenSeries }: 
   </article>;
 }
 
+// Combines the two "Rekorde" metrics into the same compact two-segment
+// layout as CompletedCard, so they read as a single 4th tile in the week
+// grid instead of a separate, half-width row below it. Neither segment
+// navigates anywhere, so the divider/labels stay but the button semantics
+// (and cursor) don't. Longest session drops its item-name subtitle and
+// the record day uses the short day/month date (no year) — both existed
+// only as MetricCards' third detail line, which doesn't fit two metrics
+// side by side in one card.
+function RecordsCard({ longestSession, longestSessionState, mostActiveDay, mostActiveDayState }: {
+  longestSession: LongestSession | null; longestSessionState: LoadState;
+  mostActiveDay: MostActiveDay | null; mostActiveDayState: LoadState;
+}) {
+  return <article className="metric-card completed-card tone-lilac">
+    <div className="completed-card-segment static">
+      <span className="metric-icon"><Icon name="clock" /></span>
+      {longestSessionState === "loading"
+        ? <span className="skeleton skeleton-value" aria-hidden="true" />
+        : <strong>{longestSessionState === "ready" && longestSession ? formatDuration(longestSession.watchSeconds) : "—"}</strong>}
+      <small>Längste Session</small>
+    </div>
+    <span className="completed-card-divider" aria-hidden="true" />
+    <div className="completed-card-segment static">
+      <span className="metric-icon"><Icon name="genre" /></span>
+      {mostActiveDayState === "loading"
+        ? <span className="skeleton skeleton-value" aria-hidden="true" />
+        : <strong>{mostActiveDayState === "ready" && mostActiveDay ? formatPremiereDate(mostActiveDay.date) : "—"}</strong>}
+      <small>Aktivster Tag</small>
+    </div>
+  </article>;
+}
+
 function WatchedCategoryTile({ label, items, onOpen }: { label: string; items: readonly WatchedItem[]; onOpen: () => void }) {
   const featured = items.length > 0
     ? [...items].sort((a, b) => (b.dateAdded ?? "").localeCompare(a.dateAdded ?? ""))[0]
@@ -644,6 +675,7 @@ function Stats({ user, onSelectMedia }: { user: { id: string; name: string }; on
         onOpenMovies={statistics && statistics.completedMovies > 0 && completedMoviesState === "ready" ? () => setCompletedGridView("movies") : undefined}
         onOpenSeries={statistics && statistics.completedSeries > 0 && completedSeriesState === "ready" ? () => setCompletedGridView("series") : undefined}
       />
+      <RecordsCard longestSession={longestSession} longestSessionState={longestSessionState} mostActiveDay={mostActiveDay} mostActiveDayState={mostActiveDayState} />
     </section>
 
     <section className="chart-grid">
@@ -653,14 +685,12 @@ function Stats({ user, onSelectMedia }: { user: { id: string; name: string }; on
       <BarChart title="Nach Gerät" data={deviceStatsState === "ready" ? deviceStats.slice(0, 6).map((device) => ({ label: device.deviceName, value: device.watchSeconds })) : []} formatValue={formatDuration} loading={deviceStatsState === "loading"} />
     </section>
 
-    <section className="records-grid" aria-label="Rekorde">
-      <MetricCard icon="clock" tone="lilac" value={longestSessionState === "ready" && longestSession ? formatDuration(longestSession.watchSeconds) : "—"} label="Längste Session" detail={longestSessionState === "ready" ? (longestSession?.itemName ?? "Keine Daten") : loadingCopy(longestSessionState)} loading={longestSessionState === "loading"} />
-      <MetricCard icon="genre" tone="peach" value={mostActiveDayState === "ready" && mostActiveDay ? formatFullDate(mostActiveDay.date) : "—"} label="Aktivster Tag" detail={mostActiveDayState === "ready" ? (mostActiveDay ? formatDuration(mostActiveDay.watchSeconds) : "Keine Daten") : loadingCopy(mostActiveDayState)} loading={mostActiveDayState === "loading"} />
-    </section>
-
-    <section className="watched-tiles" aria-label="Gesehene Inhalte">
-      <WatchedCategoryTile label="Filme" items={watchedMovies} onOpen={() => setWatchedGridView("movies")} />
-      <WatchedCategoryTile label="Serien" items={watchedSeries} onOpen={() => setWatchedGridView("series")} />
+    <section aria-label="Gesehene Inhalte">
+      <h2 className="watched-tiles-heading">Komplett angeschaut</h2>
+      <div className="watched-tiles">
+        <WatchedCategoryTile label="Filme" items={watchedMovies} onOpen={() => setWatchedGridView("movies")} />
+        <WatchedCategoryTile label="Serien" items={watchedSeries} onOpen={() => setWatchedGridView("series")} />
+      </div>
     </section>
 
     {completedGridView === "movies" && <MediaGridScreen title={`Filme abgeschlossen · ${period}`} items={completedMovies} detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setCompletedGridView(null)} />}
@@ -827,10 +857,30 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated, onHiddenChang
   const [selectedSeasons, setSelectedSeasons] = useState<number[]>([]);
   const [requestState, setRequestState] = useState<"idle" | "submitting" | "done" | "error">("idle");
   const [requestModalOpen, setRequestModalOpen] = useState(false);
-  const [tracking, setTracking] = useState<{ rating: number; onWatchlist: boolean; hiddenInProgress: boolean; rewatchCount: number }>({ rating: 0, onWatchlist: false, hiddenInProgress: false, rewatchCount: 0 });
+  const [tracking, setTracking] = useState<{ rating: number; onWatchlist: boolean; hiddenInProgress: boolean }>({ rating: 0, onWatchlist: false, hiddenInProgress: false });
   const [favorite, setFavorite] = useState(false);
   const [favoriteBusy, setFavoriteBusy] = useState(false);
   const mediaType = selection.source === "seerr" ? selection.mediaType : undefined;
+
+  // Seerr can take a moment to reflect a just-created request in its own
+  // media/season status (the request itself is immediate, but the show's
+  // mediaInfo sync lags slightly) — reopening the detail screen right after
+  // requesting can briefly show the season as requestable again. This
+  // remembers what this browser itself just requested so the UI stays on
+  // "Angefragt ✓" regardless of what a fresh, still-lagging fetch reports.
+  // movieRequestedSentinel stands in for "the movie itself", since movies
+  // have no season numbers to key off of.
+  const movieRequestedSentinel = -1;
+  const requestedStorageKey = selection.source === "seerr" ? `insights:requested:${selection.mediaType}:${selection.id}` : null;
+  const [locallyRequestedSeasons, setLocallyRequestedSeasons] = useState<number[]>(() => {
+    if (!requestedStorageKey || typeof window === "undefined") return [];
+    try {
+      const raw = window.localStorage.getItem(requestedStorageKey);
+      return raw ? (JSON.parse(raw) as number[]) : [];
+    } catch {
+      return [];
+    }
+  });
 
   // Guards against the initial GET resolving after the user already saved a
   // local change (e.g. clicked "Erneut gesehen" on a slow connection) — a
@@ -845,7 +895,7 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated, onHiddenChang
       .then(async (response) => {
         if (!response.ok) throw new Error("tracking unavailable");
         const data: MediaTrackingEntry = await response.json();
-        if (active && !trackingWrittenRef.current) setTracking({ rating: data.rating ?? 0, onWatchlist: data.onWatchlist, hiddenInProgress: data.hiddenInProgress ?? false, rewatchCount: data.rewatchCount ?? 0 });
+        if (active && !trackingWrittenRef.current) setTracking({ rating: data.rating ?? 0, onWatchlist: data.onWatchlist, hiddenInProgress: data.hiddenInProgress ?? false });
       })
       .catch(() => null);
     return () => { active = false; };
@@ -853,7 +903,7 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated, onHiddenChang
 
   // Always resends hiddenInProgress (Upsert overwrites the whole row), so a
   // plain rating/watchlist change never silently un-hides a dismissed series.
-  const saveTracking = (next: { rating: number; onWatchlist: boolean; hiddenInProgress: boolean; rewatchCount: number }) => {
+  const saveTracking = (next: { rating: number; onWatchlist: boolean; hiddenInProgress: boolean }) => {
     trackingWrittenRef.current = true;
     setTracking(next);
     if (!detail) return;
@@ -870,7 +920,6 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated, onHiddenChang
         rating: next.rating,
         onWatchlist: next.onWatchlist,
         hiddenInProgress: next.hiddenInProgress,
-        rewatchCount: next.rewatchCount,
       }),
     }).then((response) => { if (response.ok) onHiddenChanged?.(); }).catch(() => null);
   };
@@ -927,12 +976,28 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated, onHiddenChang
   // means there is nothing left to request. Seasons already available or
   // with an open request (pending/processing) are excluded so they can't
   // be re-requested.
-  const requestableSeasons = (detail?.seasons?.filter(isRequestableSeason) ?? []).filter((season) => !season.available && !season.requested);
+  // Seerr's own truth, ignoring what this browser has locally recorded —
+  // used only to detect once Seerr's status has caught up with a request
+  // already made, so the "Angefragt ✓" override below can hand off to the
+  // normal status display (matching every other title) instead of masking
+  // it forever.
+  const seerrRequestableSeasons = (detail?.seasons?.filter(isRequestableSeason) ?? []).filter((season) => !season.available && !season.requested);
+  const requestableSeasons = seerrRequestableSeasons.filter((season) => !locallyRequestedSeasons.includes(season.seasonNumber));
   const seerrStatusPending = 2;
   const seerrStatusProcessing = 3;
   const seerrStatusPartiallyAvailable = 4;
   const seerrStatusAvailable = 5;
-  const canRequest = selection.source === "seerr" && (!detail?.mediaStatus || (detail.mediaStatus === seerrStatusPartiallyAvailable && mediaType === "tv" && requestableSeasons.length > 0));
+  const seerrKnowsAboutMovie = mediaType !== "tv" && !!detail?.mediaStatus;
+  const locallyRequestedMovie = mediaType !== "tv" && locallyRequestedSeasons.includes(movieRequestedSentinel) && !seerrKnowsAboutMovie;
+  const canRequest = selection.source === "seerr" && !locallyRequestedMovie && (!detail?.mediaStatus || (detail.mediaStatus === seerrStatusPartiallyAvailable && mediaType === "tv" && requestableSeasons.length > 0));
+  // Once this browser has requested everything that's currently missing,
+  // keep showing the confirmation across a remount/refetch — but only
+  // while Seerr's own data hasn't caught up yet (seerrRequestableSeasons
+  // still non-empty / mediaStatus still 0). Once it has, this steps aside
+  // for seerrAvailabilityLabel below so the title looks like any other
+  // already-requested one instead of staying stuck on "Angefragt ✓".
+  const showRequestConfirmation = requestState === "done" || locallyRequestedMovie
+    || (mediaType === "tv" && locallyRequestedSeasons.length > 0 && requestableSeasons.length === 0 && seerrRequestableSeasons.length > 0);
   const seerrAvailabilityLabel = detail?.mediaStatus === seerrStatusAvailable ? "Verfügbar"
     : detail?.mediaStatus === seerrStatusPartiallyAvailable ? "Teilweise verfügbar"
     : detail?.mediaStatus === seerrStatusPending || detail?.mediaStatus === seerrStatusProcessing ? "Bereits angefragt"
@@ -956,6 +1021,18 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated, onHiddenChang
       setRequestState("done");
       setRequestModalOpen(false);
       onRequestCreated();
+      if (requestedStorageKey) {
+        const requestedNow = selection.mediaType === "tv" ? selectedSeasons : [movieRequestedSentinel];
+        const merged = Array.from(new Set([...locallyRequestedSeasons, ...requestedNow]));
+        setLocallyRequestedSeasons(merged);
+        try {
+          window.localStorage.setItem(requestedStorageKey, JSON.stringify(merged));
+        } catch {
+          // Best effort — a persistence failure just means the "Angefragt ✓"
+          // confirmation might not survive a remount, not that the request
+          // (which already succeeded above) is lost.
+        }
+      }
     } catch {
       setRequestState("error");
     }
@@ -1015,12 +1092,6 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated, onHiddenChang
               aria-label={favorite ? "Als Favorit in Emby entfernen" : "Als Favorit in Emby markieren"}
               title={favorite ? "Als Favorit in Emby entfernen" : "Als Favorit in Emby markieren"}
             ><Icon name="heart" /></button>
-            <button
-              type="button"
-              className="request-button secondary"
-              onClick={() => saveTracking({ ...tracking, rewatchCount: tracking.rewatchCount + 1 })}
-              title="Als erneut gesehen zählen"
-            >{tracking.rewatchCount > 0 ? `Erneut gesehen · ${tracking.rewatchCount}×` : "Erneut gesehen"}</button>
           </>}
           <label className="watchlist-toggle">
             <span>Merkliste</span>
@@ -1035,9 +1106,9 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated, onHiddenChang
             {tracking.hiddenInProgress ? "Wieder in „Noch nicht fertig“ zeigen" : "Aus „Noch nicht fertig“ ausblenden"}
           </button>
         </div>}
-        {selection.source === "seerr" && (canRequest || seerrAvailabilityLabel) && <div className="request-row">
-          {seerrAvailabilityLabel && <span className="media-availability-badge">{seerrAvailabilityLabel}</span>}
-          {canRequest && (requestState === "done"
+        {selection.source === "seerr" && (canRequest || seerrAvailabilityLabel || showRequestConfirmation) && <div className="request-row">
+          {seerrAvailabilityLabel && !showRequestConfirmation && <span className="media-availability-badge">{seerrAvailabilityLabel}</span>}
+          {(canRequest || showRequestConfirmation) && (showRequestConfirmation
             ? <p className="request-confirmation">Angefragt ✓</p>
             : <button type="button" className="request-button" onClick={() => setRequestModalOpen(true)}>Anfragen</button>)}
         </div>}

@@ -20,7 +20,6 @@ type MediaTracking struct {
 	PosterURL        string `json:"posterUrl"`
 	Rating           int    `json:"rating,omitempty"`
 	OnWatchlist      bool   `json:"onWatchlist"`
-	RewatchCount     int    `json:"rewatchCount"`
 	HiddenInProgress bool   `json:"hiddenInProgress,omitempty"`
 }
 
@@ -58,14 +57,14 @@ func NewPostgresTrackingStore(pool *pgxpool.Pool) *PostgresTrackingStore {
 // never rated, watchlisted or hidden it.
 func (store *PostgresTrackingStore) Get(ctx context.Context, embyUserID, mediaSource, mediaID string) (MediaTracking, bool, error) {
 	row := store.pool.QueryRow(ctx, `
-		SELECT media_source, media_id, media_type, title, poster_url, COALESCE(rating, 0), on_watchlist, rewatch_count, hidden_in_progress
+		SELECT media_source, media_id, media_type, title, poster_url, COALESCE(rating, 0), on_watchlist, hidden_in_progress
 		FROM media_tracking
 		WHERE emby_user_id = $1 AND media_source = $2 AND media_id = $3
 	`, embyUserID, mediaSource, mediaID)
 
 	var entry MediaTracking
 	err := row.Scan(&entry.MediaSource, &entry.MediaID, &entry.MediaType, &entry.Title, &entry.PosterURL,
-		&entry.Rating, &entry.OnWatchlist, &entry.RewatchCount, &entry.HiddenInProgress)
+		&entry.Rating, &entry.OnWatchlist, &entry.HiddenInProgress)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return MediaTracking{}, false, nil
 	}
@@ -81,26 +80,25 @@ func (store *PostgresTrackingStore) Get(ctx context.Context, embyUserID, mediaSo
 func (store *PostgresTrackingStore) Upsert(ctx context.Context, embyUserID string, entry MediaTracking) error {
 	_, err := store.pool.Exec(ctx, `
 		INSERT INTO media_tracking
-			(emby_user_id, media_source, media_id, media_type, title, poster_url, rating, on_watchlist, rewatch_count, hidden_in_progress, updated_at)
+			(emby_user_id, media_source, media_id, media_type, title, poster_url, rating, on_watchlist, hidden_in_progress, updated_at)
 		VALUES
-			($1, $2, $3, $4, $5, $6, NULLIF($7, 0), $8, $9, $10, CURRENT_TIMESTAMP)
+			($1, $2, $3, $4, $5, $6, NULLIF($7, 0), $8, $9, CURRENT_TIMESTAMP)
 		ON CONFLICT (emby_user_id, media_source, media_id) DO UPDATE SET
 			media_type         = EXCLUDED.media_type,
 			title              = EXCLUDED.title,
 			poster_url         = EXCLUDED.poster_url,
 			rating             = EXCLUDED.rating,
 			on_watchlist       = EXCLUDED.on_watchlist,
-			rewatch_count      = EXCLUDED.rewatch_count,
 			hidden_in_progress = EXCLUDED.hidden_in_progress,
 			updated_at         = CURRENT_TIMESTAMP
 	`, embyUserID, entry.MediaSource, entry.MediaID, entry.MediaType, entry.Title, entry.PosterURL,
-		entry.Rating, entry.OnWatchlist, entry.RewatchCount, entry.HiddenInProgress)
+		entry.Rating, entry.OnWatchlist, entry.HiddenInProgress)
 	return err
 }
 
 func (store *PostgresTrackingStore) Watchlist(ctx context.Context, embyUserID string) ([]MediaTracking, error) {
 	rows, err := store.pool.Query(ctx, `
-		SELECT media_source, media_id, media_type, title, poster_url, COALESCE(rating, 0), on_watchlist, rewatch_count, hidden_in_progress
+		SELECT media_source, media_id, media_type, title, poster_url, COALESCE(rating, 0), on_watchlist, hidden_in_progress
 		FROM media_tracking
 		WHERE emby_user_id = $1 AND on_watchlist
 		ORDER BY updated_at DESC
@@ -114,7 +112,7 @@ func (store *PostgresTrackingStore) Watchlist(ctx context.Context, embyUserID st
 
 func (store *PostgresTrackingStore) Ratings(ctx context.Context, embyUserID string) ([]MediaTracking, error) {
 	rows, err := store.pool.Query(ctx, `
-		SELECT media_source, media_id, media_type, title, poster_url, COALESCE(rating, 0), on_watchlist, rewatch_count, hidden_in_progress
+		SELECT media_source, media_id, media_type, title, poster_url, COALESCE(rating, 0), on_watchlist, hidden_in_progress
 		FROM media_tracking
 		WHERE emby_user_id = $1 AND rating IS NOT NULL
 		ORDER BY updated_at DESC
@@ -185,7 +183,7 @@ func scanTracking(rows pgx.Rows) ([]MediaTracking, error) {
 	for rows.Next() {
 		var entry MediaTracking
 		if err := rows.Scan(&entry.MediaSource, &entry.MediaID, &entry.MediaType, &entry.Title, &entry.PosterURL,
-			&entry.Rating, &entry.OnWatchlist, &entry.RewatchCount, &entry.HiddenInProgress); err != nil {
+			&entry.Rating, &entry.OnWatchlist, &entry.HiddenInProgress); err != nil {
 			return nil, err
 		}
 		results = append(results, entry)
