@@ -8,6 +8,25 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.59] - 2026-07-31
+
+### Fixed
+
+- The "Aus „Noch nicht fertig" ausblenden" button on the media detail
+  page showed for every Emby series regardless of watch progress —
+  including fully finished ones (e.g. Peaky Blinders), where it was
+  also functionally inert since finished series never appear in that
+  row to begin with. It now only shows for series that aren't fully
+  watched.
+- The favorite toggle on the media detail page used an unclear sparkle
+  icon with no indication of what clicking it does. It's now a heart
+  icon with a tooltip/label explaining it sets an Emby favorite, and
+  fills in visibly once activated.
+- The media detail page could be scrolled horizontally on mobile due
+  to long titles/meta text forcing the layout wider than the viewport.
+  It's now vertical-only, while the intentional season/provider
+  carousels keep scrolling horizontally as before.
+
 ## [0.8.58] - 2026-07-31
 
 ### Fixed
