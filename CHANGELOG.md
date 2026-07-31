@@ -8,6 +8,21 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.72] - 2026-07-31
+
+### Fixed
+
+- Die Kennzahlen-Kacheln (Platz, Sehzeit, Filme/Serien, Rekorde) hatten
+  uneinheitliche Icon-Größen/-Positionen, und die zweigeteilten Kacheln
+  quetschten ihre Werte auf Mobile auf Viertelbreite zusammen, sodass
+  Text mitten im Wort umbrach. Icons sind jetzt einheitlich 26px groß,
+  die Segmente stapeln sich unter 520px vertikal statt nebeneinander.
+
+### Changed
+
+- Logo/Icons: transparenter Hintergrund statt fester Füllfläche;
+  Quelldateien liegen jetzt zusätzlich unter `branding/logo/originals/`.
+
 ## [0.8.71] - 2026-07-31
 
 ### Fixed
