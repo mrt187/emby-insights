@@ -8,6 +8,16 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.69] - 2026-07-31
+
+### Changed
+
+- "Top Bewertet" on the home screen now ranks titles by the average of
+  everyone's own ratings given inside Emby Insights, instead of Emby's
+  community/critics rating.
+- Chats empty state now points to Thomas by name instead of a generic
+  first-person prompt.
+
 ## [0.8.68] - 2026-07-31
 
 ### Fixed

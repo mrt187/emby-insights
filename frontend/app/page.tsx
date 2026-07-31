@@ -19,7 +19,7 @@ type UserProfile = { memberSince: string; lastActiveDate: string; lastLoginDate:
 type UpcomingItem = { id: string; tmdbId: string; title: string; posterUrl: string; mediaType: string; availabilityDate: string; cinemaStartDate?: string; cinemaEndDate?: string; seasonNumber?: number; episodeNumber?: number; episodeTitle?: string };
 type RequestItem = { id: string; title: string; posterUrl: string; status: string; tmdbId: string; mediaType: string; availableSince?: string };
 type NewForYouItem = { id: string; title: string; posterUrl: string; dateCreated?: string };
-type TopRatedItem = { id: string; title: string; posterUrl: string; communityRating: number };
+type TopRatedItem = { id: string; mediaSource: string; mediaId: string; mediaType: string; title: string; posterUrl: string; averageRating: number };
 type ContinueWatchingItem = { id: string; title: string; posterUrl: string; progressPercent: number };
 type WatchedItem = { id: string; title: string; posterUrl: string; genres: string[]; lastPlayedDate: string; backdropUrl?: string; dateAdded?: string };
 type SeriesProgress = { id: string; title: string; posterUrl: string; watchedEpisodes: number; totalEpisodes: number };
@@ -64,7 +64,7 @@ function visibleNav(user: CurrentUser): { label: Page; icon: IconName }[] {
   return items;
 }
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.8.68";
+const APP_VERSION = "0.8.69";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -330,7 +330,7 @@ function Today({ upcoming, upcomingState, cinema, cinemaState, requests, request
     <PosterRow title="Noch nicht fertig" eyebrow="TEILWEISE GESEHEN" items={seriesInProgress} state={seriesInProgressState} emptyLabel="Keine Serien mit offenen Folgen." detail={(item) => `${item.watchedEpisodes} von ${item.totalEpisodes} Folgen`} progress={(item) => Math.round((item.watchedEpisodes / item.totalEpisodes) * 100)} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
     {features.requests && <PosterRow title="Meine Anfragen" eyebrow="SEERR · OFFEN" items={requests} state={requestState} emptyLabel="Keine offenen Anfragen." detail={(item) => item.status} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />}
     <PosterRow title="Neu für dich" eyebrow="IN DEN LETZTEN 14 TAGEN" items={newForYou} state={newForYouState} emptyLabel="Nichts Neues in den letzten 14 Tagen." detail={(item) => item.dateCreated ? `Hinzugefügt ${daysAgoWording(item.dateCreated)}` : "Ungesehen"} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
-    <PosterRow title="Top Bewertet" eyebrow="BELIEBT AUF EMBY" items={topRated} state={topRatedState} emptyLabel="Noch keine Bewertungen in deiner Bibliothek." detail={(item) => `★ ${item.communityRating.toFixed(1)}`} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
+    <PosterRow title="Top Bewertet" eyebrow="EURE BEWERTUNGEN" items={topRated} state={topRatedState} emptyLabel="Noch keine Bewertungen im Plugin." detail={(item) => `★ ${item.averageRating.toFixed(1)}`} onSelect={(item) => onSelectMedia(item.mediaSource === "seerr" ? { source: "seerr", id: item.mediaId, mediaType: item.mediaType } : { source: "emby", id: item.mediaId })} />
     {features.movieDates && <PosterRow title="Im Kino" eyebrow="KOMMENDE UND AKTUELLE KINOSTARTS" items={cinema} state={cinemaState} emptyLabel="Zurzeit keine Kinostarts." detail={cinemaWording} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />}
 
     {allEventsOpen && <RelevantAllScreen events={events} onClose={() => setAllEventsOpen(false)} />}
@@ -1512,7 +1512,7 @@ function UserChat({ userName, userId }: { userName: string; userId: string }) {
     <section className="chat-thread" aria-label="Chat mit dem Betreiber">
       {state === "loading" && <p className="poster-status" role="status">Wird geladen …</p>}
       {state === "error" && <p className="poster-status">Nicht verfügbar</p>}
-      {state === "ready" && messages.length === 0 && <p className="chat-empty">Schreib mir gern, wenn du eine Frage oder einen Wunsch hast.</p>}
+      {state === "ready" && messages.length === 0 && <p className="chat-empty">Schreib Thomas eine Nachricht bei Fragen oder Problemen.</p>}
       <ChatMessageList messages={messages} mineWhenFromAdmin={false} mineName={userName} mineAvatarSrc={`/api/me/avatar?u=${encodeURIComponent(userId)}`} theirsName="Admin" theirsAvatarSrc="/api/messages/admin-avatar" />
       <ChatComposer placeholder="Nachricht schreiben …" onSend={send} />
     </section>

@@ -30,6 +30,20 @@ type TrackingStore interface {
 	Watchlist(ctx context.Context, embyUserID string) ([]MediaTracking, error)
 	Ratings(ctx context.Context, embyUserID string) ([]MediaTracking, error)
 	HiddenInProgressIDs(ctx context.Context, embyUserID string) (map[string]bool, error)
+	TopRatings(ctx context.Context, limit int) ([]AggregatedRating, error)
+}
+
+// AggregatedRating is one title's rating averaged across every Emby Insights
+// user who rated it — the "Top Bewertet" home row, household taste rather
+// than Emby's own community/critics score.
+type AggregatedRating struct {
+	ID            string  `json:"id"`
+	MediaSource   string  `json:"mediaSource"`
+	MediaID       string  `json:"mediaId"`
+	MediaType     string  `json:"mediaType"`
+	Title         string  `json:"title"`
+	PosterURL     string  `json:"posterUrl"`
+	AverageRating float64 `json:"averageRating"`
 }
 
 type PostgresTrackingStore struct {
@@ -110,6 +124,36 @@ func (store *PostgresTrackingStore) Ratings(ctx context.Context, embyUserID stri
 	}
 	defer rows.Close()
 	return scanTracking(rows)
+}
+
+// TopRatings averages every user's rating per title across the whole
+// household and returns the highest-rated ones, most-agreed-on first when
+// averages tie.
+func (store *PostgresTrackingStore) TopRatings(ctx context.Context, limit int) ([]AggregatedRating, error) {
+	rows, err := store.pool.Query(ctx, `
+		SELECT media_source, media_id, MAX(media_type), MAX(title), MAX(poster_url), AVG(rating)::float8, COUNT(*)
+		FROM media_tracking
+		WHERE rating IS NOT NULL
+		GROUP BY media_source, media_id
+		ORDER BY AVG(rating) DESC, COUNT(*) DESC
+		LIMIT $1
+	`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []AggregatedRating
+	for rows.Next() {
+		var entry AggregatedRating
+		var count int
+		if err := rows.Scan(&entry.MediaSource, &entry.MediaID, &entry.MediaType, &entry.Title, &entry.PosterURL, &entry.AverageRating, &count); err != nil {
+			return nil, err
+		}
+		entry.ID = entry.MediaSource + ":" + entry.MediaID
+		results = append(results, entry)
+	}
+	return results, rows.Err()
 }
 
 // HiddenInProgressIDs returns the Emby item ids a user dismissed from "Noch

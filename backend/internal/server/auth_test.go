@@ -275,6 +275,9 @@ type fakeTrackingStore struct {
 
 	hiddenInProgress map[string]bool
 	hiddenErr        error
+
+	topRatings    []store.AggregatedRating
+	topRatingsErr error
 }
 
 func (fake *fakeTrackingStore) Get(_ context.Context, _, _, _ string) (store.MediaTracking, bool, error) {
@@ -297,6 +300,10 @@ func (fake *fakeTrackingStore) Ratings(_ context.Context, _ string) ([]store.Med
 
 func (fake *fakeTrackingStore) HiddenInProgressIDs(_ context.Context, _ string) (map[string]bool, error) {
 	return fake.hiddenInProgress, fake.hiddenErr
+}
+
+func (fake *fakeTrackingStore) TopRatings(_ context.Context, _ int) ([]store.AggregatedRating, error) {
+	return fake.topRatings, fake.topRatingsErr
 }
 
 type fakeSeriesInProgressReader struct {

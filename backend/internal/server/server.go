@@ -34,6 +34,7 @@ const comingSoonCacheTTL = 15 * time.Minute
 const discoverCacheTTL = 1 * time.Hour
 const statsCacheTTL = 5 * time.Minute
 const requestsCacheTTL = 5 * time.Minute
+const topRatedLimit = 15
 
 // imageCacheTTL is long because the cache key includes Emby's image tag,
 // which changes whenever the underlying image does — a cache hit is by
@@ -66,7 +67,6 @@ type App struct {
 	newForYou           emby.NewForYouReader
 	continueWatching    emby.ContinueWatchingReader
 	watched             emby.WatchedReader
-	topRated            emby.TopRatedReader
 	seriesInProgress    emby.SeriesInProgressReader
 	completed           emby.CompletedReader
 	profile             emby.ProfileReader
@@ -158,7 +158,6 @@ func New(cfg config.Config) (*App, error) {
 		newForYou:           embyClient,
 		continueWatching:    embyClient,
 		watched:             embyClient,
-		topRated:            embyClient,
 		seriesInProgress:    embyClient,
 		completed:           embyClient,
 		profile:             embyClient,
@@ -1601,11 +1600,10 @@ func (app *App) continueWatchingItems(writer http.ResponseWriter, request *http.
 }
 
 func (app *App) topRatedHandler(writer http.ResponseWriter, request *http.Request) {
-	identity, ok := app.identityFromRequest(writer, request)
-	if !ok {
+	if _, ok := app.identityFromRequest(writer, request); !ok {
 		return
 	}
-	items, err := app.topRated.TopRated(request.Context(), identity.UserID, app.live.watchedLibraries())
+	items, err := app.tracking.TopRatings(request.Context(), topRatedLimit)
 	if err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "top rated titles are unavailable"})
 		return
