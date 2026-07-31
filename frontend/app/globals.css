@@ -281,7 +281,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 
 /* ---------------------------------------------------------- metric cards */
 
-.week-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.week-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
 .records-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
 .watched-tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
 .watched-tile {
@@ -298,7 +298,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .watched-tile-label { position: relative; z-index: 1; padding: 16px; font-size: 20px; font-weight: 800; letter-spacing: -.4px; color: var(--text-primary); }
 
 .metric-card {
-  position: relative; overflow: hidden; min-height: 108px; padding: 14px 16px;
+  position: relative; overflow: hidden; min-height: 84px; padding: 12px 14px;
   border: 1px solid var(--line); border-radius: 14px;
   background: linear-gradient(150deg, rgb(28 38 47 / 88%), rgb(16 22 30 / 88%));
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%);
@@ -316,10 +316,20 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   font-size: clamp(20px, 2vw, 27px); letter-spacing: -1px; font-variant-numeric: tabular-nums;
 }
 .metric-card p { position: relative; z-index: 1; margin: 6px 0 4px; color: var(--text-secondary); font-size: 12px; }
-.metric-card small { position: relative; z-index: 1; color: var(--muted); font-size: 10px; }
+.metric-card small { position: relative; z-index: 1; display: block; margin-top: 4px; color: var(--muted); font-size: 10px; }
 .metric-card .up { color: #6edba5; }
 .metric-card .skeleton-value { display: block; width: 46%; height: 22px; margin: 2px 0 10px; }
 .metric-card .skeleton-detail { display: block; width: 70%; height: 10px; }
+.completed-card { display: flex; align-items: stretch; padding: 0; }
+.completed-card-segment {
+  flex: 1; display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
+  padding: 12px 14px; border: 0; background: transparent; font: inherit; color: inherit; text-align: left; cursor: pointer;
+}
+.completed-card-segment:disabled { cursor: default; opacity: .6; }
+.completed-card-segment strong { position: relative; z-index: 1; display: block; line-height: 1; font-size: clamp(20px, 2vw, 27px); letter-spacing: -1px; font-variant-numeric: tabular-nums; }
+.completed-card-segment small { position: relative; z-index: 1; display: block; margin-top: 4px; color: var(--muted); font-size: 10px; }
+.completed-card-segment .skeleton-value { display: block; width: 46%; height: 22px; margin: 2px 0 4px; }
+.completed-card-divider { width: 1px; margin: 12px 0; background: var(--line); }
 .genre-card strong { font-size: 15px; line-height: 1.15; overflow-wrap: anywhere; }
 .genre-card .metric-icon { position: absolute; right: 14px; top: 14px; }
 .rank-avatar-badge { position: relative; z-index: 1; display: block; width: 36px; height: 36px; margin-bottom: 8px; }

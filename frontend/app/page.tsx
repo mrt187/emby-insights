@@ -439,6 +439,27 @@ function MetricCard({ icon, tone, value, label, detail, positive, genre = false,
     : <article className={`metric-card tone-${tone}${genre ? " genre-card" : ""}`}>{inner}</article>;
 }
 
+// Replaces two separate "Filme abgeschlossen"/"Serien abgeschlossen"
+// MetricCards — the period was redundant with the period tabs directly
+// above this grid, and two full-height cards for one number each felt
+// heavy, so both counts live in one compact card as independently
+// clickable segments instead.
+function CompletedCard({ movies, series, loading, onOpenMovies, onOpenSeries }: { movies?: number; series?: number; loading?: boolean; onOpenMovies?: () => void; onOpenSeries?: () => void }) {
+  return <article className="metric-card completed-card tone-peach">
+    <button type="button" className="completed-card-segment" onClick={onOpenMovies} disabled={!onOpenMovies}>
+      <span className="metric-icon"><Icon name="movie" /></span>
+      {loading ? <span className="skeleton skeleton-value" aria-hidden="true" /> : <strong>{movies ?? "—"}</strong>}
+      <small>Filme</small>
+    </button>
+    <span className="completed-card-divider" aria-hidden="true" />
+    <button type="button" className="completed-card-segment" onClick={onOpenSeries} disabled={!onOpenSeries}>
+      <span className="metric-icon"><Icon name="series" /></span>
+      {loading ? <span className="skeleton skeleton-value" aria-hidden="true" /> : <strong>{series ?? "—"}</strong>}
+      <small>Serien</small>
+    </button>
+  </article>;
+}
+
 function WatchedCategoryTile({ label, items, onOpen }: { label: string; items: readonly WatchedItem[]; onOpen: () => void }) {
   const featured = items.length > 0
     ? [...items].sort((a, b) => (b.dateAdded ?? "").localeCompare(a.dateAdded ?? ""))[0]
@@ -469,8 +490,7 @@ function RankCard({ rank, name, userId }: { rank: number | null; name: string; u
       <span className={`rank-badge${medalClass}`}>{hasRank ? rank : "—"}</span>
     </span>
     <strong>{hasRank ? `Platz ${rank}` : "—"}</strong>
-    <p>Dein Platz</p>
-    <small>Nach Sehzeit unter allen Nutzern</small>
+    <small>Nach Sehzeit</small>
   </article>;
 }
 
@@ -593,8 +613,13 @@ function Stats({ user, onSelectMedia }: { user: { id: string; name: string }; on
     <section className="week-grid" aria-label={`Kennzahlen für ${period}`}>
       <RankCard rank={watchTimeRank} name={user.name} userId={user.id} />
       <MetricCard icon="clock" tone="blue" value={statistics ? formatDuration(statistics.watchSeconds) : "—"} label="Sehzeit" detail={statistics ? comparisonText(statistics) : loadingCopy(state)} loading={state === "loading"} />
-      <MetricCard icon="movie" tone="peach" value={statistics ? statistics.completedMovies : "—"} label="Filme abgeschlossen" detail={statistics ? period : loadingCopy(state)} loading={state === "loading"} onClick={statistics && statistics.completedMovies > 0 && completedMoviesState === "ready" ? () => setCompletedGridView("movies") : undefined} />
-      <MetricCard icon="series" tone="mint" value={statistics ? statistics.completedSeries : "—"} label="Serien abgeschlossen" detail={statistics ? period : loadingCopy(state)} loading={state === "loading"} onClick={statistics && statistics.completedSeries > 0 && completedSeriesState === "ready" ? () => setCompletedGridView("series") : undefined} />
+      <CompletedCard
+        loading={state === "loading"}
+        movies={statistics?.completedMovies}
+        series={statistics?.completedSeries}
+        onOpenMovies={statistics && statistics.completedMovies > 0 && completedMoviesState === "ready" ? () => setCompletedGridView("movies") : undefined}
+        onOpenSeries={statistics && statistics.completedSeries > 0 && completedSeriesState === "ready" ? () => setCompletedGridView("series") : undefined}
+      />
     </section>
 
     <section className="chart-grid">
@@ -605,8 +630,8 @@ function Stats({ user, onSelectMedia }: { user: { id: string; name: string }; on
     </section>
 
     <section className="records-grid" aria-label="Rekorde">
-      <MetricCard icon="clock" tone="lilac" value={longestSessionState === "ready" && longestSession ? formatDuration(longestSession.watchSeconds) : "—"} label="Längste Session" detail={longestSessionState === "ready" ? (longestSession?.itemName ?? "Keine Daten für diesen Zeitraum") : loadingCopy(longestSessionState)} loading={longestSessionState === "loading"} />
-      <MetricCard icon="genre" tone="peach" value={mostActiveDayState === "ready" && mostActiveDay ? formatFullDate(mostActiveDay.date) : "—"} label="Aktivster Tag" detail={mostActiveDayState === "ready" ? (mostActiveDay ? formatDuration(mostActiveDay.watchSeconds) : "Keine Daten für diesen Zeitraum") : loadingCopy(mostActiveDayState)} loading={mostActiveDayState === "loading"} />
+      <MetricCard icon="clock" tone="lilac" value={longestSessionState === "ready" && longestSession ? formatDuration(longestSession.watchSeconds) : "—"} label="Längste Session" detail={longestSessionState === "ready" ? (longestSession?.itemName ?? "Keine Daten") : loadingCopy(longestSessionState)} loading={longestSessionState === "loading"} />
+      <MetricCard icon="genre" tone="peach" value={mostActiveDayState === "ready" && mostActiveDay ? formatFullDate(mostActiveDay.date) : "—"} label="Aktivster Tag" detail={mostActiveDayState === "ready" ? (mostActiveDay ? formatDuration(mostActiveDay.watchSeconds) : "Keine Daten") : loadingCopy(mostActiveDayState)} loading={mostActiveDayState === "loading"} />
     </section>
 
     <section className="watched-tiles" aria-label="Gesehene Inhalte">
@@ -1623,4 +1648,4 @@ function goHomeAndRefresh() {
 }
 function loadingCopy(state: LoadState) { return state === "error" ? "Nicht verfügbar" : "Wird geladen …"; }
 function formatDuration(seconds: number) { const hours = Math.floor(seconds / 3600); const minutes = Math.floor((seconds % 3600) / 60); return hours > 0 ? `${hours}\u00a0Std. ${minutes}\u00a0Min.` : `${minutes}\u00a0Min.`; }
-function comparisonText(statistics: PersonalStats) { if (statistics.previousWatchSeconds === 0) return "Keine Vergleichsdaten"; const change = Math.round(((statistics.watchSeconds - statistics.previousWatchSeconds) / statistics.previousWatchSeconds) * 100); return `${change >= 0 ? "Mehr" : "Weniger"} als im vorherigen Zeitraum: ${new Intl.NumberFormat("de-DE").format(Math.abs(change))}\u00a0%`; }
+function comparisonText(statistics: PersonalStats) { if (statistics.previousWatchSeconds === 0) return "Keine Vergleichsdaten"; const change = Math.round(((statistics.watchSeconds - statistics.previousWatchSeconds) / statistics.previousWatchSeconds) * 100); return `${change >= 0 ? "+" : "\u2212"}${new Intl.NumberFormat("de-DE").format(Math.abs(change))}\u00a0% gg\u00fc. vorher`; }
