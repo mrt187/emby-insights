@@ -41,7 +41,7 @@ type MediaDetail = {
 };
 type MediaTrackingEntry = { mediaSource: string; mediaId: string; mediaType: string; title: string; posterUrl: string; rating?: number; onWatchlist: boolean; rewatchCount: number; hiddenInProgress?: boolean };
 function isRequestableSeason(season: MediaSeason | RequestableSeason): season is RequestableSeason { return !("id" in season); }
-type IconName = "home" | "chart" | "sparkle" | "user" | "bell" | "arrow" | "close" | "clock" | "movie" | "series" | "genre" | "medal" | "refresh" | "chat" | "settings";
+type IconName = "home" | "chart" | "sparkle" | "heart" | "user" | "bell" | "arrow" | "close" | "clock" | "movie" | "series" | "genre" | "medal" | "refresh" | "chat" | "settings";
 type Tone = "blue" | "peach" | "mint" | "lilac";
 type LoadState = "loading" | "ready" | "error";
 
@@ -239,6 +239,7 @@ function Icon({ name }: { name: IconName }) {
     home: <path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1V10Z" />,
     chart: <><path d="M4 20V10m8 10V4m8 16v-7" /><path d="M2 20h20" /></>,
     sparkle: <path d="m12 2 1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8L12 2Zm7 13 .8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z" />,
+    heart: <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78Z" />,
     user: <><circle cx="12" cy="8" r="3.5" /><path d="M4.5 21c.8-4 3.2-6 7.5-6s6.7 2 7.5 6" /></>,
     bell: <><path d="M18 10a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M10 22h4" /></>,
     arrow: <path d="M5 12h14m-6-6 6 6-6 6" />,
@@ -920,8 +921,9 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated, onHiddenChang
               onClick={toggleFavorite}
               disabled={favoriteBusy}
               aria-pressed={favorite}
-              aria-label={favorite ? "Aus Favoriten entfernen" : "Zu Favoriten hinzufügen"}
-            ><Icon name="sparkle" /></button>
+              aria-label={favorite ? "Als Favorit in Emby entfernen" : "Als Favorit in Emby markieren"}
+              title={favorite ? "Als Favorit in Emby entfernen" : "Als Favorit in Emby markieren"}
+            ><Icon name="heart" /></button>
           </>}
           <label className="watchlist-toggle">
             <span>Merkliste</span>
@@ -931,7 +933,7 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated, onHiddenChang
             </span>
           </label>
         </div>
-        {selection.source === "emby" && detail.isSeries && <div className="request-row">
+        {selection.source === "emby" && detail.isSeries && status !== "Angesehen" && <div className="request-row">
           <button type="button" className="request-button secondary" onClick={() => saveTracking({ ...tracking, hiddenInProgress: !tracking.hiddenInProgress })}>
             {tracking.hiddenInProgress ? "Wieder in „Noch nicht fertig“ zeigen" : "Aus „Noch nicht fertig“ ausblenden"}
           </button>
