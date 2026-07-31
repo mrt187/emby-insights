@@ -8,6 +8,14 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.65] - 2026-07-31
+
+### Fixed
+
+- The new `/api/images` proxy (0.8.64) rejected every poster/backdrop with
+  a 400 — Emby's image tags are often a GUID and a tick count joined with
+  an underscore, which the tag validation didn't allow.
+
 ## [0.8.64] - 2026-07-31
 
 ### Fixed

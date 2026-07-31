@@ -1536,9 +1536,10 @@ func (app *App) adminActivity(writer http.ResponseWriter, request *http.Request)
 // with the admin API key.
 var validEmbyItemID = regexp.MustCompile(`^[A-Za-z0-9-]{1,64}$`)
 
-// validImageTag matches Emby's image tags (hex-ish cache-busting hashes),
-// which are interpolated into a URL sent to Emby with the admin API key.
-var validImageTag = regexp.MustCompile(`^[A-Za-z0-9]{1,64}$`)
+// validImageTag matches Emby's image tags — often a GUID plus a tick count
+// joined with an underscore (e.g. "320bb58c..._639205781665227668") — which
+// are interpolated into a URL sent to Emby with the admin API key.
+var validImageTag = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 
 // setFavoriteHandler returns a handler for both the POST and DELETE Emby
 // favorite routes, since they differ only in which way the toggle goes.
