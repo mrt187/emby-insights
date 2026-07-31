@@ -8,6 +8,14 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.66] - 2026-07-31
+
+### Fixed
+
+- Some posters/backdrops still 400'd after 0.8.65 — items with multiple
+  image versions get longer, multi-segment Emby image tags that exceeded
+  the tag validation's 64-character cap. Raised it to 200.
+
 ## [0.8.65] - 2026-07-31
 
 ### Fixed
