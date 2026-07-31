@@ -394,6 +394,14 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 }
 .poster-entry strong { margin-top: 2px; color: #f1f6f3; font-size: 13px; }
 .poster-entry small { margin-top: 4px; color: #98dcb2; font-size: 11px; }
+/* Season titles can be full sentences on anthology shows (e.g. "Monster:
+   The Jeffrey Dahmer Story" as the season name, not just "Staffel 1") —
+   single-line ellipsis truncated those to a few characters, so this scope
+   allows up to two lines instead. */
+.media-detail-seasons .poster-entry strong {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; white-space: normal; overflow-wrap: break-word;
+}
 .poster-entry .rating-stars { color: #f6cf6b; letter-spacing: 1px; }
 .poster-status { color: #9db3a7; font-size: 13px; padding: 4px 2px; }
 
@@ -530,8 +538,8 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   color: var(--text-secondary); font-weight: 700; font-size: 20px;
 }
 .cast-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.cast-entry strong { font-size: 12px; font-weight: 700; }
-.cast-entry small { color: var(--muted); font-size: 11px; }
+.cast-entry strong { font-size: 12px; font-weight: 700; overflow-wrap: break-word; }
+.cast-entry small { color: var(--muted); font-size: 11px; overflow-wrap: break-word; }
 
 .search-form { display: flex; gap: 10px; margin-bottom: 8px; }
 .search-input {
@@ -599,12 +607,13 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 @keyframes request-modal-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes request-modal-rise { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
 .request-modal-head { display: flex; gap: 14px; align-items: center; }
+.request-modal-head > div { min-width: 0; }
 .request-modal-poster {
   width: 56px; height: 84px; flex-shrink: 0; border-radius: 8px; overflow: hidden;
   background: linear-gradient(135deg, #24312c, #384a3f);
 }
 .request-modal-poster img { width: 100%; height: 100%; object-fit: cover; }
-.request-modal-head h3 { margin: 2px 0 0; font-size: 17px; font-weight: 800; letter-spacing: -.2px; }
+.request-modal-head h3 { margin: 2px 0 0; font-size: 17px; font-weight: 800; letter-spacing: -.2px; overflow-wrap: break-word; }
 .season-list { display: grid; gap: 8px; max-height: 260px; overflow-y: auto; padding-right: 2px; }
 .season-toggle-row {
   display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px;

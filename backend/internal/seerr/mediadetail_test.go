@@ -104,10 +104,12 @@ func TestMediaDetailMarksAvailableSeasonsFromMediaInfo(t *testing.T) {
 		writer.Header().Set("Content-Type", "application/json")
 		_, _ = writer.Write([]byte(`{"name":"The Sopranos","firstAirDate":"1999-01-10","seasons":[
 			{"seasonNumber":1,"episodeCount":13},
-			{"seasonNumber":2,"episodeCount":13}
+			{"seasonNumber":2,"episodeCount":13},
+			{"seasonNumber":3,"episodeCount":13}
 		],"mediaInfo":{"status":4,"seasons":[
 			{"seasonNumber":1,"status":5},
-			{"seasonNumber":2,"status":2}
+			{"seasonNumber":2,"status":2},
+			{"seasonNumber":3,"status":4}
 		]}}`))
 	}))
 	defer testServer.Close()
@@ -119,7 +121,7 @@ func TestMediaDetailMarksAvailableSeasonsFromMediaInfo(t *testing.T) {
 	if detail.MediaStatus != 4 {
 		t.Fatalf("MediaStatus = %d, want 4 (partially available)", detail.MediaStatus)
 	}
-	if len(detail.Seasons) != 2 {
+	if len(detail.Seasons) != 3 {
 		t.Fatalf("Seasons = %#v", detail.Seasons)
 	}
 	if !detail.Seasons[0].Available {
@@ -133,6 +135,12 @@ func TestMediaDetailMarksAvailableSeasonsFromMediaInfo(t *testing.T) {
 	}
 	if !detail.Seasons[1].Requested {
 		t.Fatalf("season 2 = %#v, want Requested (status 2 pending in mediaInfo)", detail.Seasons[1])
+	}
+	if detail.Seasons[2].Available {
+		t.Fatalf("season 3 = %#v, want not Available (status 4 partially available in mediaInfo)", detail.Seasons[2])
+	}
+	if !detail.Seasons[2].Requested {
+		t.Fatalf("season 3 = %#v, want Requested (status 4 partially available means already spoken for)", detail.Seasons[2])
 	}
 }
 

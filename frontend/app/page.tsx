@@ -832,13 +832,20 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated, onHiddenChang
   const [favoriteBusy, setFavoriteBusy] = useState(false);
   const mediaType = selection.source === "seerr" ? selection.mediaType : undefined;
 
+  // Guards against the initial GET resolving after the user already saved a
+  // local change (e.g. clicked "Erneut gesehen" on a slow connection) — a
+  // late GET response would otherwise clobber the newer optimistic value
+  // back down to whatever was in the DB when the fetch started.
+  const trackingWrittenRef = useRef(false);
+
   useEffect(() => {
     let active = true;
+    trackingWrittenRef.current = false;
     fetch(`/api/tracking?source=${selection.source}&id=${encodeURIComponent(selection.id)}`, { credentials: "include" })
       .then(async (response) => {
         if (!response.ok) throw new Error("tracking unavailable");
         const data: MediaTrackingEntry = await response.json();
-        if (active) setTracking({ rating: data.rating ?? 0, onWatchlist: data.onWatchlist, hiddenInProgress: data.hiddenInProgress ?? false, rewatchCount: data.rewatchCount ?? 0 });
+        if (active && !trackingWrittenRef.current) setTracking({ rating: data.rating ?? 0, onWatchlist: data.onWatchlist, hiddenInProgress: data.hiddenInProgress ?? false, rewatchCount: data.rewatchCount ?? 0 });
       })
       .catch(() => null);
     return () => { active = false; };
@@ -847,6 +854,7 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated, onHiddenChang
   // Always resends hiddenInProgress (Upsert overwrites the whole row), so a
   // plain rating/watchlist change never silently un-hides a dismissed series.
   const saveTracking = (next: { rating: number; onWatchlist: boolean; hiddenInProgress: boolean; rewatchCount: number }) => {
+    trackingWrittenRef.current = true;
     setTracking(next);
     if (!detail) return;
     fetch("/api/tracking", {

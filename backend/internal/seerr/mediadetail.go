@@ -175,16 +175,17 @@ func (client *Client) MediaDetail(ctx context.Context, mediaType string, tmdbID 
 			continue
 		}
 		const (
-			seerrStatusPending    = 2
-			seerrStatusProcessing = 3
-			seerrStatusAvailable  = 5
+			seerrStatusPending            = 2
+			seerrStatusProcessing         = 3
+			seerrStatusPartiallyAvailable = 4
+			seerrStatusAvailable          = 5
 		)
 		status := seasonAvailability[season.SeasonNumber]
 		detail.Seasons = append(detail.Seasons, RequestableSeason{
 			SeasonNumber: season.SeasonNumber,
 			EpisodeCount: season.EpisodeCount,
 			Available:    status == seerrStatusAvailable,
-			Requested:    status == seerrStatusPending || status == seerrStatusProcessing,
+			Requested:    status == seerrStatusPending || status == seerrStatusProcessing || status == seerrStatusPartiallyAvailable,
 		})
 	}
 	if result.PosterPath != "" {
