@@ -336,14 +336,12 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .completed-card-segment small { position: relative; z-index: 1; display: block; margin-top: 4px; color: var(--muted); font-size: 10px; }
 .completed-card-segment .skeleton-value { display: block; width: 46%; height: 22px; margin: 2px 0 4px; }
 .completed-card-divider { width: 1px; margin: 12px 0; background: var(--line); }
-.genre-card strong { font-size: 15px; line-height: 1.15; overflow-wrap: anywhere; }
-.genre-card .metric-icon { position: absolute; right: 14px; top: 14px; }
-.rank-avatar-badge { position: relative; z-index: 1; display: block; width: 36px; height: 36px; margin-bottom: 8px; }
-.rank-avatar { position: relative; display: block; width: 36px; height: 36px; border: 2px solid rgb(241 246 243 / 66%); border-radius: 50%; overflow: hidden; background: var(--ink); }
+.rank-avatar-badge { position: relative; z-index: 1; display: block; width: 26px; height: 26px; margin-bottom: 8px; }
+.rank-avatar { position: relative; display: block; width: 26px; height: 26px; border: 2px solid rgb(241 246 243 / 66%); border-radius: 50%; overflow: hidden; background: var(--ink); }
 .rank-badge {
-  position: absolute; right: -4px; bottom: -4px; z-index: 1; min-width: 20px; height: 20px; padding: 0 4px;
+  position: absolute; right: -4px; bottom: -4px; z-index: 1; min-width: 16px; height: 16px; padding: 0 3px;
   display: grid; place-items: center; border: 2px solid var(--ink-raised); border-radius: 999px;
-  color: #15191d; font-size: 10px; font-weight: 900; font-variant-numeric: tabular-nums;
+  color: #15191d; font-size: 9px; font-weight: 900; font-variant-numeric: tabular-nums;
   background: linear-gradient(145deg, #cdd3d7, #818a91); box-shadow: 0 3px 8px rgb(0 0 0 / 32%);
 }
 .rank-badge.gold { background: linear-gradient(145deg, #ffe69a, #c59124); }
@@ -959,7 +957,8 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   .text-button { font-size: 11px; }
 
   .week-grid { gap: 10px; }
-  .genre-card { min-height: 96px; }
+  .completed-card { flex-direction: column; }
+  .completed-card-divider { width: auto; height: 1px; margin: 0 14px; }
 
   .poster-entry { flex-basis: 143px; }
   .poster.wide { height: 206px; border-radius: 16px; }

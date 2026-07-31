@@ -445,13 +445,13 @@ function RelevantAllScreen({ events, onClose }: { events: RelevantEvent[]; onClo
   </div>;
 }
 
-function MetricCard({ icon, tone, value, label, detail, positive, genre = false, loading, onClick }: { icon: IconName; tone: Tone; value: string | number; label: string; detail: string; positive?: boolean; genre?: boolean; loading?: boolean; onClick?: () => void }) {
+function MetricCard({ icon, tone, value, label, detail, positive, loading, onClick }: { icon: IconName; tone: Tone; value: string | number; label: string; detail: string; positive?: boolean; loading?: boolean; onClick?: () => void }) {
   const inner = loading
     ? <><span className="metric-icon"><Icon name={icon} /></span><span className="skeleton skeleton-value" aria-hidden="true" /><p>{label}</p><span className="skeleton skeleton-detail" aria-hidden="true" /><span className="sr-only" role="status">Wird geladen …</span></>
     : <><span className="metric-icon"><Icon name={icon} /></span><strong>{value}</strong><p>{label}</p><small className={positive ? "up" : undefined}>{detail}</small></>;
   return onClick
-    ? <button type="button" className={`metric-card metric-card-button tone-${tone}${genre ? " genre-card" : ""}`} onClick={onClick}>{inner}</button>
-    : <article className={`metric-card tone-${tone}${genre ? " genre-card" : ""}`}>{inner}</article>;
+    ? <button type="button" className={`metric-card metric-card-button tone-${tone}`} onClick={onClick}>{inner}</button>
+    : <article className={`metric-card tone-${tone}`}>{inner}</article>;
 }
 
 // Replaces two separate "Filme abgeschlossen"/"Serien abgeschlossen"
