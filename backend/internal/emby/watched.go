@@ -18,6 +18,11 @@ type WatchedItem struct {
 	PosterURL      string   `json:"posterUrl"`
 	Genres         []string `json:"genres"`
 	LastPlayedDate string   `json:"lastPlayedDate"`
+	// BackdropURL and DateAdded are used by the frontend to pick a hero image
+	// for the "most recently added" title in a watched list — omitted when
+	// Emby has no backdrop for the item.
+	BackdropURL string `json:"backdropUrl,omitempty"`
+	DateAdded   string `json:"dateAdded,omitempty"`
 }
 
 type WatchedReader interface {
@@ -68,6 +73,10 @@ func (client *Client) watchedItems(ctx context.Context, userID, itemType string,
 		if item.ImageTags.Primary != "" {
 			posterURL = fmt.Sprintf("%s/Items/%s/Images/Primary?tag=%s&maxWidth=400", client.baseURL, item.Id, item.ImageTags.Primary)
 		}
+		var backdropURL string
+		if len(item.BackdropImageTags) > 0 {
+			backdropURL = fmt.Sprintf("%s/Items/%s/Images/Backdrop?tag=%s&maxWidth=1600", client.baseURL, item.Id, item.BackdropImageTags[0])
+		}
 
 		items = append(items, WatchedItem{
 			ID:             item.Id,
@@ -75,6 +84,8 @@ func (client *Client) watchedItems(ctx context.Context, userID, itemType string,
 			PosterURL:      posterURL,
 			Genres:         item.Genres,
 			LastPlayedDate: lastPlayedDate,
+			BackdropURL:    backdropURL,
+			DateAdded:      item.DateCreated,
 		})
 	}
 
@@ -86,10 +97,12 @@ func (client *Client) watchedItems(ctx context.Context, userID, itemType string,
 }
 
 type embyWatchedCandidate struct {
-	Id        string   `json:"Id"`
-	Name      string   `json:"Name"`
-	Genres    []string `json:"Genres"`
-	ImageTags struct {
+	Id                string   `json:"Id"`
+	Name              string   `json:"Name"`
+	Genres            []string `json:"Genres"`
+	DateCreated       string   `json:"DateCreated"`
+	BackdropImageTags []string `json:"BackdropImageTags"`
+	ImageTags         struct {
 		Primary string `json:"Primary"`
 	} `json:"ImageTags"`
 }
@@ -101,7 +114,7 @@ func (client *Client) watchedItemsInLibrary(ctx context.Context, userID, itemTyp
 		"IncludeItemTypes": {itemType},
 		"SortBy":           {"DatePlayed"},
 		"SortOrder":        {"Descending"},
-		"Fields":           {"Genres"},
+		"Fields":           {"Genres,DateCreated,BackdropImageTags"},
 		"Limit":            {strconv.Itoa(limit)},
 		"Recursive":        {"true"},
 	}

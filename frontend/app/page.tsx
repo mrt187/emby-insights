@@ -21,7 +21,7 @@ type RequestItem = { id: string; title: string; posterUrl: string; status: strin
 type NewForYouItem = { id: string; title: string; posterUrl: string };
 type TopRatedItem = { id: string; title: string; posterUrl: string; communityRating: number };
 type ContinueWatchingItem = { id: string; title: string; posterUrl: string; progressPercent: number };
-type WatchedItem = { id: string; title: string; posterUrl: string; genres: string[]; lastPlayedDate: string };
+type WatchedItem = { id: string; title: string; posterUrl: string; genres: string[]; lastPlayedDate: string; backdropUrl?: string; dateAdded?: string };
 type SeriesProgress = { id: string; title: string; posterUrl: string; watchedEpisodes: number; totalEpisodes: number };
 type DiscoverItem = { id: string; title: string; posterUrl: string; mediaType: string };
 type MediaSelection = { source: "emby"; id: string } | { source: "seerr"; id: string; mediaType: string };
@@ -139,6 +139,14 @@ function useEscapeKey(onEscape: () => void) {
   }, [onEscape]);
 }
 
+function useBodyScrollLock() {
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previous; };
+  }, []);
+}
+
 export default function Home() {
   const [page, setPage] = useState<Page>("Heute");
   const [noticeOpen, setNoticeOpen] = useState(false);
@@ -163,6 +171,7 @@ export default function Home() {
   const [newForYouItems, newForYouState] = useApiResource<NewForYouItem[]>(user ? "/api/new-for-you" : null, []);
   const [topRatedItems, topRatedState] = useApiResource<TopRatedItem[]>(user ? "/api/top-rated" : null, []);
   const [seriesInProgress, seriesInProgressState, refetchSeriesInProgress] = useApiResource<SeriesProgress[]>(user ? "/api/series-in-progress" : null, []);
+  const [continueWatching, continueWatchingState] = useApiResource<ContinueWatchingItem[]>(user ? "/api/continue-watching" : null, []);
   const [availableRequests] = useApiResource<RequestItem[]>(user?.features.requests ? "/api/requests/available" : null, []);
   const [userProfile] = useApiResource<UserProfile | null>(user ? "/api/me/profile" : null, null);
 
@@ -222,7 +231,7 @@ export default function Home() {
           </div>}
         </div>
       </header>
-      {page === "Heute" && <Today upcoming={upcomingItems} upcomingState={upcomingState} cinema={cinemaItems} cinemaState={cinemaState} requests={requestItems} requestState={requestState} newForYou={newForYouItems} newForYouState={newForYouState} topRated={topRatedItems} topRatedState={topRatedState} seriesInProgress={seriesInProgress} seriesInProgressState={seriesInProgressState} availableRequests={availableRequests} features={user.features} message={messagePreview} onSelectMedia={setSelectedMedia} onOpenChats={() => selectPage("Chats")} />}
+      {page === "Heute" && <Today upcoming={upcomingItems} upcomingState={upcomingState} cinema={cinemaItems} cinemaState={cinemaState} requests={requestItems} requestState={requestState} newForYou={newForYouItems} newForYouState={newForYouState} topRated={topRatedItems} topRatedState={topRatedState} seriesInProgress={seriesInProgress} seriesInProgressState={seriesInProgressState} continueWatching={continueWatching} continueWatchingState={continueWatchingState} availableRequests={availableRequests} features={user.features} message={messagePreview} onSelectMedia={setSelectedMedia} onOpenChats={() => selectPage("Chats")} />}
       {page === "Statistik" && user.features.statistics && <Stats user={user} onSelectMedia={setSelectedMedia} />}
       {page === "Anfragen" && user.features.requests && <Requests onSelectMedia={setSelectedMedia} />}
       {page === "Chats" && <Chats user={user} />}
@@ -270,11 +279,12 @@ function UserAvatar({ name, userId }: { name: string; userId: string }) {
   return <PersonAvatar name={name} src={`/api/me/avatar?u=${encodeURIComponent(userId)}`} />;
 }
 
-function Today({ upcoming, upcomingState, cinema, cinemaState, requests, requestState, newForYou, newForYouState, topRated, topRatedState, seriesInProgress, seriesInProgressState, availableRequests, features, message, onSelectMedia, onOpenChats }: {
+function Today({ upcoming, upcomingState, cinema, cinemaState, requests, requestState, newForYou, newForYouState, topRated, topRatedState, seriesInProgress, seriesInProgressState, continueWatching, continueWatchingState, availableRequests, features, message, onSelectMedia, onOpenChats }: {
 	upcoming: UpcomingItem[]; upcomingState: LoadState; requests: RequestItem[]; requestState: LoadState;
 	cinema: UpcomingItem[]; cinemaState: LoadState;
   newForYou: NewForYouItem[]; newForYouState: LoadState; topRated: TopRatedItem[]; topRatedState: LoadState; availableRequests: RequestItem[];
   seriesInProgress: SeriesProgress[]; seriesInProgressState: LoadState;
+  continueWatching: ContinueWatchingItem[]; continueWatchingState: LoadState;
   features: Features;
   message: { preview: string } | null;
   onSelectMedia: (selection: MediaSelection) => void; onOpenChats: () => void;
@@ -300,6 +310,7 @@ function Today({ upcoming, upcomingState, cinema, cinemaState, requests, request
 
   return <div className="content today-view">
     <RelevantNow events={events} onShowAll={() => setAllEventsOpen(true)} />
+    <PosterRow title="Was ich gerade schaue" eyebrow="WEITERSCHAUEN" items={continueWatching} state={continueWatchingState} emptyLabel="Nichts in Bearbeitung." detail={(item) => `${item.progressPercent} % gesehen`} progress={(item) => item.progressPercent} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
     {features.upcoming && <PosterRow title="Demnächst" eyebrow="IN DEN NÄCHSTEN 4 WOCHEN AUF EMBY" items={visibleUpcoming} state={upcomingState} emptyLabel="Nichts Neues in den nächsten vier Wochen." itemTitle={upcomingTitle} detail={(item) => availabilityWording(item.availabilityDate)} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />}
     <PosterRow title="Noch nicht fertig" eyebrow="TEILWEISE GESEHEN" items={seriesInProgress} state={seriesInProgressState} emptyLabel="Keine Serien mit offenen Folgen." detail={(item) => `${item.watchedEpisodes} von ${item.totalEpisodes} Folgen`} progress={(item) => Math.round((item.watchedEpisodes / item.totalEpisodes) * 100)} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
     {features.requests && <PosterRow title="Meine Anfragen" eyebrow="SEERR · OFFEN" items={requests} state={requestState} emptyLabel="Keine offenen Anfragen." detail={(item) => item.status} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />}
@@ -408,6 +419,7 @@ function RelevantRow({ event, onOpen }: { event: RelevantEvent; onOpen?: () => v
 
 function RelevantAllScreen({ events, onClose }: { events: RelevantEvent[]; onClose: () => void }) {
   useEscapeKey(onClose);
+  useBodyScrollLock();
 
   return <div className="media-detail-overlay media-grid-overlay" role="dialog" aria-modal="true" aria-label="Jetzt relevant">
     <div className="media-detail-scroll">
@@ -425,6 +437,22 @@ function MetricCard({ icon, tone, value, label, detail, positive, genre = false,
   return onClick
     ? <button type="button" className={`metric-card metric-card-button tone-${tone}${genre ? " genre-card" : ""}`} onClick={onClick}>{inner}</button>
     : <article className={`metric-card tone-${tone}${genre ? " genre-card" : ""}`}>{inner}</article>;
+}
+
+function WatchedCategoryTile({ label, items, onOpen }: { label: string; items: readonly WatchedItem[]; onOpen: () => void }) {
+  const featured = items.length > 0
+    ? [...items].sort((a, b) => (b.dateAdded ?? "").localeCompare(a.dateAdded ?? ""))[0]
+    : undefined;
+  return <button
+    type="button"
+    className="watched-tile"
+    style={featured?.backdropUrl ? { backgroundImage: `url(${featured.backdropUrl})` } : undefined}
+    onClick={onOpen}
+    aria-label={`${label} anzeigen`}
+  >
+    <span className="watched-tile-scrim" />
+    <span className="watched-tile-label">{label}</span>
+  </button>;
 }
 
 // Same vertical flow as MetricCard (icon, then strong/p/small stacked in
@@ -545,11 +573,11 @@ function BarChart({ title, data, formatValue, loading }: { title: string; data: 
 function Stats({ user, onSelectMedia }: { user: { id: string; name: string }; onSelectMedia: (selection: MediaSelection) => void }) {
   const [period, setPeriod] = useState<Period>("Woche");
   const [completedGridView, setCompletedGridView] = useState<"movies" | "series" | null>(null);
+  const [watchedGridView, setWatchedGridView] = useState<"movies" | "series" | null>(null);
 
   const [statistics, state] = useApiResource<PersonalStats | null>(`/api/stats?period=${apiPeriod[period]}`, null);
   const [watchTimeRankData] = useApiResource<WatchTimeRank | null>("/api/stats/rank", null);
   const watchTimeRank = watchTimeRankData?.rank ?? null;
-  const [continueWatching, continueWatchingState] = useApiResource<ContinueWatchingItem[]>("/api/continue-watching", []);
   const [watchedMovies, watchedMoviesState] = useApiResource<WatchedItem[]>("/api/watched-movies", []);
   const [watchedSeries, watchedSeriesState] = useApiResource<WatchedItem[]>("/api/watched-series", []);
   const [completedMovies, completedMoviesState] = useApiResource<WatchedItem[]>(`/api/completed-movies?period=${apiPeriod[period]}`, []);
@@ -569,10 +597,6 @@ function Stats({ user, onSelectMedia }: { user: { id: string; name: string }; on
       <MetricCard icon="series" tone="mint" value={statistics ? statistics.completedSeries : "—"} label="Serien abgeschlossen" detail={statistics ? period : loadingCopy(state)} loading={state === "loading"} onClick={statistics && statistics.completedSeries > 0 && completedSeriesState === "ready" ? () => setCompletedGridView("series") : undefined} />
     </section>
 
-    <PosterRow title="Was ich gerade schaue" eyebrow="WEITERSCHAUEN" items={continueWatching} state={continueWatchingState} emptyLabel="Nichts in Bearbeitung." detail={(item) => `${item.progressPercent} % gesehen`} progress={(item) => item.progressPercent} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
-    <PosterRow title="Gesehene Filme" eyebrow="ALLE" items={watchedMovies} state={watchedMoviesState} emptyLabel="Noch keine Filme abgeschlossen." detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
-    <PosterRow title="Gesehene Serien" eyebrow="ALLE" items={watchedSeries} state={watchedSeriesState} emptyLabel="Noch keine Serien abgeschlossen." detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
-
     <section className="chart-grid">
       <BarChart title="Meistgesehene Genres" data={topGenres(watchedMovies, watchedSeries)} loading={watchedMoviesState === "loading" || watchedSeriesState === "loading"} />
       <BarChart title="Aktivität nach Wochentag" data={weekdayStatsState === "ready" ? weekdayChartData(weekdayStats) : []} formatValue={formatDuration} loading={weekdayStatsState === "loading"} />
@@ -585,8 +609,15 @@ function Stats({ user, onSelectMedia }: { user: { id: string; name: string }; on
       <MetricCard icon="genre" tone="peach" value={mostActiveDayState === "ready" && mostActiveDay ? formatFullDate(mostActiveDay.date) : "—"} label="Aktivster Tag" detail={mostActiveDayState === "ready" ? (mostActiveDay ? formatDuration(mostActiveDay.watchSeconds) : "Keine Daten für diesen Zeitraum") : loadingCopy(mostActiveDayState)} loading={mostActiveDayState === "loading"} />
     </section>
 
+    <section className="watched-tiles" aria-label="Gesehene Inhalte">
+      <WatchedCategoryTile label="Filme" items={watchedMovies} onOpen={() => setWatchedGridView("movies")} />
+      <WatchedCategoryTile label="Serien" items={watchedSeries} onOpen={() => setWatchedGridView("series")} />
+    </section>
+
     {completedGridView === "movies" && <MediaGridScreen title={`Filme abgeschlossen · ${period}`} items={completedMovies} detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setCompletedGridView(null)} />}
     {completedGridView === "series" && <MediaGridScreen title={`Serien abgeschlossen · ${period}`} items={completedSeries} detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setCompletedGridView(null)} />}
+    {watchedGridView === "movies" && <MediaGridScreen title="Gesehene Filme" items={watchedMovies} detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setWatchedGridView(null)} />}
+    {watchedGridView === "series" && <MediaGridScreen title="Gesehene Serien" items={watchedSeries} detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setWatchedGridView(null)} />}
   </div>;
 }
 
@@ -596,6 +627,7 @@ function MediaGridScreen<T extends { id: string; title: string; posterUrl?: stri
   onSelect?: (item: T) => void; onClose: () => void;
 }) {
   useEscapeKey(onClose);
+  useBodyScrollLock();
 
   return <div className="media-detail-overlay media-grid-overlay" role="dialog" aria-modal="true" aria-label={title}>
     <div className="media-detail-scroll">
@@ -740,6 +772,7 @@ function OverviewText({ text }: { text: string }) {
   </>;
 }
 function MediaDetailScreen({ selection, onClose, onRequestCreated, onHiddenChanged }: { selection: MediaSelection; onClose: () => void; onRequestCreated: () => void; onHiddenChanged?: () => void }) {
+  useBodyScrollLock();
   const [detail, setDetail] = useState<MediaDetail | null>(null);
   const [state, setState] = useState<LoadState>("loading");
   const [selectedSeasons, setSelectedSeasons] = useState<number[]>([]);
@@ -1500,6 +1533,7 @@ function BroadcastScreen({ onClose, onSent }: { onClose: () => void; onSent: () 
 
 function ContactPickerScreen({ contacts, onSelect, onClose }: { contacts: Contact[]; onSelect: (contact: Contact) => void; onClose: () => void }) {
   useEscapeKey(onClose);
+  useBodyScrollLock();
   return <div className="media-detail-overlay media-grid-overlay" role="dialog" aria-modal="true" aria-label="Neuen Chat starten">
     <div className="media-detail-scroll">
       <button type="button" className="media-detail-close" onClick={onClose} aria-label="Schließen"><Icon name="close" /></button>
@@ -1518,6 +1552,7 @@ function ContactPickerScreen({ contacts, onSelect, onClose }: { contacts: Contac
 
 function AdminChatThreadScreen({ thread, adminName, adminUserId, onClose }: { thread: ChatThread; adminName: string; adminUserId: string; onClose: () => void }) {
   useEscapeKey(onClose);
+  useBodyScrollLock();
   const [messages, state, refetch] = useApiResource<ChatMessage[]>(`/api/admin/messages/thread?userId=${encodeURIComponent(thread.userId)}`, [], CHAT_POLL_MS);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);

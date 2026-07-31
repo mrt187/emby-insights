@@ -24,7 +24,7 @@ func TestWatchedMoviesMergesLibrariesAndSortsByLastPlayed(t *testing.T) {
 			}
 			_, _ = writer.Write([]byte(`{"Items":[{"Id":"2","Name":"Old Movie","Genres":["Drama"]}]}`))
 		case request.URL.Path == "/emby/Users/user-1/Items" && request.URL.Query().Get("ParentId") == "123857":
-			_, _ = writer.Write([]byte(`{"Items":[{"Id":"1","Name":"Dune","Genres":["Science Fiction"],"ImageTags":{"Primary":"tag-1"}}]}`))
+			_, _ = writer.Write([]byte(`{"Items":[{"Id":"1","Name":"Dune","Genres":["Science Fiction"],"ImageTags":{"Primary":"tag-1"},"BackdropImageTags":["backdrop-1"],"DateCreated":"2026-01-02T00:00:00Z"}]}`))
 		case request.URL.Path == "/emby/Users/user-1/Items/1":
 			_, _ = writer.Write([]byte(`{"UserData":{"LastPlayedDate":"` + recent + `"}}`))
 		case request.URL.Path == "/emby/Users/user-1/Items/2":
@@ -44,6 +44,9 @@ func TestWatchedMoviesMergesLibrariesAndSortsByLastPlayed(t *testing.T) {
 	}
 	if items[0].Title != "Dune" || len(items[0].Genres) != 1 || items[0].Genres[0] != "Science Fiction" {
 		t.Fatalf("items[0] (most recently played) = %#v", items[0])
+	}
+	if items[0].BackdropURL == "" || items[0].DateAdded != "2026-01-02T00:00:00Z" {
+		t.Fatalf("items[0] backdrop/dateAdded = %#v", items[0])
 	}
 	if items[1].Title != "Old Movie" {
 		t.Fatalf("items[1] = %#v", items[1])
