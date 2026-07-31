@@ -8,6 +8,24 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.63] - 2026-07-31
+
+### Fixed
+
+- Season titles on anthology shows (e.g. "Monster") were hard
+  single-line-truncated, cutting most of the title off — they now wrap
+  to two lines. Also closed similar wrap gaps in the request-modal
+  title and cast entries that earlier fixes only covered for the hero
+  block, not the sections below it.
+- The "Erneut gesehen" rewatch counter could reset to 0 after clicking
+  it — a late-arriving initial data fetch could overwrite a value the
+  user had already saved locally. Fixed with a guard so a stale fetch
+  response is ignored once a newer local save has happened.
+- A season with only 1-2 episodes available out of an already-running
+  request stayed selectable in the request picker — the backend only
+  recognized "pending"/"processing" as already-requested, not
+  "partially available".
+
 ## [0.8.62] - 2026-07-31
 
 ### Fixed
