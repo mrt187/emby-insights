@@ -436,6 +436,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   background: linear-gradient(135deg, #5aaa7c, #2b6d52); color: #e4f7e9;
   box-shadow: 0 7px 20px rgb(25 97 65 / 34%);
 }
+.period-range { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
 
 .chart-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
 .chart-card {
@@ -444,6 +445,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%);
 }
 .chart-card h3 { margin: 0 0 18px; font-size: 15px; font-weight: 800; letter-spacing: -.3px; }
+.chart-card-subtitle { margin: -14px 0 18px; color: var(--muted); font-size: 12px; }
 .bar-chart { display: grid; gap: 12px; }
 .bar-row { display: grid; grid-template-columns: 84px 1fr 32px; align-items: center; gap: 10px; }
 .bar-label {
@@ -517,8 +519,8 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 
 .media-detail-facts dl { display: grid; gap: 10px; max-width: 480px; }
 .media-detail-facts dl > div { display: flex; justify-content: space-between; gap: 16px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
-.media-detail-facts dt { color: var(--muted); font-size: 13px; font-weight: 600; }
-.media-detail-facts dd { margin: 0; color: var(--text-primary); font-size: 13px; font-weight: 600; text-align: right; }
+.media-detail-facts dt { flex-shrink: 0; color: var(--muted); font-size: 13px; font-weight: 600; }
+.media-detail-facts dd { min-width: 0; margin: 0; color: var(--text-primary); font-size: 13px; font-weight: 600; text-align: right; overflow-wrap: break-word; }
 
 .cast-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 16px; }
 .cast-entry { display: grid; justify-items: center; text-align: center; gap: 6px; }
@@ -547,7 +549,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 
 /* ---------------------------------------------------- Personal tracking
    Rating, favorite and watchlist controls between the hero and overview. */
-.tracking-bar { display: flex; align-items: center; gap: 16px; margin-top: -8px; }
+.tracking-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin-top: -8px; }
 .star-rating { display: flex; gap: 4px; }
 .star-button {
   position: relative; min-width: 32px; min-height: 32px; padding: 0; border: 0; background: none; cursor: pointer;
@@ -567,7 +569,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .icon-toggle-button:disabled { opacity: .5; cursor: not-allowed; }
 .watchlist-toggle { display: flex; align-items: center; gap: 10px; color: var(--text-secondary); font-size: 14px; font-weight: 600; }
 
-.request-row { display: flex; align-items: center; gap: 12px; justify-content: flex-start; margin-top: -8px; }
+.request-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; justify-content: flex-start; margin-top: -8px; }
 .media-availability-badge {
   display: inline-block; padding: 5px 12px; border-radius: 999px; font-size: 11px; font-weight: 800;
   letter-spacing: .3px; color: var(--text-secondary); background: transparent; border: 1px solid var(--line);

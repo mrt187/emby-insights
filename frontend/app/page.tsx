@@ -17,8 +17,8 @@ type LongestSession = { itemName: string; watchSeconds: number; startedAt: strin
 type MostActiveDay = { date: string; watchSeconds: number };
 type UserProfile = { memberSince: string; lastActiveDate: string; lastLoginDate: string };
 type UpcomingItem = { id: string; tmdbId: string; title: string; posterUrl: string; mediaType: string; availabilityDate: string; cinemaStartDate?: string; cinemaEndDate?: string; seasonNumber?: number; episodeNumber?: number; episodeTitle?: string };
-type RequestItem = { id: string; title: string; posterUrl: string; status: string; tmdbId: string; mediaType: string };
-type NewForYouItem = { id: string; title: string; posterUrl: string };
+type RequestItem = { id: string; title: string; posterUrl: string; status: string; tmdbId: string; mediaType: string; availableSince?: string };
+type NewForYouItem = { id: string; title: string; posterUrl: string; dateCreated?: string };
 type TopRatedItem = { id: string; title: string; posterUrl: string; communityRating: number };
 type ContinueWatchingItem = { id: string; title: string; posterUrl: string; progressPercent: number };
 type WatchedItem = { id: string; title: string; posterUrl: string; genres: string[]; lastPlayedDate: string; backdropUrl?: string; dateAdded?: string };
@@ -97,6 +97,21 @@ const fullDateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", mon
 function formatFullDate(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "" : fullDateFormatter.format(date);
+}
+function daysAgoWording(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const days = Math.round((Date.now() - date.getTime()) / 86_400_000);
+  if (days <= 0) return "heute";
+  if (days === 1) return "gestern";
+  return `vor ${days} Tagen`;
+}
+const shortDateFormatter = new Intl.DateTimeFormat("de-DE", { day: "numeric", month: "long" });
+function dateRangeWording(start: string, end: string) {
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return "";
+  return `${startDate.getDate()}.–${shortDateFormatter.format(endDate)}`;
 }
 
 function useApiResource<T>(path: string | null, initialValue: T, pollMs?: number): [T, LoadState, () => void] {
@@ -314,12 +329,12 @@ function Today({ upcoming, upcomingState, cinema, cinemaState, requests, request
     {features.upcoming && <PosterRow title="Demnächst" eyebrow="IN DEN NÄCHSTEN 4 WOCHEN AUF EMBY" items={visibleUpcoming} state={upcomingState} emptyLabel="Nichts Neues in den nächsten vier Wochen." itemTitle={upcomingTitle} detail={(item) => availabilityWording(item.availabilityDate)} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />}
     <PosterRow title="Noch nicht fertig" eyebrow="TEILWEISE GESEHEN" items={seriesInProgress} state={seriesInProgressState} emptyLabel="Keine Serien mit offenen Folgen." detail={(item) => `${item.watchedEpisodes} von ${item.totalEpisodes} Folgen`} progress={(item) => Math.round((item.watchedEpisodes / item.totalEpisodes) * 100)} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
     {features.requests && <PosterRow title="Meine Anfragen" eyebrow="SEERR · OFFEN" items={requests} state={requestState} emptyLabel="Keine offenen Anfragen." detail={(item) => item.status} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />}
-    <PosterRow title="Neu für dich" eyebrow="IN DEN LETZTEN 14 TAGEN" items={newForYou} state={newForYouState} emptyLabel="Nichts Neues in den letzten 14 Tagen." detail={() => "Ungesehen"} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
+    <PosterRow title="Neu für dich" eyebrow="IN DEN LETZTEN 14 TAGEN" items={newForYou} state={newForYouState} emptyLabel="Nichts Neues in den letzten 14 Tagen." detail={(item) => item.dateCreated ? `Hinzugefügt ${daysAgoWording(item.dateCreated)}` : "Ungesehen"} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
     <PosterRow title="Top Bewertet" eyebrow="BELIEBT AUF EMBY" items={topRated} state={topRatedState} emptyLabel="Noch keine Bewertungen in deiner Bibliothek." detail={(item) => `★ ${item.communityRating.toFixed(1)}`} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
     {features.movieDates && <PosterRow title="Im Kino" eyebrow="KOMMENDE UND AKTUELLE KINOSTARTS" items={cinema} state={cinemaState} emptyLabel="Zurzeit keine Kinostarts." detail={cinemaWording} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />}
 
     {allEventsOpen && <RelevantAllScreen events={events} onClose={() => setAllEventsOpen(false)} />}
-    {newForYouGridOpen && <MediaGridScreen title="Neu für dich" items={newForYou} detail={() => "Ungesehen"} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setNewForYouGridOpen(false)} />}
+    {newForYouGridOpen && <MediaGridScreen title="Neu für dich" items={newForYou} detail={(item) => item.dateCreated ? `Hinzugefügt ${daysAgoWording(item.dateCreated)}` : "Ungesehen"} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setNewForYouGridOpen(false)} />}
   </div>;
 }
 
@@ -358,7 +373,7 @@ function relevantEvents({ availableRequests, upcoming, cinema, newForYou, messag
   for (const request of availableRequests) {
     events.push({
       key: `available-${request.id}`, tone: "mint", icon: "sparkle", status: "Jetzt verfügbar",
-      detail: <>Deine Anfrage „{request.title}“ ist in Emby</>,
+      detail: <>Deine Anfrage „{request.title}“ ist{request.availableSince ? ` seit ${daysAgoWording(request.availableSince)}` : ""} in Emby</>,
       onOpen: () => onSelectMedia({ source: "seerr", id: request.tmdbId, mediaType: request.mediaType }),
     });
   }
@@ -543,6 +558,13 @@ function topGenres(movies: readonly WatchedItem[], series: readonly WatchedItem[
   return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([label, value]) => ({ label, value }));
 }
 
+function watchedItemDetail(item: WatchedItem) {
+  const genre = item.genres[0] ?? "";
+  if (!item.lastPlayedDate) return genre;
+  const lastPlayed = `zuletzt ${daysAgoWording(item.lastPlayedDate)}`;
+  return genre ? `${genre} · ${lastPlayed}` : lastPlayed;
+}
+
 const WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 
 function weekdayChartData(weekdays: readonly WeekdayWatchTime[]) {
@@ -564,11 +586,12 @@ function daypartChartData(hours: readonly HourWatchTime[]) {
   return DAYPARTS.map((daypart) => ({ label: daypart.label, value: daypart.hours.reduce((sum, hour) => sum + secondsByHour[hour], 0) }));
 }
 
-function BarChart({ title, data, formatValue, loading }: { title: string; data: { label: string; value: number }[]; formatValue?: (value: number) => string; loading?: boolean }) {
+function BarChart({ title, subtitle, data, formatValue, loading }: { title: string; subtitle?: string; data: { label: string; value: number }[]; formatValue?: (value: number) => string; loading?: boolean }) {
   const max = Math.max(1, ...data.map((entry) => entry.value));
   const hasData = data.some((entry) => entry.value > 0);
   return <section className="chart-card">
     <h3>{title}</h3>
+    {subtitle && <p className="chart-card-subtitle">{subtitle}</p>}
     {loading
       ? <div className="bar-chart" aria-hidden="true">
         <p className="sr-only" role="status">Wird geladen …</p>
@@ -610,6 +633,7 @@ function Stats({ user, onSelectMedia }: { user: { id: string; name: string }; on
 
   return <div className="content page-view">
     <section className="period-tabs" aria-label="Zeitraum auswählen">{(["Woche", "Monat", "Jahr"] as Period[]).map((item) => <button className={period === item ? "selected" : ""} onClick={() => setPeriod(item)} key={item} aria-pressed={period === item}>{item}</button>)}</section>
+    {statistics?.periodStartsAt && statistics?.periodEndsAt && <p className="period-range">{dateRangeWording(statistics.periodStartsAt, statistics.periodEndsAt)}</p>}
     <section className="week-grid" aria-label={`Kennzahlen für ${period}`}>
       <RankCard rank={watchTimeRank} name={user.name} userId={user.id} />
       <MetricCard icon="clock" tone="blue" value={statistics ? formatDuration(statistics.watchSeconds) : "—"} label="Sehzeit" detail={statistics ? comparisonText(statistics) : loadingCopy(state)} loading={state === "loading"} />
@@ -623,7 +647,7 @@ function Stats({ user, onSelectMedia }: { user: { id: string; name: string }; on
     </section>
 
     <section className="chart-grid">
-      <BarChart title="Meistgesehene Genres" data={topGenres(watchedMovies, watchedSeries)} loading={watchedMoviesState === "loading" || watchedSeriesState === "loading"} />
+      <BarChart title="Meistgesehene Genres" subtitle={statistics?.favouriteGenre ? `Dein Favorit: ${statistics.favouriteGenre}` : undefined} data={topGenres(watchedMovies, watchedSeries)} loading={watchedMoviesState === "loading" || watchedSeriesState === "loading"} />
       <BarChart title="Aktivität nach Wochentag" data={weekdayStatsState === "ready" ? weekdayChartData(weekdayStats) : []} formatValue={formatDuration} loading={weekdayStatsState === "loading"} />
       <BarChart title="Aktivität nach Uhrzeit" data={hourStatsState === "ready" ? daypartChartData(hourStats) : []} formatValue={formatDuration} loading={hourStatsState === "loading"} />
       <BarChart title="Nach Gerät" data={deviceStatsState === "ready" ? deviceStats.slice(0, 6).map((device) => ({ label: device.deviceName, value: device.watchSeconds })) : []} formatValue={formatDuration} loading={deviceStatsState === "loading"} />
@@ -641,8 +665,8 @@ function Stats({ user, onSelectMedia }: { user: { id: string; name: string }; on
 
     {completedGridView === "movies" && <MediaGridScreen title={`Filme abgeschlossen · ${period}`} items={completedMovies} detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setCompletedGridView(null)} />}
     {completedGridView === "series" && <MediaGridScreen title={`Serien abgeschlossen · ${period}`} items={completedSeries} detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setCompletedGridView(null)} />}
-    {watchedGridView === "movies" && <MediaGridScreen title="Gesehene Filme" items={watchedMovies} detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setWatchedGridView(null)} />}
-    {watchedGridView === "series" && <MediaGridScreen title="Gesehene Serien" items={watchedSeries} detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setWatchedGridView(null)} />}
+    {watchedGridView === "movies" && <MediaGridScreen title="Gesehene Filme" items={watchedMovies} detail={(item) => watchedItemDetail(item)} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setWatchedGridView(null)} />}
+    {watchedGridView === "series" && <MediaGridScreen title="Gesehene Serien" items={watchedSeries} detail={(item) => watchedItemDetail(item)} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setWatchedGridView(null)} />}
   </div>;
 }
 
@@ -803,7 +827,7 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated, onHiddenChang
   const [selectedSeasons, setSelectedSeasons] = useState<number[]>([]);
   const [requestState, setRequestState] = useState<"idle" | "submitting" | "done" | "error">("idle");
   const [requestModalOpen, setRequestModalOpen] = useState(false);
-  const [tracking, setTracking] = useState<{ rating: number; onWatchlist: boolean; hiddenInProgress: boolean }>({ rating: 0, onWatchlist: false, hiddenInProgress: false });
+  const [tracking, setTracking] = useState<{ rating: number; onWatchlist: boolean; hiddenInProgress: boolean; rewatchCount: number }>({ rating: 0, onWatchlist: false, hiddenInProgress: false, rewatchCount: 0 });
   const [favorite, setFavorite] = useState(false);
   const [favoriteBusy, setFavoriteBusy] = useState(false);
   const mediaType = selection.source === "seerr" ? selection.mediaType : undefined;
@@ -814,7 +838,7 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated, onHiddenChang
       .then(async (response) => {
         if (!response.ok) throw new Error("tracking unavailable");
         const data: MediaTrackingEntry = await response.json();
-        if (active) setTracking({ rating: data.rating ?? 0, onWatchlist: data.onWatchlist, hiddenInProgress: data.hiddenInProgress ?? false });
+        if (active) setTracking({ rating: data.rating ?? 0, onWatchlist: data.onWatchlist, hiddenInProgress: data.hiddenInProgress ?? false, rewatchCount: data.rewatchCount ?? 0 });
       })
       .catch(() => null);
     return () => { active = false; };
@@ -822,7 +846,7 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated, onHiddenChang
 
   // Always resends hiddenInProgress (Upsert overwrites the whole row), so a
   // plain rating/watchlist change never silently un-hides a dismissed series.
-  const saveTracking = (next: { rating: number; onWatchlist: boolean; hiddenInProgress: boolean }) => {
+  const saveTracking = (next: { rating: number; onWatchlist: boolean; hiddenInProgress: boolean; rewatchCount: number }) => {
     setTracking(next);
     if (!detail) return;
     fetch("/api/tracking", {
@@ -838,6 +862,7 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated, onHiddenChang
         rating: next.rating,
         onWatchlist: next.onWatchlist,
         hiddenInProgress: next.hiddenInProgress,
+        rewatchCount: next.rewatchCount,
       }),
     }).then((response) => { if (response.ok) onHiddenChanged?.(); }).catch(() => null);
   };
@@ -887,7 +912,7 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated, onHiddenChang
 
   const status = detail ? mediaStatus(detail) : null;
   const crewAndCast = detail ? [...(detail.crew ?? []), ...(detail.cast ?? [])] : [];
-  const embySeasons = detail?.seasons?.filter((season): season is MediaSeason => !isRequestableSeason(season)) ?? [];
+  const embySeasons = (detail?.seasons?.filter((season): season is MediaSeason => !isRequestableSeason(season)) ?? []).slice().sort((a, b) => a.indexNumber - b.indexNumber);
   // Seerr's own MediaStatus enum: 4 = partially available. Only for that
   // status (and only for series) do missing seasons remain requestable —
   // any other non-zero status (pending, processing, fully available, ...)
@@ -982,6 +1007,12 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated, onHiddenChang
               aria-label={favorite ? "Als Favorit in Emby entfernen" : "Als Favorit in Emby markieren"}
               title={favorite ? "Als Favorit in Emby entfernen" : "Als Favorit in Emby markieren"}
             ><Icon name="heart" /></button>
+            <button
+              type="button"
+              className="request-button secondary"
+              onClick={() => saveTracking({ ...tracking, rewatchCount: tracking.rewatchCount + 1 })}
+              title="Als erneut gesehen zählen"
+            >{tracking.rewatchCount > 0 ? `Erneut gesehen · ${tracking.rewatchCount}×` : "Erneut gesehen"}</button>
           </>}
           <label className="watchlist-toggle">
             <span>Merkliste</span>
@@ -1194,6 +1225,8 @@ function AdminSettings() {
   const [sonarr, setSonarr] = useState<ServiceDraft>({ enabled: false, baseUrl: "", apiKey: "" });
   const [tmdb, setTmdb] = useState<ServiceDraft>({ enabled: false, baseUrl: "", apiKey: "" });
   const [omdb, setOmdb] = useState<ServiceDraft>({ enabled: false, baseUrl: "", apiKey: "" });
+  const [comingSoonRegion, setComingSoonRegion] = useState("DE");
+  const [comingSoonDaysAhead, setComingSoonDaysAhead] = useState(28);
 
   useEffect(() => {
     if (!settings) return;
@@ -1204,6 +1237,8 @@ function AdminSettings() {
     setSonarr({ enabled: settings.sonarr.enabled, baseUrl: settings.sonarr.baseUrl ?? "", apiKey: "" });
     setTmdb({ enabled: settings.tmdb.enabled, baseUrl: "", apiKey: "" });
     setOmdb({ enabled: settings.omdb.enabled, baseUrl: "", apiKey: "" });
+    setComingSoonRegion(settings.comingSoonRegion || "DE");
+    setComingSoonDaysAhead(settings.comingSoonDaysAhead || 28);
   }, [settings]);
 
   const dismissIntro = () => {
@@ -1229,8 +1264,8 @@ function AdminSettings() {
           seerr, radarr, sonarr,
           tmdb: { enabled: tmdb.enabled, apiKey: tmdb.apiKey },
           omdb: { enabled: omdb.enabled, apiKey: omdb.apiKey },
-          comingSoonRegion: settings?.comingSoonRegion ?? "DE",
-          comingSoonDaysAhead: settings?.comingSoonDaysAhead ?? 28,
+          comingSoonRegion,
+          comingSoonDaysAhead,
         }),
       });
       if (!response.ok) throw new Error("saving settings failed");
@@ -1309,6 +1344,20 @@ function AdminSettings() {
           shows="Ohne OMDb bleibt nur die TMDB-eigene Bewertung sichtbar."
           draft={omdb} onChange={setOmdb} existing={settings.omdb} showsBaseUrl={false}
         />
+      </div>
+    </section>
+
+    <section className="admin-section" aria-label="Demnächst">
+      <div className="section-heading"><div><p className="eyebrow">DEMNÄCHST</p><h2>Kino- und Erscheinungstermine</h2></div></div>
+      <div className="admin-service-grid">
+        <label className="admin-field">
+          <span>Region</span>
+          <input type="text" className="search-input" maxLength={2} value={comingSoonRegion} onChange={(event) => setComingSoonRegion(event.target.value.toUpperCase())} placeholder="DE" />
+        </label>
+        <label className="admin-field">
+          <span>Tage im Voraus</span>
+          <input type="number" className="search-input" min={1} max={90} value={comingSoonDaysAhead} onChange={(event) => setComingSoonDaysAhead(Number(event.target.value) || 1)} />
+        </label>
       </div>
     </section>
 
