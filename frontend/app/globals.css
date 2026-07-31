@@ -236,6 +236,10 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .relevant-empty { padding: 6px 12px 14px; color: var(--muted); font-size: 13px; }
 
 .relevant-list { list-style: none; margin: 0; padding: 0; display: grid; }
+/* Same grid-item automatic-minimum-size trap as .media-detail: without
+   this, a long unbroken title pushes the <li> (and the row inside it)
+   wider than the list, clipped invisibly by the ancestor overlay. */
+.relevant-list > li { min-width: 0; }
 .relevant-list > li + li { border-top: 1px solid var(--line); }
 
 .relevant-row {
@@ -255,7 +259,8 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .relevant-icon .icon { width: 18px; height: 18px; }
 
 .relevant-text { flex: 1; min-width: 0; display: grid; gap: 3px; }
-.relevant-text strong { color: #f1f6f3; font-size: 14px; font-weight: 700; letter-spacing: -.2px; }
+.relevant-text > * { min-width: 0; }
+.relevant-text strong { color: #f1f6f3; font-size: 14px; font-weight: 700; letter-spacing: -.2px; overflow-wrap: break-word; }
 .relevant-text small {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   color: var(--text-secondary); font-size: 12.5px; line-height: 1.35;
@@ -486,7 +491,13 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .media-detail-status { padding-top: 40px; }
 
 .media-detail { position: relative; display: grid; gap: 28px; }
+/* Grid items default to a content-based automatic minimum size and will
+   happily overflow their track (long studio names, unbroken hero text)
+   instead of shrinking to wrap — min-width: 0 opts every row back into
+   the track width, matching the .media-detail-hero > * rule below. */
+.media-detail > * { min-width: 0; }
 .media-detail-above-fold { display: grid; gap: 28px; }
+.media-detail-above-fold > * { min-width: 0; }
 /* Anchored to the overlay itself (not the padded scroll column) so it always
    reaches the true top of the screen, behind the status bar/close button —
    and always renders, with a plain ambient fallback, so the hero looks the
