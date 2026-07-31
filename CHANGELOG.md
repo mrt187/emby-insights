@@ -8,6 +8,20 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.61] - 2026-07-31
+
+### Changed
+
+- The "Filme abgeschlossen"/"Serien abgeschlossen" stat cards on the
+  Statistik page took a lot of space for little information,
+  especially on desktop. They're now one compact card with both counts
+  as independently clickable segments, dropping the period label that
+  duplicated the period tabs directly above.
+- Card copy shortened across the board: the rank card drops the
+  redundant "Dein Platz" line, the watch-time comparison and empty
+  states read shorter, and metric cards got less vertical padding now
+  that their text is shorter.
+
 ## [0.8.60] - 2026-07-31
 
 ### Fixed
