@@ -8,6 +8,31 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.60] - 2026-07-31
+
+### Fixed
+
+- The media detail screen showed two scrollbars on desktop — the
+  background page was never locked while the overlay was open. All
+  full-screen overlays (media detail, poster overview, "Jetzt
+  relevant" overview, contact picker, admin chat thread) now lock body
+  scroll while open.
+- On mobile, the previous overflow fix broke horizontal scrolling on
+  the season/provider carousels and hard-clipped long titles/meta
+  text instead of wrapping them. `overflow-x: hidden` now sits on the
+  inner scroll column instead of the fixed overlay, and long text
+  wraps instead of being cut off.
+
+### Changed
+
+- "Was ich gerade schaue" moved from the Statistik page to the Heute
+  page, directly under "Jetzt relevant".
+- The Statistik page no longer has poster rows for watched movies and
+  series. They're now two backdrop tiles at the very bottom of the
+  page (after the charts), showing the most recently added title's
+  backdrop with "Filme"/"Serien" as bold overlay text — clicking a
+  tile opens the same full poster overview as before.
+
 ## [0.8.59] - 2026-07-31
 
 ### Fixed
