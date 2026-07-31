@@ -8,6 +8,17 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.68] - 2026-07-31
+
+### Fixed
+
+- Redis caches for `comingsoon:*`/`requests:*`/`discover:*` survive a
+  backend redeploy (persisted on the same volume), so a fixed integration
+  response — e.g. the "Demnächst" poster https upgrade — could still be
+  served from a pre-fix cache entry for up to 15 minutes after the new
+  version was already running. The backend now clears those caches once on
+  startup.
+
 ## [0.8.67] - 2026-07-31
 
 ### Fixed

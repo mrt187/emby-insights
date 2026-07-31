@@ -145,7 +145,7 @@ func New(cfg config.Config) (*App, error) {
 	seerrFacade := liveSeerr{live: live}
 	comingSoonFacade := liveComingSoon{live: live}
 
-	return &App{
+	app := &App{
 		database:            database,
 		redis:               cache,
 		authenticator:       embyClient,
@@ -181,7 +181,14 @@ func New(cfg config.Config) (*App, error) {
 		appconfig:           appconfigStore,
 		live:                live,
 		loginLimiters:       make(map[string]*ipRateLimiter),
-	}, nil
+	}
+	// Redis persists across restarts/redeploys (appendonly file on the same
+	// volume as everything else), so a fixed integration response (e.g. the
+	// comingsoon poster URL scheme) can otherwise keep being served from a
+	// pre-fix cache entry for up to its full TTL after the new binary is
+	// already running.
+	app.invalidateIntegrationCaches(ctx)
+	return app, nil
 }
 
 // applySettings persists new setup-wizard settings and immediately swaps the
