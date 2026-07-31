@@ -35,6 +35,11 @@ const discoverCacheTTL = 1 * time.Hour
 const statsCacheTTL = 5 * time.Minute
 const requestsCacheTTL = 5 * time.Minute
 
+// imageCacheTTL is long because the cache key includes Emby's image tag,
+// which changes whenever the underlying image does — a cache hit is by
+// definition still current.
+const imageCacheTTL = 7 * 24 * time.Hour
+
 // ConfigStore is the subset of appconfig.Store that App depends on, kept as
 // an interface (like every other store dependency here — MessageStore,
 // TrackingStore, etc.) so admin-gating and features-matrix behavior can be
@@ -247,6 +252,7 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("POST /api/auth/logout", app.logout)
 	mux.HandleFunc("GET /api/me", app.me)
 	mux.HandleFunc("GET /api/me/avatar", app.avatar)
+	mux.HandleFunc("GET /api/images", app.itemImage)
 	mux.HandleFunc("GET /api/me/profile", app.meProfile)
 	mux.HandleFunc("GET /api/stats", app.stats)
 	mux.HandleFunc("GET /api/stats/rank", app.watchTimeRankStats)
@@ -1530,6 +1536,10 @@ func (app *App) adminActivity(writer http.ResponseWriter, request *http.Request)
 // with the admin API key.
 var validEmbyItemID = regexp.MustCompile(`^[A-Za-z0-9-]{1,64}$`)
 
+// validImageTag matches Emby's image tags (hex-ish cache-busting hashes),
+// which are interpolated into a URL sent to Emby with the admin API key.
+var validImageTag = regexp.MustCompile(`^[A-Za-z0-9]{1,64}$`)
+
 // setFavoriteHandler returns a handler for both the POST and DELETE Emby
 // favorite routes, since they differ only in which way the toggle goes.
 func (app *App) setFavoriteHandler(favorite bool) http.HandlerFunc {
@@ -1789,6 +1799,55 @@ func (app *App) avatar(writer http.ResponseWriter, request *http.Request) {
 	}
 	writer.Header().Set("Content-Type", image.ContentType)
 	writer.Header().Set("Cache-Control", "private, no-cache")
+	writer.WriteHeader(http.StatusOK)
+	_, _ = writer.Write(image.Data)
+}
+
+// itemImage proxies Emby posters/backdrops through this server instead of
+// linking the browser straight to Emby's own address (see emby.ImageURL) —
+// otherwise anyone reaching the dashboard through a reverse proxy from
+// outside Emby's own network gets broken images. Responses are cached in
+// Redis under a key that includes Emby's image tag, so a repeat view never
+// has to round-trip to Emby again.
+func (app *App) itemImage(writer http.ResponseWriter, request *http.Request) {
+	if _, ok := app.identityFromRequest(writer, request); !ok {
+		return
+	}
+	itemID := request.URL.Query().Get("itemId")
+	if itemID == "" || !validEmbyItemID.MatchString(itemID) {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "itemId is required"})
+		return
+	}
+	imageType := request.URL.Query().Get("type")
+	if imageType != "Primary" && imageType != "Backdrop" {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "type must be Primary or Backdrop"})
+		return
+	}
+	tag := request.URL.Query().Get("tag")
+	if !validImageTag.MatchString(tag) {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "tag is invalid"})
+		return
+	}
+	maxWidth, err := strconv.Atoi(request.URL.Query().Get("maxWidth"))
+	if err != nil || maxWidth < 1 || maxWidth > 2000 {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "maxWidth is invalid"})
+		return
+	}
+
+	cacheKey := fmt.Sprintf("image:%s:%s:%s:%d", itemID, imageType, tag, maxWidth)
+	image, err := cachedJSON(request.Context(), app, cacheKey, imageCacheTTL, func(ctx context.Context) (emby.UserImage, error) {
+		return app.embyClient.ItemImage(ctx, itemID, imageType, tag, maxWidth)
+	})
+	if errors.Is(err, emby.ErrItemImageUnavailable) {
+		http.NotFound(writer, request)
+		return
+	}
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "image is unavailable"})
+		return
+	}
+	writer.Header().Set("Content-Type", image.ContentType)
+	writer.Header().Set("Cache-Control", "public, max-age=604800, immutable")
 	writer.WriteHeader(http.StatusOK)
 	_, _ = writer.Write(image.Data)
 }

@@ -55,7 +55,7 @@ func (client *Client) SeriesInProgress(ctx context.Context, userID string, libra
 		}
 		var posterURL string
 		if item.ImageTags.Primary != "" {
-			posterURL = fmt.Sprintf("%s/Items/%s/Images/Primary?tag=%s&maxWidth=400", client.baseURL, item.Id, item.ImageTags.Primary)
+			posterURL = ImageURL(item.Id, "Primary", item.ImageTags.Primary, 400)
 		}
 		items = append(items, SeriesProgress{
 			ID:              item.Id,

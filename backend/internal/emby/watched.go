@@ -71,11 +71,11 @@ func (client *Client) watchedItems(ctx context.Context, userID, itemType string,
 
 		var posterURL string
 		if item.ImageTags.Primary != "" {
-			posterURL = fmt.Sprintf("%s/Items/%s/Images/Primary?tag=%s&maxWidth=400", client.baseURL, item.Id, item.ImageTags.Primary)
+			posterURL = ImageURL(item.Id, "Primary", item.ImageTags.Primary, 400)
 		}
 		var backdropURL string
 		if len(item.BackdropImageTags) > 0 {
-			backdropURL = fmt.Sprintf("%s/Items/%s/Images/Backdrop?tag=%s&maxWidth=1600", client.baseURL, item.Id, item.BackdropImageTags[0])
+			backdropURL = ImageURL(item.Id, "Backdrop", item.BackdropImageTags[0], 1600)
 		}
 
 		items = append(items, WatchedItem{

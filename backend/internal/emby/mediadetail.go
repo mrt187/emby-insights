@@ -146,10 +146,10 @@ func (client *Client) EmbyMediaDetail(ctx context.Context, userID, itemID string
 		Seasons:         []Season{},
 	}
 	if result.ImageTags.Primary != "" {
-		detail.PosterURL = fmt.Sprintf("%s/Items/%s/Images/Primary?tag=%s&maxWidth=600", client.baseURL, result.Id, result.ImageTags.Primary)
+		detail.PosterURL = ImageURL(result.Id, "Primary", result.ImageTags.Primary, 600)
 	}
 	if len(result.BackdropImageTags) > 0 {
-		detail.BackdropURL = fmt.Sprintf("%s/Items/%s/Images/Backdrop?tag=%s&maxWidth=1600", client.baseURL, result.Id, result.BackdropImageTags[0])
+		detail.BackdropURL = ImageURL(result.Id, "Backdrop", result.BackdropImageTags[0], 1600)
 	}
 	if detail.IsSeries {
 		detail.TotalEpisodes = result.RecursiveItemCount
@@ -164,7 +164,7 @@ func (client *Client) EmbyMediaDetail(ctx context.Context, userID, itemID string
 	for _, person := range result.People {
 		var imageURL string
 		if person.PrimaryImageTag != "" {
-			imageURL = fmt.Sprintf("%s/Items/%s/Images/Primary?tag=%s&maxWidth=200", client.baseURL, person.Id, person.PrimaryImageTag)
+			imageURL = ImageURL(person.Id, "Primary", person.PrimaryImageTag, 200)
 		}
 		entry := Person{Name: person.Name, Role: person.Role, ImageURL: imageURL}
 		if person.Type == "Actor" {
@@ -226,7 +226,7 @@ func (client *Client) seasons(ctx context.Context, userID, seriesID string) ([]S
 		}
 		var posterURL string
 		if item.ImageTags.Primary != "" {
-			posterURL = fmt.Sprintf("%s/Items/%s/Images/Primary?tag=%s&maxWidth=300", client.baseURL, item.Id, item.ImageTags.Primary)
+			posterURL = ImageURL(item.Id, "Primary", item.ImageTags.Primary, 300)
 		}
 		seasons = append(seasons, Season{
 			ID:              item.Id,

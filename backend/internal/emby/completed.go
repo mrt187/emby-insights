@@ -2,7 +2,6 @@ package emby
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"time"
 )
@@ -58,7 +57,7 @@ func (client *Client) completedItems(ctx context.Context, userID, itemType strin
 
 		var posterURL string
 		if item.ImageTags.Primary != "" {
-			posterURL = fmt.Sprintf("%s/Items/%s/Images/Primary?tag=%s&maxWidth=400", client.baseURL, item.Id, item.ImageTags.Primary)
+			posterURL = ImageURL(item.Id, "Primary", item.ImageTags.Primary, 400)
 		}
 		items = append(items, WatchedItem{ID: item.Id, Title: item.Name, PosterURL: posterURL, Genres: item.Genres, LastPlayedDate: lastPlayedDate})
 	}

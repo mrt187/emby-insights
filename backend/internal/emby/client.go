@@ -155,3 +155,44 @@ func (client *Client) userPrimaryImage(ctx context.Context, userID, token string
 	}
 	return UserImage{ContentType: contentType, Data: data}, nil
 }
+
+// ImageURL builds a link to our own image proxy (see server.itemImage)
+// instead of exposing the Emby server's address to the browser. Item
+// posters/backdrops used to be linked straight to client.baseURL, which
+// only resolves for browsers on the same network as Emby — anyone reaching
+// the dashboard through a reverse proxy from outside that network got a
+// broken image instead.
+func ImageURL(itemID, imageType, tag string, maxWidth int) string {
+	return fmt.Sprintf("/api/images?itemId=%s&type=%s&tag=%s&maxWidth=%d", url.QueryEscape(itemID), imageType, url.QueryEscape(tag), maxWidth)
+}
+
+// ItemImage fetches an item's poster/backdrop with the admin API key —
+// these aren't user-specific, so there's no per-user token to use.
+func (client *Client) ItemImage(ctx context.Context, itemID, imageType, tag string, maxWidth int) (UserImage, error) {
+	endpoint := fmt.Sprintf("%s/Items/%s/Images/%s?tag=%s&maxWidth=%d", client.baseURL, url.PathEscape(itemID), url.PathEscape(imageType), url.QueryEscape(tag), maxWidth)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return UserImage{}, err
+	}
+	request.Header.Set("X-Emby-Token", client.adminAPIKey)
+	response, err := client.httpClient.Do(request)
+	if err != nil {
+		return UserImage{}, fmt.Errorf("fetch Emby item image: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode == http.StatusNotFound {
+		return UserImage{}, ErrItemImageUnavailable
+	}
+	if response.StatusCode != http.StatusOK {
+		return UserImage{}, fmt.Errorf("Emby item image returned %s", response.Status)
+	}
+	data, err := io.ReadAll(io.LimitReader(response.Body, 5<<20))
+	if err != nil {
+		return UserImage{}, fmt.Errorf("read Emby item image: %w", err)
+	}
+	contentType := response.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "image/jpeg"
+	}
+	return UserImage{ContentType: contentType, Data: data}, nil
+}

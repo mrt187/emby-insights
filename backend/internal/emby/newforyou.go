@@ -53,7 +53,7 @@ func (client *Client) NewForYou(ctx context.Context, userID string, libraryIDs [
 			}
 			var posterURL string
 			if item.ImageTags.Primary != "" {
-				posterURL = fmt.Sprintf("%s/Items/%s/Images/Primary?tag=%s&maxWidth=400", client.baseURL, item.Id, item.ImageTags.Primary)
+				posterURL = ImageURL(item.Id, "Primary", item.ImageTags.Primary, 400)
 			}
 			items = append(items, NewForYouItem{ID: item.Id, Title: item.Name, PosterURL: posterURL, DateCreated: item.DateCreated})
 		}

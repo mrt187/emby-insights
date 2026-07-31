@@ -8,6 +8,17 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.64] - 2026-07-31
+
+### Fixed
+
+- Posters and backdrops didn't load when the dashboard was reached
+  through a reverse proxy from outside Emby's own network — the
+  browser was linked straight to Emby's internal address instead of
+  going through Emby Insights. Item images are now proxied through the
+  backend (and cached in Redis) instead of exposing Emby's address to
+  the browser.
+
 ## [0.8.63] - 2026-07-31
 
 ### Fixed

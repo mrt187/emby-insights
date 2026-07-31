@@ -80,9 +80,9 @@ func (client *Client) ContinueWatching(ctx context.Context, userID string) ([]Co
 		var posterURL string
 		switch {
 		case item.SeriesId != "" && item.SeriesPrimaryImageTag != "":
-			posterURL = fmt.Sprintf("%s/Items/%s/Images/Primary?tag=%s&maxWidth=400", client.baseURL, item.SeriesId, item.SeriesPrimaryImageTag)
+			posterURL = ImageURL(item.SeriesId, "Primary", item.SeriesPrimaryImageTag, 400)
 		case item.ImageTags.Primary != "":
-			posterURL = fmt.Sprintf("%s/Items/%s/Images/Primary?tag=%s&maxWidth=400", client.baseURL, item.Id, item.ImageTags.Primary)
+			posterURL = ImageURL(item.Id, "Primary", item.ImageTags.Primary, 400)
 		}
 
 		items = append(items, ContinueWatchingItem{ID: item.Id, Title: title, PosterURL: posterURL, ProgressPercent: progress})
