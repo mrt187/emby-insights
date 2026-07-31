@@ -8,6 +8,27 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.62] - 2026-07-31
+
+### Fixed
+
+- The media detail screen could still clip text on mobile for titles
+  with a long studio/status line (e.g. "Monster") — the facts row and
+  the tracking/request button rows had no wrap safety. Both now wrap
+  instead of overflowing.
+
+### Added
+
+- Surfaced several pieces of data the backend already fetched but the
+  UI never showed: the exact date range and favourite genre on
+  Statistik, "verfügbar seit X Tagen" on newly-available requests,
+  "hinzugefügt vor X Tagen" on Neu für dich, "zuletzt gesehen vor X
+  Tagen" on watched movies/series, a rewatch counter on the detail
+  screen, and editable region/days-ahead fields for ComingSoon in
+  Verwaltung (previously silently read-only).
+- Emby seasons are now explicitly sorted by their index instead of
+  relying on backend response order.
+
 ## [0.8.61] - 2026-07-31
 
 ### Changed
