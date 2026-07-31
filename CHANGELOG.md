@@ -8,6 +8,15 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.71] - 2026-07-31
+
+### Fixed
+
+- Mobile detail screens (Film/Serie) and das "Jetzt relevant"-Overlay
+  konnten bei langen Titeln/Studio-Namen horizontal verschoben werden
+  bzw. Text lautlos abschneiden, statt umzubrechen — CSS-Grid-Items ohne
+  `min-width: 0` verweigerten das Schrumpfen unter ihre Inhaltsgröße.
+
 ## [0.8.70] - 2026-07-31
 
 ### Fixed
