@@ -27,7 +27,7 @@ type DiscoverItem = { id: string; title: string; posterUrl: string; mediaType: s
 type MediaSelection = { source: "emby"; id: string } | { source: "seerr"; id: string; mediaType: string };
 type MediaPerson = { name: string; role: string; imageUrl: string };
 type MediaSeason = { id: string; title: string; posterUrl: string; indexNumber: number; watchedEpisodes: number; totalEpisodes: number; played: boolean };
-type RequestableSeason = { seasonNumber: number; episodeCount: number; available?: boolean };
+type RequestableSeason = { seasonNumber: number; episodeCount: number; available?: boolean; requested?: boolean };
 type MediaDetail = {
   id: string; title: string; overview: string; posterUrl: string; backdropUrl: string;
   genres: string[]; communityRating: number; officialRating?: string; year: number; runtimeMinutes: number;
@@ -832,8 +832,10 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated, onHiddenChang
   // Seerr's own MediaStatus enum: 4 = partially available. Only for that
   // status (and only for series) do missing seasons remain requestable —
   // any other non-zero status (pending, processing, fully available, ...)
-  // means there is nothing left to request.
-  const requestableSeasons = (detail?.seasons?.filter(isRequestableSeason) ?? []).filter((season) => !season.available);
+  // means there is nothing left to request. Seasons already available or
+  // with an open request (pending/processing) are excluded so they can't
+  // be re-requested.
+  const requestableSeasons = (detail?.seasons?.filter(isRequestableSeason) ?? []).filter((season) => !season.available && !season.requested);
   const seerrStatusPending = 2;
   const seerrStatusProcessing = 3;
   const seerrStatusPartiallyAvailable = 4;

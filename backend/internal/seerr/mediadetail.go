@@ -19,6 +19,11 @@ type RequestableSeason struct {
 	// it from the season picker — only the seasons still missing should be
 	// selectable to request.
 	Available bool `json:"available,omitempty"`
+	// Requested marks a season Seerr already has an open request for
+	// (status 2 pending or 3 processing), so the frontend can hide it from
+	// the season picker too — otherwise it would be re-requestable even
+	// though it isn't "Available" yet.
+	Requested bool `json:"requested,omitempty"`
 }
 
 type MediaDetail struct {
@@ -169,11 +174,17 @@ func (client *Client) MediaDetail(ctx context.Context, mediaType string, tmdbID 
 		if season.SeasonNumber == 0 { // "Specials" — not a real season to request
 			continue
 		}
-		const seerrStatusAvailable = 5
+		const (
+			seerrStatusPending    = 2
+			seerrStatusProcessing = 3
+			seerrStatusAvailable  = 5
+		)
+		status := seasonAvailability[season.SeasonNumber]
 		detail.Seasons = append(detail.Seasons, RequestableSeason{
 			SeasonNumber: season.SeasonNumber,
 			EpisodeCount: season.EpisodeCount,
-			Available:    seasonAvailability[season.SeasonNumber] == seerrStatusAvailable,
+			Available:    status == seerrStatusAvailable,
+			Requested:    status == seerrStatusPending || status == seerrStatusProcessing,
 		})
 	}
 	if result.PosterPath != "" {

@@ -128,6 +128,12 @@ func TestMediaDetailMarksAvailableSeasonsFromMediaInfo(t *testing.T) {
 	if detail.Seasons[1].Available {
 		t.Fatalf("season 2 = %#v, want not Available (status 2 in mediaInfo)", detail.Seasons[1])
 	}
+	if detail.Seasons[0].Requested {
+		t.Fatalf("season 1 = %#v, want not Requested (status 5 in mediaInfo)", detail.Seasons[0])
+	}
+	if !detail.Seasons[1].Requested {
+		t.Fatalf("season 2 = %#v, want Requested (status 2 pending in mediaInfo)", detail.Seasons[1])
+	}
 }
 
 func TestMediaDetailReturnsErrorWhenClientIsNil(t *testing.T) {
