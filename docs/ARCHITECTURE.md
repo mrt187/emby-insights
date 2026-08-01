@@ -72,7 +72,7 @@ Die User-ID wird nie vom Client als Berechtigungsparameter akzeptiert; das Backe
 
 ## Deployment-Ziel
 
-Emby Insights wird als einzelner Unraid-Container ausgeliefert. Der Container enthält die App, PostgreSQL und Redis; die PostgreSQL-Daten liegen in einem persistenten Volume.
+Emby Insights wird als einzelner Docker-Container ausgeliefert (läuft auf jedem Linux-Host mit Docker/Docker Compose). Der Container enthält die App, PostgreSQL und Redis; die PostgreSQL-Daten liegen in einem persistenten Volume.
 
 - **PostgreSQL** speichert dauerhafte Daten: Nutzerzuordnungen, Benachrichtigungen und Lesestatus.
 - **Redis** dient als Cache für externe Datenquellen sowie später für Hintergrund-Jobs und Synchronisationssperren.

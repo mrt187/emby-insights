@@ -11,7 +11,7 @@ Die Produktgrundlage und das MVP stehen in [docs/PRODUCT-BLUEPRINT.md](docs/PROD
 Current release: [v0.8.73](CHANGELOG.md#0873---2026-08-01).
 
 The personal dashboard foundation is implemented: Emby login, protected
-sessions, personal watch-time statistics, and the all-in-one Unraid container.
+sessions, personal watch-time statistics, and the all-in-one Docker container.
 Clicking any poster opens a detail screen (description, cast, rating,
 personal status). All four Home cards (My Week, Upcoming, Requests, Neu für
 dich) read real data
@@ -23,5 +23,5 @@ five Seerr/TMDB discover lists.
 
 Releases use [Semantic Versioning](https://semver.org/). Each Gitea release is
 identified by a Git tag in the form `vMAJOR.MINOR.PATCH`. Container images use
-the same version tag, the commit SHA, and `latest`; the Unraid deployment
-tracks `latest` automatically.
+the same version tag, the commit SHA, and `latest`; a running deployment
+tracks `latest` automatically once updated.
