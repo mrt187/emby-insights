@@ -1,0 +1,27 @@
+name: Build and Push Image
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest # options: -v /var/run/docker.sock:/var/run/docker.sock
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version
+        id: version
+        run: echo "version=$(cat VERSION)" >> "$GITEA_OUTPUT"
+
+      - name: Log in to Gitea registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login registry.example.com -u "${{ github.actor }}" --password-stdin
+
+      - name: Build and push image
+        run: |
+          docker buildx build --platform linux/amd64 \
+            --tag registry.example.com/homelab/emby-insights:${{ steps.version.outputs.version }} \
+            --tag registry.example.com/homelab/emby-insights:${{ github.sha }} \
+            --tag registry.example.com/homelab/emby-insights:latest \
+            -f docker/all-in-one/Dockerfile \
+            --push .
