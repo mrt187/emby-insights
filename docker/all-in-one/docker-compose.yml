@@ -2,7 +2,7 @@ name: emby-insights
 
 services:
   emby-insights:
-    image: ${EMBY_INSIGHTS_IMAGE:-ghcr.io/mrt187/emby-insights:latest}
+    image: ${EMBY_INSIGHTS_IMAGE:-registry.example.com/homelab/emby-insights:latest}
     pull_policy: always
     container_name: emby-insights
     restart: unless-stopped

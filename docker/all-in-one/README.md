@@ -10,6 +10,10 @@ cp .env.example .env
 docker compose up -d
 ```
 
+The default image is pulled from a private registry, not (yet) publicly
+reachable — until this project has a public release, build from source
+instead (see below) and set `EMBY_INSIGHTS_IMAGE` in `.env` to your own tag.
+
 Emby passwords are never stored; after a successful login only the temporary Emby access token is retained in Redis for the dashboard session. The Emby device id is generated automatically on first start and persisted in Postgres — no manual `uuidgen` step needed. Radarr, Sonarr, TMDB, Seerr and library selection are configured after deployment through the Verwaltung admin UI: the first Emby account to log in becomes the Emby Insights admin automatically.
 
 The API listens on port `8080` inside the container and provides:
@@ -22,8 +26,6 @@ The API listens on port `8080` inside the container and provides:
 Copy this `docker/all-in-one` directory to `/mnt/cache/appdata/emby-insights/`, then start it from Compose Manager the same way as above.
 
 ## Building the image yourself
-
-Only needed if you want to build from source instead of pulling `ghcr.io/mrt187/emby-insights`:
 
 ```bash
 docker build -f docker/all-in-one/Dockerfile -t emby-insights:local .
