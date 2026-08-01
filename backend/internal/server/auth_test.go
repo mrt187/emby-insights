@@ -353,13 +353,13 @@ func (store *memorySessionStore) Delete(_ context.Context, _ string) error {
 func TestLoginCreatesSessionWithoutExposingEmbyToken(t *testing.T) {
 	store := &memorySessionStore{}
 	app := &App{
-		authenticator: fakeAuthenticator{identity: emby.Identity{UserID: "user-1", DisplayName: "Thomas", AccessToken: "secret-token"}},
+		authenticator: fakeAuthenticator{identity: emby.Identity{UserID: "user-1", DisplayName: "Test User", AccessToken: "secret-token"}},
 		sessions:      store,
 		cookieSecure:  true,
 		loginLimiters: make(map[string]*ipRateLimiter),
 	}
 
-	request := httptest.NewRequest(http.MethodPost, "/api/auth/emby/login", strings.NewReader(`{"username":"thomas","password":"password"}`))
+	request := httptest.NewRequest(http.MethodPost, "/api/auth/emby/login", strings.NewReader(`{"username":"testuser","password":"password"}`))
 	recorder := httptest.NewRecorder()
 	app.Handler().ServeHTTP(recorder, request)
 
@@ -377,7 +377,7 @@ func TestLoginCreatesSessionWithoutExposingEmbyToken(t *testing.T) {
 
 func TestLoginRejectsInvalidCredentials(t *testing.T) {
 	app := &App{authenticator: fakeAuthenticator{err: emby.ErrInvalidCredentials}, sessions: &memorySessionStore{}, loginLimiters: make(map[string]*ipRateLimiter)}
-	request := httptest.NewRequest(http.MethodPost, "/api/auth/emby/login", strings.NewReader(`{"username":"thomas","password":"wrong"}`))
+	request := httptest.NewRequest(http.MethodPost, "/api/auth/emby/login", strings.NewReader(`{"username":"testuser","password":"wrong"}`))
 	recorder := httptest.NewRecorder()
 	app.Handler().ServeHTTP(recorder, request)
 
@@ -387,7 +387,7 @@ func TestLoginRejectsInvalidCredentials(t *testing.T) {
 }
 
 func TestStatsUsesSessionIdentity(t *testing.T) {
-	store := &memorySessionStore{identity: emby.Identity{UserID: "user-1", DisplayName: "Thomas", AccessToken: "secret-token"}}
+	store := &memorySessionStore{identity: emby.Identity{UserID: "user-1", DisplayName: "Test User", AccessToken: "secret-token"}}
 	statistics := &fakeStatisticsReader{statistics: emby.PersonalWatchTime{WatchSeconds: 3600, PreviousWatchSeconds: 1800}}
 	app := &App{sessions: store, statistics: statistics}
 	request := httptest.NewRequest(http.MethodGet, "/api/stats?period=month", nil)

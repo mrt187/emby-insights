@@ -1583,7 +1583,7 @@ function UserChat({ userName, userId }: { userName: string; userId: string }) {
     <section className="chat-thread" aria-label="Chat mit dem Betreiber">
       {state === "loading" && <p className="poster-status" role="status">Wird geladen …</p>}
       {state === "error" && <p className="poster-status">Nicht verfügbar</p>}
-      {state === "ready" && messages.length === 0 && <p className="chat-empty">Schreib Thomas eine Nachricht bei Fragen oder Problemen.</p>}
+      {state === "ready" && messages.length === 0 && <p className="chat-empty">Schreib dem Admin eine Nachricht bei Fragen oder Problemen.</p>}
       <ChatMessageList messages={messages} mineWhenFromAdmin={false} mineName={userName} mineAvatarSrc={`/api/me/avatar?u=${encodeURIComponent(userId)}`} theirsName="Admin" theirsAvatarSrc="/api/messages/admin-avatar" />
       <ChatComposer placeholder="Nachricht schreiben …" onSend={send} />
     </section>

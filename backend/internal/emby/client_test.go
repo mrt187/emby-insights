@@ -18,18 +18,18 @@ func TestAuthenticateSendsEmbyRequest(t *testing.T) {
 			t.Fatalf("missing device id header: %q", request.Header.Get("X-Emby-Authorization"))
 		}
 		body, _ := io.ReadAll(request.Body)
-		if string(body) != `{"Username":"thomas","Pw":"secret"}` {
+		if string(body) != `{"Username":"testuser","Pw":"secret"}` {
 			t.Fatalf("body = %s", body)
 		}
 		writer.Header().Set("Content-Type", "application/json")
-		_, _ = writer.Write([]byte(`{"User":{"Id":"user-1","Name":"Thomas"},"AccessToken":"token","ServerId":"server-1"}`))
+		_, _ = writer.Write([]byte(`{"User":{"Id":"user-1","Name":"Test User"},"AccessToken":"token","ServerId":"server-1"}`))
 	}))
 	defer testServer.Close()
-	identity, err := NewClient(testServer.URL+"/emby", "dashboard-device", "admin-key").Authenticate(context.Background(), Credentials{Username: "thomas", Password: "secret"})
+	identity, err := NewClient(testServer.URL+"/emby", "dashboard-device", "admin-key").Authenticate(context.Background(), Credentials{Username: "testuser", Password: "secret"})
 	if err != nil {
 		t.Fatalf("Authenticate() error = %v", err)
 	}
-	if identity.UserID != "user-1" || identity.DisplayName != "Thomas" || identity.AccessToken != "token" {
+	if identity.UserID != "user-1" || identity.DisplayName != "Test User" || identity.AccessToken != "token" {
 		t.Fatalf("identity = %#v", identity)
 	}
 }
