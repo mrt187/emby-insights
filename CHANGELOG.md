@@ -1197,7 +1197,7 @@ The project follows [Semantic Versioning](https://semver.org/):
 - Both integrations are optional: leaving their environment variables empty
   disables the corresponding card instead of failing startup.
 
-## [0.4.0] - 2026-07-29
+## 0.4.0 - 2026-07-29
 
 ### Added
 
@@ -1215,7 +1215,7 @@ The project follows [Semantic Versioning](https://semver.org/):
 
 - Reduced the personal card to avatar, name, and the rotating figure.
 
-## [0.3.5] - 2026-07-29
+## 0.3.5 - 2026-07-29
 
 ### Fixed
 
@@ -1236,7 +1236,7 @@ The project follows [Semantic Versioning](https://semver.org/):
   on Escape and outside clicks, the two navigation landmarks have distinct
   labels, and touch targets meet 44px.
 
-## [0.3.4] - 2026-07-29
+## 0.3.4 - 2026-07-29
 
 ### Changed
 
@@ -1245,14 +1245,14 @@ The project follows [Semantic Versioning](https://semver.org/):
   image, including a safe one-time handover from the previously standalone
   application container.
 
-## [0.3.3] - 2026-07-29
+## 0.3.3 - 2026-07-29
 
 ### Fixed
 
 - Made the Unraid User Script invoke the release updater through Bash so it
   works reliably regardless of checkout file permissions.
 
-## [0.3.2] - 2026-07-29
+## 0.3.2 - 2026-07-29
 
 ### Added
 
@@ -1260,7 +1260,7 @@ The project follows [Semantic Versioning](https://semver.org/):
   versioned, commit-specific, and `latest` container images, then deployed to
   the Emby Insights stack.
 
-## [0.3.1] - 2026-07-29
+## 0.3.1 - 2026-07-29
 
 ### Changed
 
@@ -1269,7 +1269,7 @@ The project follows [Semantic Versioning](https://semver.org/):
 - Refined dashboard typography and charcoal panel styling to improve hierarchy
   and match the selected visual reference.
 
-## [0.3.0] - 2026-07-29
+## 0.3.0 - 2026-07-29
 
 ### Changed
 
@@ -1279,7 +1279,7 @@ The project follows [Semantic Versioning](https://semver.org/):
 - Added a persistent design-system reference for the dashboard's visual tokens,
   responsive behavior, and component rules.
 
-## [0.2.0] - 2026-07-29
+## 0.2.0 - 2026-07-29
 
 ### Changed
 
@@ -1289,7 +1289,7 @@ The project follows [Semantic Versioning](https://semver.org/):
 - Improved login form semantics, dark theme metadata, image layout stability,
   and localized statistics formatting.
 
-## [0.1.0] - 2026-07-29
+## 0.1.0 - 2026-07-29
 
 ### Added
 
@@ -1303,12 +1303,3 @@ The project follows [Semantic Versioning](https://semver.org/):
 - Container images are published with the matching release version, the commit
   SHA, and `latest`.
 
-[0.4.0]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.4.0
-[0.3.5]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.3.5
-[0.3.3]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.3.3
-[0.3.4]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.3.4
-[0.3.2]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.3.2
-[0.3.1]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.3.1
-[0.3.0]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.3.0
-[0.2.0]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.2.0
-[0.1.0]: https://registry.example.com/Homelab/emby-insights/releases/tag/v0.1.0

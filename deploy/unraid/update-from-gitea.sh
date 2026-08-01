@@ -4,7 +4,7 @@ set -euo pipefail
 APP_DIR="${APP_DIR:-/mnt/cache/appdata/emby-insights}"
 REPO_DIR="${REPO_DIR:-$APP_DIR/build}"
 COMPOSE_FILE="${COMPOSE_FILE:-$APP_DIR/docker-compose.yml}"
-IMAGE="${IMAGE:-registry.example.com/homelab/emby-insights}"
+IMAGE="${IMAGE:-ghcr.io/mrt187/emby-insights}"
 STATE_FILE="$APP_DIR/.emby-insights-release"
 LOCK_FILE="$APP_DIR/.emby-insights-release.lock"
 

@@ -2,7 +2,7 @@ name: emby-insights
 
 services:
   emby-insights:
-    image: registry.example.com/homelab/emby-insights:latest
+    image: ${EMBY_INSIGHTS_IMAGE:-ghcr.io/mrt187/emby-insights:latest}
     pull_policy: always
     container_name: emby-insights
     restart: unless-stopped
@@ -12,10 +12,3 @@ services:
       - "${EMBY_INSIGHTS_PORT:-8081}:8080"
     volumes:
       - ./config:/config
-    networks:
-      - vpn-proton
-
-networks:
-  vpn-proton:
-    external: true
-    name: wg0
