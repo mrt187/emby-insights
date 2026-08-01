@@ -16,7 +16,7 @@ import (
 // operator's own home network. This regressed once already — see v0.8.57.
 func TestValidateServiceURLAllowsPrivateLAN(t *testing.T) {
 	for _, url := range []string{
-		"http://10.0.0.2:5055",
+		"http://10.0.0.5:5055",
 		"http://192.168.1.50:7878",
 		"http://172.16.0.5:8989",
 	} {
