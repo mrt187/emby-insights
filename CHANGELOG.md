@@ -8,6 +8,12 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.73] - 2026-08-01
+
+### Chore
+
+- Test-Release, um den neuen Gitea-Actions-Build-Workflow und den Compose-Manager-"Update Stack"-Ablauf zu verifizieren.
+
 ## [0.8.72] - 2026-07-31
 
 ### Fixed
