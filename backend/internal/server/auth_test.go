@@ -306,6 +306,10 @@ func (fake *fakeTrackingStore) TopRatings(_ context.Context, _ int) ([]store.Agg
 	return fake.topRatings, fake.topRatingsErr
 }
 
+func (fake *fakeTrackingStore) PosterImage(_ context.Context, _, _ string) ([]byte, string, bool, error) {
+	return nil, "", false, nil
+}
+
 type fakeSeriesInProgressReader struct {
 	items []emby.SeriesProgress
 }

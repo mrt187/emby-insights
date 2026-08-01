@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -304,6 +305,7 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/tracking", app.upsertTracking)
 	mux.HandleFunc("GET /api/tracking/watchlist", app.trackingWatchlist)
 	mux.HandleFunc("GET /api/tracking/ratings", app.trackingRatings)
+	mux.HandleFunc("GET /api/tracking/poster", app.trackingPosterImage)
 	mux.HandleFunc("POST /api/media/emby/favorite", app.setFavoriteHandler(true))
 	mux.HandleFunc("DELETE /api/media/emby/favorite", app.setFavoriteHandler(false))
 	mux.HandleFunc("GET /api/messages", app.getMessages)
@@ -882,6 +884,15 @@ func (app *App) upsertTracking(writer http.ResponseWriter, request *http.Request
 	if entry.Rating < 0 || entry.Rating > 5 {
 		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "rating must be between 0 and 5"})
 		return
+	}
+
+	// Best-effort: cache the poster now, while entry.PosterURL is guaranteed
+	// fresh (it was built moments ago when the detail screen loaded). A
+	// failed fetch just leaves the image column untouched rather than
+	// failing the whole save — see the "Top Bewertet" fix in CHANGELOG.
+	if data, contentType, ok := app.fetchPosterBytes(request.Context(), entry.MediaSource, entry.PosterURL); ok {
+		entry.PosterImageData = data
+		entry.PosterImageContentType = contentType
 	}
 
 	if err := app.tracking.Upsert(request.Context(), identity.UserID, entry); err != nil {
@@ -1861,4 +1872,97 @@ func (app *App) itemImage(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "public, max-age=604800, immutable")
 	writer.WriteHeader(http.StatusOK)
 	_, _ = writer.Write(image.Data)
+}
+
+// trackingPosterImage serves the poster bytes cached alongside a rating
+// (migration 009) — the "Top Bewertet" home row and a user's own ratings/
+// watchlist all link here instead of a raw Emby/TMDB URL, so a title's
+// poster survives Emby regenerating its artwork tag or removing the item
+// entirely after it was rated.
+func (app *App) trackingPosterImage(writer http.ResponseWriter, request *http.Request) {
+	if _, ok := app.identityFromRequest(writer, request); !ok {
+		return
+	}
+	mediaSource := request.URL.Query().Get("source")
+	mediaID := request.URL.Query().Get("id")
+	if mediaSource == "" || mediaID == "" {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "source and id are required"})
+		return
+	}
+	data, contentType, found, err := app.tracking.PosterImage(request.Context(), mediaSource, mediaID)
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "poster is unavailable"})
+		return
+	}
+	if !found {
+		http.NotFound(writer, request)
+		return
+	}
+	writer.Header().Set("Content-Type", contentType)
+	writer.Header().Set("Cache-Control", "public, max-age=604800, immutable")
+	writer.WriteHeader(http.StatusOK)
+	_, _ = writer.Write(data)
+}
+
+// fetchPosterBytes resolves a poster URL to actual image bytes so it can be
+// persisted (see upsertTracking and BackfillPosterImages). Emby-sourced URLs
+// are our own /api/images proxy links (see emby.ImageURL) — those go
+// straight to Emby with the admin API key, bypassing the proxy's Redis cache
+// since this only ever runs once per rating. Anything else (Seerr/TMDB
+// URLs) is already a stable, publicly reachable image and is just fetched
+// directly.
+func (app *App) fetchPosterBytes(ctx context.Context, mediaSource, posterURL string) ([]byte, string, bool) {
+	if posterURL == "" {
+		return nil, "", false
+	}
+	if mediaSource == "emby" {
+		itemID, tag, maxWidth, ok := parseImageProxyURL(posterURL)
+		if !ok {
+			return nil, "", false
+		}
+		image, err := app.embyClient.ItemImage(ctx, itemID, "Primary", tag, maxWidth)
+		if err != nil {
+			return nil, "", false
+		}
+		return image.Data, image.ContentType, true
+	}
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, posterURL, nil)
+	if err != nil {
+		return nil, "", false
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return nil, "", false
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return nil, "", false
+	}
+	data, err := io.ReadAll(io.LimitReader(response.Body, 5<<20))
+	if err != nil {
+		return nil, "", false
+	}
+	contentType := response.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "image/jpeg"
+	}
+	return data, contentType, true
+}
+
+// parseImageProxyURL extracts the itemId/tag/maxWidth query parameters back
+// out of a URL built by emby.ImageURL.
+func parseImageProxyURL(raw string) (itemID, tag string, maxWidth int, ok bool) {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return "", "", 0, false
+	}
+	query := parsed.Query()
+	itemID = query.Get("itemId")
+	tag = query.Get("tag")
+	width, err := strconv.Atoi(query.Get("maxWidth"))
+	if itemID == "" || tag == "" || err != nil {
+		return "", "", 0, false
+	}
+	return itemID, tag, width, true
 }

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"net/url"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -21,6 +22,11 @@ type MediaTracking struct {
 	Rating           int    `json:"rating,omitempty"`
 	OnWatchlist      bool   `json:"onWatchlist"`
 	HiddenInProgress bool   `json:"hiddenInProgress,omitempty"`
+	// PosterImageData/PosterImageContentType carry a freshly fetched poster
+	// to persist alongside the rating (see server.fetchPosterBytes) — never
+	// part of the JSON API, only used internally by Upsert.
+	PosterImageData        []byte `json:"-"`
+	PosterImageContentType string `json:"-"`
 }
 
 type TrackingStore interface {
@@ -30,6 +36,7 @@ type TrackingStore interface {
 	Ratings(ctx context.Context, embyUserID string) ([]MediaTracking, error)
 	HiddenInProgressIDs(ctx context.Context, embyUserID string) (map[string]bool, error)
 	TopRatings(ctx context.Context, limit int) ([]AggregatedRating, error)
+	PosterImage(ctx context.Context, mediaSource, mediaID string) ([]byte, string, bool, error)
 }
 
 // AggregatedRating is one title's rating averaged across every Emby Insights
@@ -53,17 +60,28 @@ func NewPostgresTrackingStore(pool *pgxpool.Pool) *PostgresTrackingStore {
 	return &PostgresTrackingStore{pool: pool}
 }
 
+// posterServingURL points the browser at our own permanently-cached poster
+// once one has been stored, instead of the (possibly stale) URL captured at
+// rating time — see migration 009.
+func posterServingURL(mediaSource, mediaID string, hasImage bool, fallback string) string {
+	if !hasImage {
+		return fallback
+	}
+	return "/api/tracking/poster?source=" + url.QueryEscape(mediaSource) + "&id=" + url.QueryEscape(mediaID)
+}
+
 // Get returns the tracking entry for one title, and false if the user has
 // never rated, watchlisted or hidden it.
 func (store *PostgresTrackingStore) Get(ctx context.Context, embyUserID, mediaSource, mediaID string) (MediaTracking, bool, error) {
 	row := store.pool.QueryRow(ctx, `
-		SELECT media_source, media_id, media_type, title, poster_url, COALESCE(rating, 0), on_watchlist, hidden_in_progress
+		SELECT media_source, media_id, media_type, title, poster_url, poster_image IS NOT NULL, COALESCE(rating, 0), on_watchlist, hidden_in_progress
 		FROM media_tracking
 		WHERE emby_user_id = $1 AND media_source = $2 AND media_id = $3
 	`, embyUserID, mediaSource, mediaID)
 
 	var entry MediaTracking
-	err := row.Scan(&entry.MediaSource, &entry.MediaID, &entry.MediaType, &entry.Title, &entry.PosterURL,
+	var hasImage bool
+	err := row.Scan(&entry.MediaSource, &entry.MediaID, &entry.MediaType, &entry.Title, &entry.PosterURL, &hasImage,
 		&entry.Rating, &entry.OnWatchlist, &entry.HiddenInProgress)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return MediaTracking{}, false, nil
@@ -71,34 +89,45 @@ func (store *PostgresTrackingStore) Get(ctx context.Context, embyUserID, mediaSo
 	if err != nil {
 		return MediaTracking{}, false, err
 	}
+	entry.PosterURL = posterServingURL(entry.MediaSource, entry.MediaID, hasImage, entry.PosterURL)
 	return entry, true, nil
 }
 
 // Upsert stores a rating, watchlist membership and/or hidden-in-progress
 // flag for one title. A rating of 0 clears it (NULLIF turns it into SQL
-// NULL) rather than storing an invalid value.
+// NULL) rather than storing an invalid value. PosterImageData is only
+// overwritten when the caller actually fetched a fresh one (see
+// server.upsertTracking) — an empty value leaves whatever was already
+// stored untouched, so a failed fetch on one save doesn't wipe out a poster
+// a previous save already cached.
 func (store *PostgresTrackingStore) Upsert(ctx context.Context, embyUserID string, entry MediaTracking) error {
+	var posterContentType *string
+	if entry.PosterImageContentType != "" {
+		posterContentType = &entry.PosterImageContentType
+	}
 	_, err := store.pool.Exec(ctx, `
 		INSERT INTO media_tracking
-			(emby_user_id, media_source, media_id, media_type, title, poster_url, rating, on_watchlist, hidden_in_progress, updated_at)
+			(emby_user_id, media_source, media_id, media_type, title, poster_url, poster_image, poster_content_type, rating, on_watchlist, hidden_in_progress, updated_at)
 		VALUES
-			($1, $2, $3, $4, $5, $6, NULLIF($7, 0), $8, $9, CURRENT_TIMESTAMP)
+			($1, $2, $3, $4, $5, $6, $7, $8, NULLIF($9, 0), $10, $11, CURRENT_TIMESTAMP)
 		ON CONFLICT (emby_user_id, media_source, media_id) DO UPDATE SET
-			media_type         = EXCLUDED.media_type,
-			title              = EXCLUDED.title,
-			poster_url         = EXCLUDED.poster_url,
-			rating             = EXCLUDED.rating,
-			on_watchlist       = EXCLUDED.on_watchlist,
-			hidden_in_progress = EXCLUDED.hidden_in_progress,
-			updated_at         = CURRENT_TIMESTAMP
+			media_type          = EXCLUDED.media_type,
+			title               = EXCLUDED.title,
+			poster_url          = EXCLUDED.poster_url,
+			poster_image         = COALESCE(EXCLUDED.poster_image, media_tracking.poster_image),
+			poster_content_type = COALESCE(EXCLUDED.poster_content_type, media_tracking.poster_content_type),
+			rating              = EXCLUDED.rating,
+			on_watchlist        = EXCLUDED.on_watchlist,
+			hidden_in_progress  = EXCLUDED.hidden_in_progress,
+			updated_at          = CURRENT_TIMESTAMP
 	`, embyUserID, entry.MediaSource, entry.MediaID, entry.MediaType, entry.Title, entry.PosterURL,
-		entry.Rating, entry.OnWatchlist, entry.HiddenInProgress)
+		entry.PosterImageData, posterContentType, entry.Rating, entry.OnWatchlist, entry.HiddenInProgress)
 	return err
 }
 
 func (store *PostgresTrackingStore) Watchlist(ctx context.Context, embyUserID string) ([]MediaTracking, error) {
 	rows, err := store.pool.Query(ctx, `
-		SELECT media_source, media_id, media_type, title, poster_url, COALESCE(rating, 0), on_watchlist, hidden_in_progress
+		SELECT media_source, media_id, media_type, title, poster_url, poster_image IS NOT NULL, COALESCE(rating, 0), on_watchlist, hidden_in_progress
 		FROM media_tracking
 		WHERE emby_user_id = $1 AND on_watchlist
 		ORDER BY updated_at DESC
@@ -112,7 +141,7 @@ func (store *PostgresTrackingStore) Watchlist(ctx context.Context, embyUserID st
 
 func (store *PostgresTrackingStore) Ratings(ctx context.Context, embyUserID string) ([]MediaTracking, error) {
 	rows, err := store.pool.Query(ctx, `
-		SELECT media_source, media_id, media_type, title, poster_url, COALESCE(rating, 0), on_watchlist, hidden_in_progress
+		SELECT media_source, media_id, media_type, title, poster_url, poster_image IS NOT NULL, COALESCE(rating, 0), on_watchlist, hidden_in_progress
 		FROM media_tracking
 		WHERE emby_user_id = $1 AND rating IS NOT NULL
 		ORDER BY updated_at DESC
@@ -129,7 +158,7 @@ func (store *PostgresTrackingStore) Ratings(ctx context.Context, embyUserID stri
 // averages tie.
 func (store *PostgresTrackingStore) TopRatings(ctx context.Context, limit int) ([]AggregatedRating, error) {
 	rows, err := store.pool.Query(ctx, `
-		SELECT media_source, media_id, MAX(media_type), MAX(title), MAX(poster_url), AVG(rating)::float8, COUNT(*)
+		SELECT media_source, media_id, MAX(media_type), MAX(title), MAX(poster_url), BOOL_OR(poster_image IS NOT NULL), AVG(rating)::float8, COUNT(*)
 		FROM media_tracking
 		WHERE rating IS NOT NULL
 		GROUP BY media_source, media_id
@@ -144,14 +173,38 @@ func (store *PostgresTrackingStore) TopRatings(ctx context.Context, limit int) (
 	var results []AggregatedRating
 	for rows.Next() {
 		var entry AggregatedRating
+		var hasImage bool
 		var count int
-		if err := rows.Scan(&entry.MediaSource, &entry.MediaID, &entry.MediaType, &entry.Title, &entry.PosterURL, &entry.AverageRating, &count); err != nil {
+		if err := rows.Scan(&entry.MediaSource, &entry.MediaID, &entry.MediaType, &entry.Title, &entry.PosterURL, &hasImage, &entry.AverageRating, &count); err != nil {
 			return nil, err
 		}
 		entry.ID = entry.MediaSource + ":" + entry.MediaID
+		entry.PosterURL = posterServingURL(entry.MediaSource, entry.MediaID, hasImage, entry.PosterURL)
 		results = append(results, entry)
 	}
 	return results, rows.Err()
+}
+
+// PosterImage returns the cached poster bytes for one title, across whoever
+// rated it first — used by the /api/tracking/poster handler.
+func (store *PostgresTrackingStore) PosterImage(ctx context.Context, mediaSource, mediaID string) ([]byte, string, bool, error) {
+	row := store.pool.QueryRow(ctx, `
+		SELECT poster_image, poster_content_type
+		FROM media_tracking
+		WHERE media_source = $1 AND media_id = $2 AND poster_image IS NOT NULL
+		LIMIT 1
+	`, mediaSource, mediaID)
+
+	var data []byte
+	var contentType string
+	err := row.Scan(&data, &contentType)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, "", false, nil
+	}
+	if err != nil {
+		return nil, "", false, err
+	}
+	return data, contentType, true, nil
 }
 
 // HiddenInProgressIDs returns the Emby item ids a user dismissed from "Noch
@@ -182,10 +235,12 @@ func scanTracking(rows pgx.Rows) ([]MediaTracking, error) {
 	var results []MediaTracking
 	for rows.Next() {
 		var entry MediaTracking
-		if err := rows.Scan(&entry.MediaSource, &entry.MediaID, &entry.MediaType, &entry.Title, &entry.PosterURL,
+		var hasImage bool
+		if err := rows.Scan(&entry.MediaSource, &entry.MediaID, &entry.MediaType, &entry.Title, &entry.PosterURL, &hasImage,
 			&entry.Rating, &entry.OnWatchlist, &entry.HiddenInProgress); err != nil {
 			return nil, err
 		}
+		entry.PosterURL = posterServingURL(entry.MediaSource, entry.MediaID, hasImage, entry.PosterURL)
 		results = append(results, entry)
 	}
 	return results, rows.Err()

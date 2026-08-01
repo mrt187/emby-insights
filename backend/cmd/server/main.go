@@ -31,6 +31,8 @@ func main() {
 	}
 	defer app.Close()
 
+	go app.BackfillPosterImages(context.Background())
+
 	httpServer := &http.Server{
 		Addr:              cfg.ListenAddress,
 		Handler:           app.Handler(),
