@@ -938,6 +938,10 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
     padding: 9px 10px calc(9px + env(safe-area-inset-bottom));
     background: rgb(11 16 23 / 86%); border-top: 1px solid var(--line);
     backdrop-filter: blur(22px) saturate(150%);
+    /* iOS Safari can detach fixed + backdrop-filter elements during momentum
+       scroll, letting them drift with the page before snapping back. Forcing
+       its own compositing layer keeps it pinned. */
+    transform: translateZ(0);
   }
   .bottom-nav button {
     min-height: 44px; display: grid; gap: 4px; place-items: center;
