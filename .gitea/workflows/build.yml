@@ -6,7 +6,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest # options: -v /var/run/docker.sock:/var/run/docker.sock
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
