@@ -18,3 +18,13 @@ tools/go/
 
 # OS files
 .DS_Store
+
+# Local working files (design source drops, scratch output)
+outputs/
+work/
+emby-plugin/assets/originals/
+
+# Local agent tooling (skills, lockfiles) — not part of the product
+.agents/skills/
+.claude/skills/
+skills-lock.json
