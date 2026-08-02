@@ -8,6 +8,16 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.9.1] - 2026-08-02
+
+### Documentation
+
+- `.env.example` ships the homelab registry image as the value of
+  `EMBY_INSIGHTS_IMAGE`, pinned to `latest`, so a fresh install is a copy of
+  the file rather than a lookup. Together with `pull_policy: always` the
+  variable is written once and never touched again. Building the image
+  yourself is documented alongside it.
+
 ## [0.9.0] - 2026-08-02
 
 ### Breaking
