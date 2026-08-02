@@ -92,6 +92,9 @@ type App struct {
 	trustedProxies      []*net.IPNet
 	loginLimiters       map[string]*loginRateLimiter
 	loginLimitersMu     sync.Mutex
+	loginLimitersSwept  time.Time
+	// loginSprayDelay overrides loginSprayDelay for tests; zero means the const.
+	loginSprayDelay time.Duration
 }
 
 type loginRateLimiter struct {
@@ -371,15 +374,20 @@ func (app *App) ready(writer http.ResponseWriter, request *http.Request) {
 	respondJSON(writer, http.StatusOK, map[string]string{"status": "ready"})
 }
 
-// Login attempts are throttled on two keys at once. The strict per
-// (username, IP) limit is what actually stops password guessing, while the
-// looser per-username limit catches the same account being hammered from many
-// addresses — without letting anyone lock a neighbour out of their account
-// from a single request, which a username-only limit would allow.
+// Login throttling counts failed attempts on two keys. The per (username, IP)
+// key is the only one that ever refuses a request: it is scoped to a single
+// source, so exhausting it can never affect anybody else.
+//
+// The per-username key catches one account being guessed from many addresses,
+// but it deliberately does not deny — it delays. A username-scoped *block*
+// would hand any attacker a lockout: 20 wrong passwords in a minute and the
+// real owner is out too. Slowing every further attempt down instead makes
+// spraying expensive while the owner always gets in, just a little later.
 const (
-	loginAttemptsPerUserAndIP = 5
-	loginAttemptsPerUser      = 20
-	loginAttemptWindow        = time.Minute
+	loginFailuresPerUserAndIP = 5
+	loginFailuresPerUser      = 20
+	loginFailureWindow        = time.Minute
+	loginSprayDelay           = 2 * time.Second
 )
 
 // parseTrustedProxies turns the configured CIDR list into networks whose
@@ -459,40 +467,105 @@ func normalizeUsername(username string) string {
 	return strings.ToLower(strings.TrimSpace(username))
 }
 
-// recordLoginAttempt registers an attempt under key and reports whether it is
-// still within limit.
-func (app *App) recordLoginAttempt(key string, limit int) bool {
-	app.loginLimitersMu.Lock()
-	defer app.loginLimitersMu.Unlock()
+func userIPKey(username, clientIP string) string { return "user-ip:" + username + "|" + clientIP }
+func userKey(username string) string             { return "user:" + username }
 
+// countFailures returns how many failures under key fall inside the window.
+// The caller holds loginLimitersMu.
+func (app *App) countFailures(key string, now time.Time) int {
 	limiter, exists := app.loginLimiters[key]
 	if !exists {
-		limiter = &loginRateLimiter{}
-		app.loginLimiters[key] = limiter
+		return 0
 	}
-
-	now := time.Now()
 	valid := limiter.attempts[:0]
 	for _, t := range limiter.attempts {
-		if now.Sub(t) < loginAttemptWindow {
+		if now.Sub(t) < loginFailureWindow {
 			valid = append(valid, t)
 		}
 	}
 	limiter.attempts = valid
-
-	if len(valid) >= limit {
-		return false
-	}
-	limiter.attempts = append(limiter.attempts, now)
-	return true
+	return len(valid)
 }
 
-func (app *App) isLoginAllowed(username, clientIP string) bool {
-	// Both keys are always recorded, so a caller rotating one dimension still
-	// burns budget on the other.
-	perUserAndIP := app.recordLoginAttempt("user-ip:"+username+"|"+clientIP, loginAttemptsPerUserAndIP)
-	perUser := app.recordLoginAttempt("user:"+username, loginAttemptsPerUser)
-	return perUserAndIP && perUser
+// loginDecision reports whether an attempt may proceed and how long it should
+// be held back first. Only the source-scoped counter can refuse; the
+// account-wide counter merely slows things down (see the const block).
+func (app *App) loginDecision(username, clientIP string) (allowed bool, delay time.Duration) {
+	app.loginLimitersMu.Lock()
+	defer app.loginLimitersMu.Unlock()
+
+	now := time.Now()
+	app.sweepLoginLimiters(now)
+
+	if app.countFailures(userIPKey(username, clientIP), now) >= loginFailuresPerUserAndIP {
+		return false, 0
+	}
+	if app.countFailures(userKey(username), now) >= loginFailuresPerUser {
+		return true, app.sprayDelay()
+	}
+	return true, 0
+}
+
+func (app *App) sprayDelay() time.Duration {
+	if app.loginSprayDelay != 0 {
+		return app.loginSprayDelay
+	}
+	return loginSprayDelay
+}
+
+// recordLoginFailure is called only after Emby actually rejected the
+// credentials. Counting failures rather than requests means a user logging in
+// correctly never accumulates anything, so normal use cannot drift into the
+// throttle.
+func (app *App) recordLoginFailure(username, clientIP string) {
+	app.loginLimitersMu.Lock()
+	defer app.loginLimitersMu.Unlock()
+
+	now := time.Now()
+	for _, key := range []string{userIPKey(username, clientIP), userKey(username)} {
+		limiter, exists := app.loginLimiters[key]
+		if !exists {
+			limiter = &loginRateLimiter{}
+			app.loginLimiters[key] = limiter
+		}
+		app.countFailures(key, now) // prunes the window in place
+		limiter.attempts = append(limiter.attempts, now)
+	}
+}
+
+// clearLoginFailures wipes the record for a source that just proved it knows
+// the password, so one fat-fingered attempt does not linger for a minute.
+func (app *App) clearLoginFailures(username, clientIP string) {
+	app.loginLimitersMu.Lock()
+	defer app.loginLimitersMu.Unlock()
+	delete(app.loginLimiters, userIPKey(username, clientIP))
+	delete(app.loginLimiters, userKey(username))
+}
+
+// sweepLoginLimiters drops entries whose failures have all aged out. Without
+// it the map only ever grows: the keys contain an attacker-chosen username, so
+// an unauthenticated caller could otherwise pin arbitrary memory by guessing
+// against names that do not exist. Runs at most once per window — the map is
+// small enough that a full pass at that rate is not worth optimising.
+// The caller holds loginLimitersMu.
+func (app *App) sweepLoginLimiters(now time.Time) {
+	if now.Sub(app.loginLimitersSwept) < loginFailureWindow {
+		return
+	}
+	app.loginLimitersSwept = now
+	for key, limiter := range app.loginLimiters {
+		kept := limiter.attempts[:0]
+		for _, t := range limiter.attempts {
+			if now.Sub(t) < loginFailureWindow {
+				kept = append(kept, t)
+			}
+		}
+		if len(kept) == 0 {
+			delete(app.loginLimiters, key)
+			continue
+		}
+		limiter.attempts = kept
+	}
 }
 
 func (app *App) login(writer http.ResponseWriter, request *http.Request) {
@@ -506,12 +579,23 @@ func (app *App) login(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 
-	if !app.isLoginAllowed(normalizeUsername(input.Username), app.clientIP(request)) {
+	username := normalizeUsername(input.Username)
+	clientIP := app.clientIP(request)
+	allowed, delay := app.loginDecision(username, clientIP)
+	if !allowed {
 		respondJSON(writer, http.StatusTooManyRequests, map[string]string{"error": "too many login attempts, try again later"})
 		return
 	}
+	if delay > 0 {
+		select {
+		case <-time.After(delay):
+		case <-request.Context().Done():
+			return
+		}
+	}
 	identity, err := app.authenticator.Authenticate(request.Context(), emby.Credentials{Username: input.Username, Password: input.Password})
 	if errors.Is(err, emby.ErrInvalidCredentials) {
+		app.recordLoginFailure(username, clientIP)
 		respondJSON(writer, http.StatusUnauthorized, map[string]string{"error": "invalid credentials"})
 		return
 	}
@@ -519,6 +603,7 @@ func (app *App) login(writer http.ResponseWriter, request *http.Request) {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "Emby is unavailable"})
 		return
 	}
+	app.clearLoginFailures(username, clientIP)
 	// The first Emby account to ever log in successfully becomes the Emby
 	// Insights admin, atomically — see appconfig.Store.ClaimAdminOwner. A
 	// failure here is best-effort: it must never block a login, it just means

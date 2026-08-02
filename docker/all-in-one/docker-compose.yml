@@ -2,7 +2,9 @@ name: emby-insights
 
 services:
   emby-insights:
-    image: ${EMBY_INSIGHTS_IMAGE:-registry.example.com/homelab/emby-insights:latest}
+    # No default: the image lives in a private registry, so EMBY_INSIGHTS_IMAGE
+    # has to name it explicitly in .env (see .env.example).
+    image: ${EMBY_INSIGHTS_IMAGE:?set EMBY_INSIGHTS_IMAGE in .env}
     pull_policy: always
     container_name: emby-insights
     restart: unless-stopped

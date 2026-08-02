@@ -6,13 +6,14 @@ This image contains the Emby Insights Go backend, PostgreSQL and Redis in one co
 
 ```bash
 cp .env.example .env
-# edit .env: set POSTGRES_PASSWORD, EMBY_BASE_URL, EMBY_ADMIN_API_KEY, APP_ENCRYPTION_KEY
+# edit .env: set EMBY_INSIGHTS_IMAGE, POSTGRES_PASSWORD, EMBY_BASE_URL,
+#            EMBY_ADMIN_API_KEY, APP_ENCRYPTION_KEY
 docker compose up -d
 ```
 
-The default image is pulled from a private registry, not (yet) publicly
-reachable — until this project has a public release, build from source
-instead (see below) and set `EMBY_INSIGHTS_IMAGE` in `.env` to your own tag.
+`EMBY_INSIGHTS_IMAGE` has no default and Compose refuses to start without
+it. There is no public image yet, so build from source (see below) and
+point the variable at your own tag.
 
 Emby passwords are never stored; after a successful login only the temporary Emby access token is retained in Redis for the dashboard session. The Emby device id is generated automatically on first start and persisted in Postgres — no manual `uuidgen` step needed. Radarr, Sonarr, TMDB, Seerr and library selection are configured after deployment through the Verwaltung admin UI: the first Emby account to log in becomes the Emby Insights admin automatically.
 

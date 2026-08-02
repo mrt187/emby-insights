@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mrt187/EmbyInsights/internal/emby"
 )
@@ -17,6 +18,9 @@ func newLoginTestApp(trustedProxies ...string) *App {
 		sessions:       &memorySessionStore{},
 		trustedProxies: parseTrustedProxies(trustedProxies),
 		loginLimiters:  make(map[string]*loginRateLimiter),
+		// The spray delay is a wall-clock sleep in production; tests assert on
+		// the decision instead of waiting it out.
+		loginSprayDelay: time.Nanosecond,
 	}
 }
 
@@ -39,7 +43,7 @@ func TestLoginLimitIgnoresSpoofedForwardedFor(t *testing.T) {
 	app := newLoginTestApp() // no trusted proxies configured
 
 	var throttled bool
-	for attempt := range loginAttemptsPerUserAndIP + 3 {
+	for attempt := range loginFailuresPerUserAndIP + 3 {
 		spoofed := fmt.Sprintf("203.0.113.%d", attempt+1)
 		if postLogin(app, "victim", "198.51.100.7:5555", spoofed).Code == http.StatusTooManyRequests {
 			throttled = true
@@ -55,7 +59,7 @@ func TestLoginLimitHonoursForwardedForFromTrustedProxy(t *testing.T) {
 	app := newLoginTestApp("198.51.100.7/32")
 
 	// Exhaust the per-(user, IP) budget for one client behind the proxy.
-	for range loginAttemptsPerUserAndIP {
+	for range loginFailuresPerUserAndIP {
 		if code := postLogin(app, "tom", "198.51.100.7:5555", "203.0.113.10").Code; code == http.StatusTooManyRequests {
 			t.Fatal("throttled before the limit was reached")
 		}
@@ -74,7 +78,7 @@ func TestLoginLimitHonoursForwardedForFromTrustedProxy(t *testing.T) {
 func TestLoginLimitNormalizesUsername(t *testing.T) {
 	app := newLoginTestApp()
 
-	for range loginAttemptsPerUserAndIP {
+	for range loginFailuresPerUserAndIP {
 		postLogin(app, "tom", "203.0.113.5:1234", "")
 	}
 	// Same account, different spelling: must share the budget, not reset it.
@@ -88,7 +92,7 @@ func TestLoginLimitNormalizesUsername(t *testing.T) {
 func TestLoginLimitPerUserAllowsOtherAccounts(t *testing.T) {
 	app := newLoginTestApp()
 
-	for range loginAttemptsPerUser + 5 {
+	for range loginFailuresPerUser + 5 {
 		postLogin(app, "victim", "203.0.113.5:1234", "")
 	}
 	if code := postLogin(app, "victim", "203.0.113.5:1234", "").Code; code != http.StatusTooManyRequests {
@@ -99,21 +103,108 @@ func TestLoginLimitPerUserAllowsOtherAccounts(t *testing.T) {
 	}
 }
 
-// TestLoginLimitPerUserCatchesDistributedGuessing covers the second key: many
-// source addresses against one account still run into the per-username limit.
-func TestLoginLimitPerUserCatchesDistributedGuessing(t *testing.T) {
+// TestLoginLimitCannotLockOutAnAccount is the regression for the account
+// lockout: hammering one username — from a single address or from many — must
+// never stop the real owner from logging in somewhere else.
+func TestLoginLimitCannotLockOutAnAccount(t *testing.T) {
+	t.Run("from one address", func(t *testing.T) {
+		app := newLoginTestApp()
+		for range loginFailuresPerUser * 3 {
+			postLogin(app, "victim", "203.0.113.66:1234", "")
+		}
+		if allowed, _ := app.loginDecision("victim", "198.51.100.5"); !allowed {
+			t.Fatal("victim locked out from a clean address by a single attacker IP")
+		}
+	})
+
+	t.Run("from many addresses", func(t *testing.T) {
+		app := newLoginTestApp()
+		for attempt := range loginFailuresPerUser * 3 {
+			remote := fmt.Sprintf("203.0.113.%d:1234", attempt%200+1)
+			postLogin(app, "victim", remote, "")
+		}
+		allowed, delay := app.loginDecision("victim", "198.51.100.5")
+		if !allowed {
+			t.Fatal("victim locked out from a clean address by distributed guessing")
+		}
+		if delay == 0 {
+			t.Fatal("distributed guessing did not slow anything down")
+		}
+	})
+}
+
+// TestLoginLimitPerUserDelaysDistributedGuessing covers the second key: many
+// source addresses against one account are slowed down rather than blocked.
+func TestLoginLimitPerUserDelaysDistributedGuessing(t *testing.T) {
 	app := newLoginTestApp()
 
-	var throttled bool
-	for attempt := range loginAttemptsPerUser + 5 {
-		remote := fmt.Sprintf("203.0.113.%d:1234", attempt%250+1)
-		if postLogin(app, "tom", remote, "").Code == http.StatusTooManyRequests {
-			throttled = true
-			break
+	for attempt := range loginFailuresPerUser {
+		remote := fmt.Sprintf("203.0.113.%d:1234", attempt%200+1)
+		if code := postLogin(app, "tom", remote, "").Code; code == http.StatusTooManyRequests {
+			t.Fatalf("attempt %d was refused; the account-wide limit must delay, not deny", attempt)
 		}
 	}
-	if !throttled {
-		t.Fatal("guessing one account from many addresses was never throttled")
+	allowed, delay := app.loginDecision("tom", "192.0.2.77")
+	if !allowed {
+		t.Fatal("the account-wide limit denied a request")
+	}
+	if delay == 0 {
+		t.Fatalf("after %d failures the next attempt should be delayed", loginFailuresPerUser)
+	}
+}
+
+// TestLoginLimitCountsFailuresNotRequests: a correct password must neither
+// accumulate budget nor leave the previous failures behind.
+func TestLoginLimitCountsFailuresNotRequests(t *testing.T) {
+	app := newLoginTestApp()
+	app.authenticator = fakeAuthenticator{identity: emby.Identity{UserID: "u1", DisplayName: "tom"}}
+
+	for range loginFailuresPerUserAndIP * 4 {
+		if code := postLogin(app, "tom", "203.0.113.5:1234", "").Code; code == http.StatusTooManyRequests {
+			t.Fatal("successful logins were counted against the limit")
+		}
+	}
+	if len(app.loginLimiters) != 0 {
+		t.Fatalf("successful logins left %d limiter entries behind", len(app.loginLimiters))
+	}
+}
+
+func TestLoginLimitSuccessClearsFailures(t *testing.T) {
+	app := newLoginTestApp()
+	for range loginFailuresPerUserAndIP - 1 {
+		postLogin(app, "tom", "203.0.113.5:1234", "")
+	}
+	app.authenticator = fakeAuthenticator{identity: emby.Identity{UserID: "u1", DisplayName: "tom"}}
+	postLogin(app, "tom", "203.0.113.5:1234", "")
+
+	app.authenticator = fakeAuthenticator{err: emby.ErrInvalidCredentials}
+	for range loginFailuresPerUserAndIP {
+		if code := postLogin(app, "tom", "203.0.113.5:1234", "").Code; code == http.StatusTooManyRequests {
+			t.Fatal("a successful login did not reset the failure count")
+		}
+	}
+}
+
+// TestLoginLimiterMapDoesNotGrowUnbounded is the regression for the memory
+// leak: the map is keyed by an attacker-chosen username and had no eviction.
+func TestLoginLimiterMapDoesNotGrowUnbounded(t *testing.T) {
+	app := newLoginTestApp()
+
+	stale := time.Now().Add(-2 * loginFailureWindow)
+	for i := range 5000 {
+		key := fmt.Sprintf("user:ghost-%d", i)
+		app.loginLimiters[key] = &loginRateLimiter{attempts: []time.Time{stale}}
+	}
+	app.loginLimiters["user:recent"] = &loginRateLimiter{attempts: []time.Time{time.Now()}}
+
+	app.loginLimitersSwept = stale // force the next decision to sweep
+	app.loginDecision("someone", "203.0.113.5")
+
+	if len(app.loginLimiters) > 2 {
+		t.Fatalf("sweep left %d entries, want the aged-out ones gone", len(app.loginLimiters))
+	}
+	if _, ok := app.loginLimiters["user:recent"]; !ok {
+		t.Fatal("sweep dropped a limiter that is still inside the window")
 	}
 }
 

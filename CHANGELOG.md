@@ -8,6 +8,32 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.75] - 2026-08-02
+
+### Security
+
+- Login throttling no longer lets anyone lock a stranger out of their account.
+  The account-wide counter used to refuse requests, so 20 wrong passwords in a
+  minute — sendable from a single address — kept the real owner out too. It now
+  delays further attempts instead of denying them; only the per-(user, address)
+  counter can still refuse, and that one is scoped to the attacker's own
+  address. Attempts are counted on failed authentications rather than on
+  requests, and a successful login clears the record.
+- The login limiter's bookkeeping is swept once per window. Its keys contain a
+  caller-supplied username, so an unauthenticated client could previously pin
+  arbitrary amounts of memory by guessing against names that do not exist.
+- The HTML document now carries a Content-Security-Policy of its own, issued
+  per request with a nonce (`frontend/middleware.ts`). Until now the policy sat
+  only on the API responses while the page itself — the thing a script would
+  actually run in — had no policy at all. `script-src` admits nothing but
+  same-origin files and the nonce, so an injected inline script does not run.
+
+### Changed
+
+- The container registry host is no longer hardcoded. CI reads it from the
+  `REGISTRY_HOST` repository variable, and `EMBY_INSIGHTS_IMAGE` has to be set
+  in `.env` — Compose refuses to start without it.
+
 ## [0.8.74] - 2026-08-02
 
 ### Security

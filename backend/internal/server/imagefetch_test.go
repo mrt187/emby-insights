@@ -29,7 +29,7 @@ func newImageFetchTestApp(tracking store.TrackingStore) *App {
 func TestIsPubliclyRoutableBlocksInternalAndReservedRanges(t *testing.T) {
 	blocked := []string{
 		"127.0.0.1",        // loopback
-		"10.0.0.2",        // private — the homelab Gitea host
+		"10.0.0.2",        // private — a RFC1918 host on the same LAN
 		"192.168.1.10",     // private
 		"172.16.5.4",       // private
 		"169.254.169.254",  // cloud metadata
@@ -102,7 +102,7 @@ func TestImageFetchClientRefusesRedirects(t *testing.T) {
 	if client.CheckRedirect == nil {
 		t.Fatal("CheckRedirect is not set, redirects would be followed")
 	}
-	request := httptest.NewRequest(http.MethodGet, "http://10.0.0.2/internal", nil)
+	request := httptest.NewRequest(http.MethodGet, "http://198.51.100.2/internal", nil)
 	if err := client.CheckRedirect(request, nil); err == nil {
 		t.Fatal("CheckRedirect allowed a redirect")
 	}
