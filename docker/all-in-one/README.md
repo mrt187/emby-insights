@@ -10,6 +10,23 @@ cp .env.example .env
 # .env ausfüllen, siehe Tabelle
 docker compose up -d
 ```
+## docker-compose.yaml
+````
+name: emby-insights
+
+services:
+  emby-insights:
+    image: ${EMBY_INSIGHTS_IMAGE:?set EMBY_INSIGHTS_IMAGE in .env}
+    pull_policy: always
+    container_name: emby-insights
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${EMBY_INSIGHTS_PORT:-8081}:8080"
+    volumes:
+      - ./config:/config
+```
 
 ## Variablen
 
@@ -40,16 +57,3 @@ Im Container lauscht die API auf Port `8080`:
 Emby-Passwörter werden nie gespeichert. Nach dem Login liegt nur der temporäre
 Emby-Access-Token in Redis. Die Emby-Device-ID wird beim ersten Start erzeugt
 und in PostgreSQL abgelegt.
-
-## Unraid
-
-Dieses Verzeichnis nach `/mnt/cache/appdata/emby-insights/` kopieren und über
-den Compose Manager starten.
-
-## Image selbst bauen
-
-```bash
-docker build -f docker/all-in-one/Dockerfile -t emby-insights:local .
-```
-
-Danach `EMBY_INSIGHTS_IMAGE=emby-insights:local` in der `.env` setzen.
