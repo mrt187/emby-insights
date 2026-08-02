@@ -1,35 +1,55 @@
-# All-in-one container
+# All-in-one-Container
 
-This image contains the Emby Insights Go backend, PostgreSQL and Redis in one container, with a single persistent `/config` volume. Runs on any Linux host with Docker.
+Backend, PostgreSQL und Redis in einem Container mit einem persistenten
+`/config`-Volume. Läuft auf jedem Linux-Host mit Docker.
 
-## Run with Docker Compose (recommended)
+## Start
 
 ```bash
 cp .env.example .env
-# edit .env: set EMBY_INSIGHTS_IMAGE, POSTGRES_PASSWORD, EMBY_BASE_URL,
-#            EMBY_ADMIN_API_KEY, APP_ENCRYPTION_KEY
+# .env ausfüllen, siehe Tabelle
 docker compose up -d
 ```
 
-`EMBY_INSIGHTS_IMAGE` has no default and Compose refuses to start without
-it. There is no public image yet, so build from source (see below) and
-point the variable at your own tag.
+## Variablen
 
-Emby passwords are never stored; after a successful login only the temporary Emby access token is retained in Redis for the dashboard session. The Emby device id is generated automatically on first start and persisted in Postgres — no manual `uuidgen` step needed. Radarr, Sonarr, TMDB, Seerr and library selection are configured after deployment through the Verwaltung admin UI: the first Emby account to log in becomes the Emby Insights admin automatically.
+| Variable | Bedeutung |
+| --- | --- |
+| `EMBY_INSIGHTS_IMAGE` | Pflicht, ohne Default. Registry-Image oder eigener Build-Tag. |
+| `EMBY_INSIGHTS_PORT` | Port auf dem Host, Standard `8081`. |
+| `LISTEN_ADDRESS` | Nur ändern, wenn Port 8080 im Container belegt ist. |
+| `POSTGRES_PASSWORD` | Langer, eigener Wert. Nach dem ersten Start nicht mehr ändern, sonst ist die Datenbank unbrauchbar. |
+| `APP_ENCRYPTION_KEY` | Einmalig mit `openssl rand -base64 32` erzeugen und stabil halten. Verschlüsselt die gespeicherten API-Keys von Seerr, Radarr, Sonarr und TMDB; geht er verloren, sind diese unlesbar. |
+| `EMBY_BASE_URL` | Adresse des Emby-Servers, inklusive `/emby`. |
+| `EMBY_ADMIN_API_KEY` | In Emby unter Dashboard → Erweitert → Sicherheit → API-Schlüssel anlegen. |
+| `COOKIE_SECURE` | `false` nur für den ersten direkten HTTP-Test, danach `true`. |
+| `TRUSTED_PROXIES` | Optional, kommagetrennte IPs oder CIDRs des vorgelagerten Reverse Proxy. Nur diese Quellen dürfen per `X-Forwarded-For` die echte Client-Adresse melden. Leer lassen, wenn der Container direkt erreicht wird. |
 
-The API listens on port `8080` inside the container and provides:
+Alles Weitere — welche Dienste aktiv sind, deren Adressen und Keys, die
+Bibliotheksauswahl — wird nach dem ersten Login in der Verwaltungsoberfläche
+konfiguriert. Der erste Emby-Account, der sich erfolgreich anmeldet, wird
+automatisch Administrator.
 
-- `GET /healthz` — process is running
-- `GET /readyz` — PostgreSQL and Redis are reachable
+## Betrieb
 
-### Unraid
+Im Container lauscht die API auf Port `8080`:
 
-Copy this `docker/all-in-one` directory to `/mnt/cache/appdata/emby-insights/`, then start it from Compose Manager the same way as above.
+- `GET /healthz` — Prozess läuft
+- `GET /readyz` — PostgreSQL und Redis erreichbar
 
-## Building the image yourself
+Emby-Passwörter werden nie gespeichert. Nach dem Login liegt nur der temporäre
+Emby-Access-Token in Redis. Die Emby-Device-ID wird beim ersten Start erzeugt
+und in PostgreSQL abgelegt.
+
+## Unraid
+
+Dieses Verzeichnis nach `/mnt/cache/appdata/emby-insights/` kopieren und über
+den Compose Manager starten.
+
+## Image selbst bauen
 
 ```bash
 docker build -f docker/all-in-one/Dockerfile -t emby-insights:local .
 ```
 
-Then point `EMBY_INSIGHTS_IMAGE` in `.env` at your own tag.
+Danach `EMBY_INSIGHTS_IMAGE=emby-insights:local` in der `.env` setzen.

@@ -8,6 +8,14 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.9.3] - 2026-08-02
+
+### Documentation
+
+- READMEs auf Deutsch und auf das Wesentliche gekürzt.
+- `docker-compose.yml` und `.env.example` ohne Kommentare; die Erklärungen zu
+  den Variablen stehen jetzt gesammelt in `docker/all-in-one/README.md`.
+
 ## [0.9.2] - 2026-08-02
 
 No functional changes. The version was raised on its own to cut a fresh

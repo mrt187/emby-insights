@@ -1,27 +1,44 @@
 # Emby Insights
 
-Ein persönliches, mobile-first Medien-Dashboard für Emby-Nutzer.
+Ein persönliches, mobile-first Medien-Dashboard für Emby-Nutzer. Emby Insights
+ergänzt den Player, statt ihn zu ersetzen: persönliche Statistiken, eigene
+Medienanfragen, kommende Veröffentlichungen und Benachrichtigungen an einem Ort.
 
-Emby Insights ergänzt den Player, statt ihn zu ersetzen: Es bündelt persönliche Statistiken, eigene Medienanfragen, kommende Veröffentlichungen und Benachrichtigungen in einer ruhigen, hochwertigen Oberfläche.
+Aktuelles Release: [v0.9.3](CHANGELOG.md#093---2026-08-02)
 
-Die Produktgrundlage und das MVP stehen in [docs/PRODUCT-BLUEPRINT.md](docs/PRODUCT-BLUEPRINT.md). Die technische Richtung steht in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+## Funktionsumfang
 
-## Status
+- Emby-Login mit geschützten Sessions
+- Persönliche Wiedergabestatistiken: Genres, Wochentage, Wiedergabestunden,
+  längste Sessions, aktivste Tage
+- Detailansicht je Titel mit Beschreibung, Besetzung, Bewertung und eigenem
+  Status
+- Home-Karten: Meine Woche, Demnächst, Anfragen, Neu für dich
+- Anfragen-Seite mit Discover-Listen aus Seerr und TMDB
+- All-in-one-Docker-Container mit Backend, PostgreSQL und Redis
 
-Current release: [v0.9.2](CHANGELOG.md#092---2026-08-02).
+Die Daten stammen aus Emby, Radarr, Sonarr, TMDB und Seerr.
 
-The personal dashboard foundation is implemented: Emby login, protected
-sessions, personal watch-time statistics, and the all-in-one Docker container.
-Clicking any poster opens a detail screen (description, cast, rating,
-personal status). All four Home cards (My Week, Upcoming, Requests, Neu für
-dich) read real data
-from Emby, Radarr, Sonarr, TMDB and Seerr, the Statistics page adds continue watching,
-watched movies/series, and genre/weekday charts, and the Requests page adds
-five Seerr/TMDB discover lists.
+## Installation
+
+Anleitung in [docker/all-in-one/README.md](docker/all-in-one/README.md).
+
+Für die Statistiken wird zusätzlich der
+[Emby Insights Connector](https://gitea.homexxlab.de/Homelab/emby-insights-plugin)
+im Emby-Server benötigt.
+
+## Dokumentation
+
+- [Produktgrundlage und MVP](docs/PRODUCT-BLUEPRINT.md)
+- [Architektur](docs/ARCHITECTURE.md)
+- [Changelog](CHANGELOG.md)
 
 ## Releases
 
-Releases use [Semantic Versioning](https://semver.org/). Each Gitea release is
-identified by a Git tag in the form `vMAJOR.MINOR.PATCH`. Container images use
-the same version tag, the commit SHA, and `latest`; a running deployment
-tracks `latest` automatically once updated.
+[Semantic Versioning](https://semver.org/) mit Git-Tags der Form
+`vMAJOR.MINOR.PATCH`. Container-Images tragen dieselbe Version, zusätzlich die
+Commit-SHA und `latest`.
+
+## Entwicklungshinweis
+
+Dieses Projekt wurde mit KI-gestützten Programmierwerkzeugen entwickelt.
