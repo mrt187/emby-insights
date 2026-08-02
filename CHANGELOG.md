@@ -8,6 +8,17 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.11.1] - 2026-08-02
+
+### Fixed
+
+- Ein Poster, dessen Bild sich nicht laden laesst, zeigt jetzt wirklich den
+  Platzhalter. 0.10.0 hat serverseitig 502 auf 404 geaendert, das war aber nur
+  die halbe Miete: ein `<img>` mit einer URL, die nicht liefert, zeigt im
+  Browser weiterhin das kaputte Bild-Icon. Der Platzhalter wurde nur gerendert,
+  wenn gar keine URL vorlag — also genau dann nicht, wenn man ihn braucht.
+  Betrifft alle Poster, Staffelbilder und Besetzungsfotos.
+
 ## [0.11.0] - 2026-08-02
 
 ### Added

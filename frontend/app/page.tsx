@@ -31,6 +31,18 @@ type MediaPerson = { name: string; role: string; imageUrl: string };
 // nachgeschlagen. Das ist unabhängig davon, ob Seerr eingerichtet ist — ohne
 // TMDB hat eine Serie ohnehin keine TMDB-Id, mit der Seerr etwas anfangen
 // könnte.
+// Ein Poster kann fehlschlagen, obwohl eine URL da ist: Emby antwortet mit 500,
+// wenn die Bilddatei eines Titels defekt ist, und ein <img> mit einer URL, die
+// nicht liefert, zeigt im Browser das kaputte Bild-Icon. Der Platzhalter wurde
+// bisher nur gerendert, wenn gar keine URL vorlag — also genau dann nicht, wenn
+// man ihn braucht.
+function PosterImage({ src, fallback, lazy = true }: { src?: string; fallback: ReactNode; lazy?: boolean }) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [src]);
+  if (!src || failed) return <span>{fallback}</span>;
+  return <img src={src} alt="" loading={lazy ? "lazy" : undefined} onError={() => setFailed(true)} />;
+}
+
 function calendarSelection(item: UpcomingItem): MediaSelection {
   return { source: "comingsoon", id: item.detailId || item.tmdbId || item.id, mediaType: item.mediaType, via: item.source, tmdbId: item.tmdbId || undefined };
 }
@@ -72,7 +84,7 @@ function visibleNav(user: CurrentUser): { label: Page; icon: IconName }[] {
   return items;
 }
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.11.0";
+const APP_VERSION = "0.11.1";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -564,7 +576,7 @@ function PosterRow<T extends { id: string; title: string; posterUrl?: string }>(
     {items.length > 0 && <div className="poster-scroller">{items.map((item) => {
       const inner = <>
         <div className="poster wide" role="img" aria-label={itemTitle?.(item) ?? item.title}>
-          {item.posterUrl ? <img src={item.posterUrl} alt="" loading="lazy" /> : <span>{itemTitle?.(item) ?? item.title}</span>}
+          <PosterImage src={item.posterUrl} fallback={itemTitle?.(item) ?? item.title} />
           {progress && <div className="poster-progress"><div className="poster-progress-fill" style={{ width: `${progress(item)}%` }} /></div>}
         </div>
         <strong>{itemTitle?.(item) ?? item.title}</strong><small className={detail(item).includes("★") ? "rating-stars" : undefined}>{detail(item)}</small>
@@ -734,7 +746,7 @@ function MediaGridScreen<T extends { id: string; title: string; posterUrl?: stri
       {state !== "loading" && state !== "error" && items.length === 0 && <p className="poster-status">{emptyLabel ?? "Nichts vorhanden."}</p>}
       {items.length > 0 && <div className="media-grid">{items.map((item) => <button type="button" className="media-grid-entry" key={item.id} onClick={() => onSelect?.(item)}>
         <div className="poster wide" role="img" aria-label={item.title}>
-          {item.posterUrl ? <img src={item.posterUrl} alt="" loading="lazy" /> : <span>{item.title}</span>}
+          <PosterImage src={item.posterUrl} fallback={item.title} />
           {progress && <div className="poster-progress"><div className="poster-progress-fill" style={{ width: `${progress(item)}%` }} /></div>}
         </div>
         <strong>{item.title}</strong>
@@ -1063,7 +1075,7 @@ function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreat
       {detail && <div className="media-detail">
         <div className="media-detail-above-fold">
         <div className="media-detail-hero">
-          <div className="media-detail-poster">{detail.posterUrl ? <img src={detail.posterUrl} alt="" /> : <span>{detail.title}</span>}</div>
+          <div className="media-detail-poster"><PosterImage src={detail.posterUrl} fallback={detail.title} lazy={false} /></div>
           <div className="media-detail-info">
             {status && <span className="media-status-badge">{status}</span>}
             {detail.currentSeasonNumber !== undefined && detail.currentEpisodeNumber !== undefined && <span className="media-status-badge media-status-badge-progress">Staffel {detail.currentSeasonNumber} · Folge {detail.currentEpisodeNumber}</span>}
@@ -1141,7 +1153,7 @@ function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreat
             const progress = season.totalEpisodes > 0 ? Math.round((season.watchedEpisodes / season.totalEpisodes) * 100) : 0;
             return <article className="poster-entry" key={season.id}>
               <div className="poster wide" role="img" aria-label={season.title}>
-                {season.posterUrl ? <img src={season.posterUrl} alt="" loading="lazy" /> : <span>{season.title}</span>}
+                <PosterImage src={season.posterUrl} fallback={season.title} />
                 <div className="poster-progress"><div className="poster-progress-fill" style={{ width: `${progress}%` }} /></div>
               </div>
               <strong>{season.title}</strong>
@@ -1153,7 +1165,7 @@ function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreat
           <h2>Besetzung</h2>
           <div className="cast-grid">
             {crewAndCast.slice(0, 12).map((person, index) => <div className="cast-entry" key={`${person.name}-${index}`}>
-              <div className="cast-avatar">{person.imageUrl ? <img src={person.imageUrl} alt="" loading="lazy" /> : <span>{person.name.charAt(0)}</span>}</div>
+              <div className="cast-avatar"><PosterImage src={person.imageUrl} fallback={person.name.charAt(0)} /></div>
               <strong>{person.name}</strong><small>{person.role}</small>
             </div>)}
           </div>
@@ -1163,7 +1175,7 @@ function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreat
     {detail && requestModalOpen && <div className="request-modal-backdrop" role="presentation" onClick={() => requestState !== "submitting" && setRequestModalOpen(false)}>
       <div className="request-modal" role="dialog" aria-modal="true" aria-label={`${detail.title} anfragen`} onClick={(event) => event.stopPropagation()}>
         <div className="request-modal-head">
-          <div className="request-modal-poster">{detail.posterUrl && <img src={detail.posterUrl} alt="" />}</div>
+          <div className="request-modal-poster"><PosterImage src={detail.posterUrl} fallback="" lazy={false} /></div>
           <div><p className="eyebrow">ANFRAGE</p><h3>{detail.title}</h3></div>
         </div>
         {requestableSeasons.length > 0 && <div className="season-list">

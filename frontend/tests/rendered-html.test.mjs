@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 async function render() {
@@ -67,4 +68,27 @@ test("document carries a nonce CSP that keeps images same-origin", async () => {
   for (const tag of scriptTags) {
     assert.ok(tag.includes(`nonce="${nonce}"`), `script tag without the current nonce: ${tag}`);
   }
+});
+
+// Ein <img> mit einer URL, die 404 oder 500 liefert, zeigt im Browser das
+// kaputte Bild-Icon. Emby antwortet mit 500, wenn die Bilddatei eines Titels
+// defekt ist — der Platzhalter wurde bis 0.11.0 aber nur gerendert, wenn gar
+// keine URL vorlag, also genau dann nicht, wenn man ihn braucht. Jede
+// Poster-Stelle muss den Fehlerfall deshalb selbst abfangen.
+test("every poster image falls back to the placeholder when it fails to load", async () => {
+  const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+
+  // Kommentare raus, sonst schlaegt die Suche auf Prosa an, die <img> erwaehnt.
+  const code = source.replace(/^\s*\/\/.*$/gm, "");
+  // Bis zum Attributende statt bis zum ersten ">": ein onError-Handler enthaelt
+  // mit dem Pfeil selbst ein ">".
+  const rawImgTags = code.match(/<img\s[^>]*/g) ?? [];
+  const unguarded = rawImgTags.filter((tag) => !tag.includes("onError") && !tag.includes("brand-logo"));
+  assert.deepEqual(
+    unguarded,
+    [],
+    `these <img> tags render a broken-image icon when the source fails:\n${unguarded.join("\n")}`,
+  );
+
+  assert.match(source, /function PosterImage\(/, "PosterImage is the shared fallback and must exist");
 });
