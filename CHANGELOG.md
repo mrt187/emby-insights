@@ -8,6 +8,16 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.11.4] - 2026-08-02
+
+### Fixed
+
+- Ist Seerr eingerichtet, oeffnen die Kacheln aus "Demnaechst" und "Im Kino"
+  wieder dessen Detailscreen. 0.11.0 hat sie bedingungslos auf den neuen
+  Radarr/Sonarr-Screen gelegt — auf einer vollstaendig eingerichteten Instanz
+  gingen damit Besetzung, Crew und Staffelliste verloren. Der Kalender-Screen
+  greift jetzt nur noch, wenn Seerr fehlt oder keine TMDB-Id vorliegt.
+
 ## [0.11.3] - 2026-08-02
 
 ### Changed

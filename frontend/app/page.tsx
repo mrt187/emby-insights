@@ -2,6 +2,7 @@
 
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { LoginScreen } from "./login-screen";
+import { calendarSelection, type MediaSelection } from "./media-selection";
 
 type Page = "Heute" | "Statistik" | "Anfragen" | "Chats" | "Profil" | "Verwaltung";
 type Features = { requests: boolean; movieDates: boolean; seriesDates: boolean; upcoming: boolean; statistics: boolean };
@@ -24,13 +25,9 @@ type ContinueWatchingItem = { id: string; title: string; posterUrl: string; prog
 type WatchedItem = { id: string; title: string; posterUrl: string; genres: string[]; lastPlayedDate: string; backdropUrl?: string; dateAdded?: string };
 type SeriesProgress = { id: string; title: string; posterUrl: string; watchedEpisodes: number; totalEpisodes: number };
 type DiscoverItem = { id: string; title: string; posterUrl: string; mediaType: string };
-type MediaSelection = { source: "emby"; id: string } | { source: "seerr"; id: string; mediaType: string } | { source: "comingsoon"; id: string; mediaType: string; via: "radarr" | "sonarr"; tmdbId?: string };
+
 type MediaPerson = { name: string; role: string; imageUrl: string };
 
-// Kalender-Kacheln stammen aus Radarr/Sonarr und werden auch dort
-// nachgeschlagen. Das ist unabhängig davon, ob Seerr eingerichtet ist — ohne
-// TMDB hat eine Serie ohnehin keine TMDB-Id, mit der Seerr etwas anfangen
-// könnte.
 // Ein Poster kann fehlschlagen, obwohl eine URL da ist: Emby antwortet mit 500,
 // wenn die Bilddatei eines Titels defekt ist, und ein <img> mit einer URL, die
 // nicht liefert, zeigt im Browser das kaputte Bild-Icon. Der Platzhalter wurde
@@ -43,9 +40,6 @@ function PosterImage({ src, fallback, lazy = true }: { src?: string; fallback: R
   return <img src={src} alt="" loading={lazy ? "lazy" : undefined} onError={() => setFailed(true)} />;
 }
 
-function calendarSelection(item: UpcomingItem): MediaSelection {
-  return { source: "comingsoon", id: item.detailId || item.tmdbId || item.id, mediaType: item.mediaType, via: item.source, tmdbId: item.tmdbId || undefined };
-}
 type MediaSeason = { id: string; title: string; posterUrl: string; indexNumber: number; watchedEpisodes: number; totalEpisodes: number; played: boolean };
 type RequestableSeason = { seasonNumber: number; episodeCount: number; available?: boolean; requested?: boolean };
 type MediaDetail = {
@@ -84,7 +78,7 @@ function visibleNav(user: CurrentUser): { label: Page; icon: IconName }[] {
   return items;
 }
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.11.3";
+const APP_VERSION = "0.11.4";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -338,6 +332,7 @@ function Today({ upcoming, upcomingState, cinema, cinemaState, requests, request
     cinema: cinemaState === "ready" ? cinema : [],
     newForYou: newForYouState === "ready" ? newForYou : [],
     message,
+    seerrConfigured: features.requests,
     onSelectMedia,
     onShowNewForYou: () => setNewForYouGridOpen(true),
     onOpenChats,
@@ -346,12 +341,12 @@ function Today({ upcoming, upcomingState, cinema, cinemaState, requests, request
   return <div className="content today-view">
     <RelevantNow events={events} onShowAll={() => setAllEventsOpen(true)} />
     <PosterRow title="Was ich gerade schaue" eyebrow="WEITERSCHAUEN" items={continueWatching} state={continueWatchingState} emptyLabel="Nichts in Bearbeitung." detail={(item) => `${item.progressPercent} % gesehen`} progress={(item) => item.progressPercent} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
-    {features.upcoming && <PosterRow title="Demnächst" eyebrow="IN DEN NÄCHSTEN 4 WOCHEN AUF EMBY" items={visibleUpcoming} state={upcomingState} emptyLabel="Nichts Neues in den nächsten vier Wochen." itemTitle={upcomingTitle} detail={(item) => availabilityWording(item.availabilityDate)} onSelect={(item) => onSelectMedia(calendarSelection(item))} />}
+    {features.upcoming && <PosterRow title="Demnächst" eyebrow="IN DEN NÄCHSTEN 4 WOCHEN AUF EMBY" items={visibleUpcoming} state={upcomingState} emptyLabel="Nichts Neues in den nächsten vier Wochen." itemTitle={upcomingTitle} detail={(item) => availabilityWording(item.availabilityDate)} onSelect={(item) => onSelectMedia(calendarSelection(item, features.requests))} />}
     <PosterRow title="Noch nicht fertig" eyebrow="TEILWEISE GESEHEN" items={seriesInProgress} state={seriesInProgressState} emptyLabel="Keine Serien mit offenen Folgen." detail={(item) => `${item.watchedEpisodes} von ${item.totalEpisodes} Folgen`} progress={(item) => Math.round((item.watchedEpisodes / item.totalEpisodes) * 100)} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
     {features.requests && <PosterRow title="Meine Anfragen" eyebrow="SEERR · OFFEN" items={requests} state={requestState} emptyLabel="Keine offenen Anfragen." detail={(item) => item.status} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />}
     <PosterRow title="Neu für dich" eyebrow="IN DEN LETZTEN 14 TAGEN" items={newForYou} state={newForYouState} emptyLabel="Nichts Neues in den letzten 14 Tagen." detail={(item) => item.dateCreated ? `Hinzugefügt ${daysAgoWording(item.dateCreated)}` : "Ungesehen"} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
     <PosterRow title="Top Bewertet" eyebrow="EURE BEWERTUNGEN" items={topRated} state={topRatedState} emptyLabel="Noch keine Bewertungen im Plugin." detail={(item) => `★ ${item.averageRating.toFixed(1)}`} onSelect={(item) => onSelectMedia(item.mediaSource === "seerr" ? { source: "seerr", id: item.mediaId, mediaType: item.mediaType } : { source: "emby", id: item.mediaId })} />
-    {features.movieDates && <PosterRow title="Im Kino" eyebrow="KOMMENDE UND AKTUELLE KINOSTARTS" items={cinema} state={cinemaState} emptyLabel="Zurzeit keine Kinostarts." detail={cinemaWording} onSelect={(item) => onSelectMedia(calendarSelection(item))} />}
+    {features.movieDates && <PosterRow title="Im Kino" eyebrow="KOMMENDE UND AKTUELLE KINOSTARTS" items={cinema} state={cinemaState} emptyLabel="Zurzeit keine Kinostarts." detail={cinemaWording} onSelect={(item) => onSelectMedia(calendarSelection(item, features.requests))} />}
 
     {allEventsOpen && <RelevantAllScreen events={events} onClose={() => setAllEventsOpen(false)} />}
     {newForYouGridOpen && <MediaGridScreen title="Neu für dich" items={newForYou} detail={(item) => item.dateCreated ? `Hinzugefügt ${daysAgoWording(item.dateCreated)}` : "Ungesehen"} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setNewForYouGridOpen(false)} />}
@@ -375,9 +370,9 @@ function releaseWording(premiereDate: string) {
 
 // Builds the prioritised event list: newly available requests first, then
 // releases due within the next two days, then the unseen-titles summary.
-function relevantEvents({ availableRequests, upcoming, cinema, newForYou, message, onSelectMedia, onShowNewForYou, onOpenChats }: {
+function relevantEvents({ availableRequests, upcoming, cinema, newForYou, message, seerrConfigured, onSelectMedia, onShowNewForYou, onOpenChats }: {
   availableRequests: RequestItem[]; upcoming: UpcomingItem[]; cinema: UpcomingItem[]; newForYou: NewForYouItem[];
-  message: { preview: string } | null;
+  message: { preview: string } | null; seerrConfigured: boolean;
   onSelectMedia: (selection: MediaSelection) => void; onShowNewForYou: () => void; onOpenChats: () => void;
 }): RelevantEvent[] {
   const events: RelevantEvent[] = [];
@@ -405,7 +400,7 @@ function relevantEvents({ availableRequests, upcoming, cinema, newForYou, messag
     events.push({
       key: `release-${item.id}`, tone: "lilac", icon: "clock", status: upcomingTitle(item),
       detail: releaseWording(item.availabilityDate),
-      onOpen: () => onSelectMedia(calendarSelection(item)),
+      onOpen: () => onSelectMedia(calendarSelection(item, seerrConfigured)),
     });
   }
 
@@ -415,7 +410,7 @@ function relevantEvents({ availableRequests, upcoming, cinema, newForYou, messag
     events.push({
       key: `cinema-${item.id}`, tone: "lilac", icon: "movie", status: item.title,
       detail: premiere <= Date.now() ? "Jetzt im Kino" : "Bald im Kino",
-      onOpen: () => onSelectMedia(calendarSelection(item)),
+      onOpen: () => onSelectMedia(calendarSelection(item, seerrConfigured)),
     });
   }
 
