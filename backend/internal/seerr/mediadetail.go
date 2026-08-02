@@ -28,18 +28,22 @@ type RequestableSeason struct {
 }
 
 type MediaDetail struct {
-	ID              string              `json:"id"`
-	Title           string              `json:"title"`
-	Overview        string              `json:"overview"`
-	PosterURL       string              `json:"posterUrl"`
-	BackdropURL     string              `json:"backdropUrl"`
-	Genres          []string            `json:"genres"`
-	CommunityRating float64             `json:"communityRating"`
-	Year            int                 `json:"year"`
-	RuntimeMinutes  int                 `json:"runtimeMinutes"`
-	Cast            []Person            `json:"cast"`
-	Crew            []Person            `json:"crew"`
-	Seasons         []RequestableSeason `json:"seasons"`
+	ID              string   `json:"id"`
+	Title           string   `json:"title"`
+	Overview        string   `json:"overview"`
+	PosterURL       string   `json:"posterUrl"`
+	BackdropURL     string   `json:"backdropUrl"`
+	Genres          []string `json:"genres"`
+	CommunityRating float64  `json:"communityRating"`
+	// OfficialRating is the age certification. TMDB does not hand one back
+	// through Seerr, but Radarr and Sonarr do, and the Radarr/Sonarr detail
+	// reuses this shape — see comingSoonMediaDetailHandler.
+	OfficialRating string              `json:"officialRating,omitempty"`
+	Year           int                 `json:"year"`
+	RuntimeMinutes int                 `json:"runtimeMinutes"`
+	Cast           []Person            `json:"cast"`
+	Crew           []Person            `json:"crew"`
+	Seasons        []RequestableSeason `json:"seasons"`
 	// Status is TMDB's own production status ("Released", "Returning
 	// Series", ...), translated to German — distinct from MediaStatus below.
 	Status string `json:"status"`

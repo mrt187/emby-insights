@@ -600,6 +600,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .request-button.secondary { color: var(--text-secondary); background: transparent; border: 1px solid var(--line); }
 .request-button.secondary:hover { color: #f1f6f3; border-color: rgb(185 238 208 / 24%); }
 .request-confirmation { color: var(--mint-bright); font-weight: 700; font-size: 14px; }
+.request-unconfigured { margin: 0; font-size: 13px; line-height: 1.4; color: var(--text-secondary); }
 .request-error { color: #e88b8b; font-size: 13px; }
 
 .request-modal-backdrop {

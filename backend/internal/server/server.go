@@ -329,6 +329,7 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/discover/provider", app.discoverByProvider)
 	mux.HandleFunc("GET /api/media/emby", app.embyMediaDetailHandler)
 	mux.HandleFunc("GET /api/media/seerr", app.seerrMediaDetailHandler)
+	mux.HandleFunc("GET /api/media/comingsoon", app.comingSoonMediaDetailHandler)
 	mux.HandleFunc("POST /api/media/seerr/request", app.createSeerrRequestHandler)
 	mux.HandleFunc("GET /api/tracking", app.getTracking)
 	mux.HandleFunc("PUT /api/tracking", app.upsertTracking)
@@ -2244,4 +2245,62 @@ func (app *App) artworkImage(writer http.ResponseWriter, request *http.Request) 
 	writer.Header().Set("Cache-Control", "public, max-age=604800, immutable")
 	writer.WriteHeader(http.StatusOK)
 	_, _ = writer.Write(image.Data)
+}
+
+// comingSoonMediaDetailHandler serves the detail screen for a Radarr or Sonarr
+// calendar entry, built from what those services already returned when the
+// list was assembled. It exists because Seerr is optional: without it the
+// "Demnächst" and "Im Kino" tiles had no detail screen at all, and for series
+// not even a usable id, since translating Sonarr's TVDB id into a TMDB one is
+// itself a TMDB call.
+//
+// The response deliberately mirrors the shape the Seerr detail returns, so the
+// frontend renders both with the same component. Cast, crew and seasons stay
+// empty — Radarr and Sonarr do not carry them.
+func (app *App) comingSoonMediaDetailHandler(writer http.ResponseWriter, request *http.Request) {
+	if _, ok := app.identityFromRequest(writer, request); !ok {
+		return
+	}
+	source := request.URL.Query().Get("source")
+	id := request.URL.Query().Get("id")
+	if (source != comingsoon.SourceRadarr && source != comingsoon.SourceSonarr) || id == "" {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "source must be radarr or sonarr, and id is required"})
+		return
+	}
+	if app.comingSoon == nil {
+		respondJSON(writer, http.StatusNotFound, map[string]string{"error": "no release calendar is configured"})
+		return
+	}
+	item, found, err := app.comingSoon.Detail(request.Context(), source, id)
+	if err != nil {
+		log.Printf("coming-soon detail unavailable for %s/%s: %v", source, id, err)
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "media detail is unavailable"})
+		return
+	}
+	if !found {
+		http.NotFound(writer, request)
+		return
+	}
+
+	detail := seerr.MediaDetail{
+		ID:              item.ID,
+		Title:           item.Title,
+		Overview:        item.Overview,
+		PosterURL:       item.PosterURL,
+		BackdropURL:     item.BackdropURL,
+		Genres:          orEmpty(item.Genres),
+		CommunityRating: item.Rating,
+		Year:            item.Year,
+		RuntimeMinutes:  item.RuntimeMinutes,
+		Cast:            []seerr.Person{},
+		Crew:            []seerr.Person{},
+		Seasons:         []seerr.RequestableSeason{},
+		Status:          item.Status,
+		ReleaseDate:     item.AvailabilityDate,
+		OfficialRating:  item.OfficialRating,
+	}
+	if item.Studio != "" {
+		detail.Studios = []string{item.Studio}
+	}
+	respondJSON(writer, http.StatusOK, detail)
 }

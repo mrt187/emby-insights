@@ -16,7 +16,7 @@ type WeekdayWatchTime = { weekday: number; watchSeconds: number };
 type LongestSession = { itemName: string; watchSeconds: number; startedAt: string };
 type MostActiveDay = { date: string; watchSeconds: number };
 type UserProfile = { memberSince: string; lastActiveDate: string; lastLoginDate: string };
-type UpcomingItem = { id: string; tmdbId: string; title: string; posterUrl: string; mediaType: string; availabilityDate: string; cinemaStartDate?: string; cinemaEndDate?: string; seasonNumber?: number; episodeNumber?: number; episodeTitle?: string };
+type UpcomingItem = { id: string; tmdbId: string; source: "radarr" | "sonarr"; detailId: string; title: string; posterUrl: string; mediaType: string; availabilityDate: string; cinemaStartDate?: string; cinemaEndDate?: string; seasonNumber?: number; episodeNumber?: number; episodeTitle?: string };
 type RequestItem = { id: string; title: string; posterUrl: string; status: string; tmdbId: string; mediaType: string; availableSince?: string };
 type NewForYouItem = { id: string; title: string; posterUrl: string; dateCreated?: string };
 type TopRatedItem = { id: string; mediaSource: string; mediaId: string; mediaType: string; title: string; posterUrl: string; averageRating: number };
@@ -24,8 +24,16 @@ type ContinueWatchingItem = { id: string; title: string; posterUrl: string; prog
 type WatchedItem = { id: string; title: string; posterUrl: string; genres: string[]; lastPlayedDate: string; backdropUrl?: string; dateAdded?: string };
 type SeriesProgress = { id: string; title: string; posterUrl: string; watchedEpisodes: number; totalEpisodes: number };
 type DiscoverItem = { id: string; title: string; posterUrl: string; mediaType: string };
-type MediaSelection = { source: "emby"; id: string } | { source: "seerr"; id: string; mediaType: string };
+type MediaSelection = { source: "emby"; id: string } | { source: "seerr"; id: string; mediaType: string } | { source: "comingsoon"; id: string; mediaType: string; via: "radarr" | "sonarr"; tmdbId?: string };
 type MediaPerson = { name: string; role: string; imageUrl: string };
+
+// Kalender-Kacheln stammen aus Radarr/Sonarr und werden auch dort
+// nachgeschlagen. Das ist unabhängig davon, ob Seerr eingerichtet ist — ohne
+// TMDB hat eine Serie ohnehin keine TMDB-Id, mit der Seerr etwas anfangen
+// könnte.
+function calendarSelection(item: UpcomingItem): MediaSelection {
+  return { source: "comingsoon", id: item.detailId || item.tmdbId || item.id, mediaType: item.mediaType, via: item.source, tmdbId: item.tmdbId || undefined };
+}
 type MediaSeason = { id: string; title: string; posterUrl: string; indexNumber: number; watchedEpisodes: number; totalEpisodes: number; played: boolean };
 type RequestableSeason = { seasonNumber: number; episodeCount: number; available?: boolean; requested?: boolean };
 type MediaDetail = {
@@ -64,7 +72,7 @@ function visibleNav(user: CurrentUser): { label: Page; icon: IconName }[] {
   return items;
 }
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.10.0";
+const APP_VERSION = "0.11.0";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -221,7 +229,7 @@ export default function Home() {
   const nav = visibleNav(user);
 
   return <main className="app-shell">
-    {selectedMedia && <MediaDetailScreen selection={selectedMedia} onClose={() => setSelectedMedia(null)} onRequestCreated={refetchRequests} onHiddenChanged={refetchSeriesInProgress} />}
+    {selectedMedia && <MediaDetailScreen selection={selectedMedia} seerrConfigured={user.features.requests} onClose={() => setSelectedMedia(null)} onRequestCreated={refetchRequests} onHiddenChanged={refetchSeriesInProgress} />}
     <a className="skip-link" href="#dashboard-content">Zum Inhalt springen</a>
     <aside className="side-nav" aria-label="Hauptnavigation">
       <button type="button" className="brand" onClick={goHomeAndRefresh} aria-label="Zu Heute und Dashboard aktualisieren"><img className="brand-logo" src="/emby-insights-logo.svg" alt="Emby Insights" width="31" height="31" /><span>insights</span></button>
@@ -326,12 +334,12 @@ function Today({ upcoming, upcomingState, cinema, cinemaState, requests, request
   return <div className="content today-view">
     <RelevantNow events={events} onShowAll={() => setAllEventsOpen(true)} />
     <PosterRow title="Was ich gerade schaue" eyebrow="WEITERSCHAUEN" items={continueWatching} state={continueWatchingState} emptyLabel="Nichts in Bearbeitung." detail={(item) => `${item.progressPercent} % gesehen`} progress={(item) => item.progressPercent} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
-    {features.upcoming && <PosterRow title="Demnächst" eyebrow="IN DEN NÄCHSTEN 4 WOCHEN AUF EMBY" items={visibleUpcoming} state={upcomingState} emptyLabel="Nichts Neues in den nächsten vier Wochen." itemTitle={upcomingTitle} detail={(item) => availabilityWording(item.availabilityDate)} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />}
+    {features.upcoming && <PosterRow title="Demnächst" eyebrow="IN DEN NÄCHSTEN 4 WOCHEN AUF EMBY" items={visibleUpcoming} state={upcomingState} emptyLabel="Nichts Neues in den nächsten vier Wochen." itemTitle={upcomingTitle} detail={(item) => availabilityWording(item.availabilityDate)} onSelect={(item) => onSelectMedia(calendarSelection(item))} />}
     <PosterRow title="Noch nicht fertig" eyebrow="TEILWEISE GESEHEN" items={seriesInProgress} state={seriesInProgressState} emptyLabel="Keine Serien mit offenen Folgen." detail={(item) => `${item.watchedEpisodes} von ${item.totalEpisodes} Folgen`} progress={(item) => Math.round((item.watchedEpisodes / item.totalEpisodes) * 100)} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
     {features.requests && <PosterRow title="Meine Anfragen" eyebrow="SEERR · OFFEN" items={requests} state={requestState} emptyLabel="Keine offenen Anfragen." detail={(item) => item.status} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />}
     <PosterRow title="Neu für dich" eyebrow="IN DEN LETZTEN 14 TAGEN" items={newForYou} state={newForYouState} emptyLabel="Nichts Neues in den letzten 14 Tagen." detail={(item) => item.dateCreated ? `Hinzugefügt ${daysAgoWording(item.dateCreated)}` : "Ungesehen"} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
     <PosterRow title="Top Bewertet" eyebrow="EURE BEWERTUNGEN" items={topRated} state={topRatedState} emptyLabel="Noch keine Bewertungen im Plugin." detail={(item) => `★ ${item.averageRating.toFixed(1)}`} onSelect={(item) => onSelectMedia(item.mediaSource === "seerr" ? { source: "seerr", id: item.mediaId, mediaType: item.mediaType } : { source: "emby", id: item.mediaId })} />
-    {features.movieDates && <PosterRow title="Im Kino" eyebrow="KOMMENDE UND AKTUELLE KINOSTARTS" items={cinema} state={cinemaState} emptyLabel="Zurzeit keine Kinostarts." detail={cinemaWording} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />}
+    {features.movieDates && <PosterRow title="Im Kino" eyebrow="KOMMENDE UND AKTUELLE KINOSTARTS" items={cinema} state={cinemaState} emptyLabel="Zurzeit keine Kinostarts." detail={cinemaWording} onSelect={(item) => onSelectMedia(calendarSelection(item))} />}
 
     {allEventsOpen && <RelevantAllScreen events={events} onClose={() => setAllEventsOpen(false)} />}
     {newForYouGridOpen && <MediaGridScreen title="Neu für dich" items={newForYou} detail={(item) => item.dateCreated ? `Hinzugefügt ${daysAgoWording(item.dateCreated)}` : "Ungesehen"} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setNewForYouGridOpen(false)} />}
@@ -385,7 +393,7 @@ function relevantEvents({ availableRequests, upcoming, cinema, newForYou, messag
     events.push({
       key: `release-${item.id}`, tone: "lilac", icon: "clock", status: upcomingTitle(item),
       detail: releaseWording(item.availabilityDate),
-      onOpen: () => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType }),
+      onOpen: () => onSelectMedia(calendarSelection(item)),
     });
   }
 
@@ -395,7 +403,7 @@ function relevantEvents({ availableRequests, upcoming, cinema, newForYou, messag
     events.push({
       key: `cinema-${item.id}`, tone: "lilac", icon: "movie", status: item.title,
       detail: premiere <= Date.now() ? "Jetzt im Kino" : "Bald im Kino",
-      onOpen: () => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType }),
+      onOpen: () => onSelectMedia(calendarSelection(item)),
     });
   }
 
@@ -850,7 +858,7 @@ function OverviewText({ text }: { text: string }) {
     {isLong && <button type="button" className="text-button overview-toggle" onClick={() => setExpanded((value) => !value)}>{expanded ? "Weniger anzeigen" : "Mehr anzeigen"}</button>}
   </>;
 }
-function MediaDetailScreen({ selection, onClose, onRequestCreated, onHiddenChanged }: { selection: MediaSelection; onClose: () => void; onRequestCreated: () => void; onHiddenChanged?: () => void }) {
+function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreated, onHiddenChanged }: { selection: MediaSelection; seerrConfigured: boolean; onClose: () => void; onRequestCreated: () => void; onHiddenChanged?: () => void }) {
   useBodyScrollLock();
   const [detail, setDetail] = useState<MediaDetail | null>(null);
   const [state, setState] = useState<LoadState>("loading");
@@ -860,7 +868,7 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated, onHiddenChang
   const [tracking, setTracking] = useState<{ rating: number; onWatchlist: boolean; hiddenInProgress: boolean }>({ rating: 0, onWatchlist: false, hiddenInProgress: false });
   const [favorite, setFavorite] = useState(false);
   const [favoriteBusy, setFavoriteBusy] = useState(false);
-  const mediaType = selection.source === "seerr" ? selection.mediaType : undefined;
+  const mediaType = selection.source === "emby" ? undefined : selection.mediaType;
 
   // Seerr can take a moment to reflect a just-created request in its own
   // media/season status (the request itself is immediate, but the show's
@@ -943,6 +951,10 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated, onHiddenChang
     let active = true;
     const url = selection.source === "emby"
       ? `/api/media/emby?id=${encodeURIComponent(selection.id)}`
+      : selection.source === "comingsoon"
+      // Radarr und Sonarr tragen alles, was dieser Screen braucht, schon im
+      // Kalender — deshalb braucht "Demnächst" und "Im Kino" kein Seerr.
+      ? `/api/media/comingsoon?source=${encodeURIComponent(selection.via)}&id=${encodeURIComponent(selection.id)}`
       : `/api/media/seerr?mediaType=${encodeURIComponent(mediaType ?? "")}&id=${encodeURIComponent(selection.id)}`;
     fetch(url, { credentials: "include" })
       .then(async (response) => {
@@ -989,7 +1001,11 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated, onHiddenChang
   const seerrStatusAvailable = 5;
   const seerrKnowsAboutMovie = mediaType !== "tv" && !!detail?.mediaStatus;
   const locallyRequestedMovie = mediaType !== "tv" && locallyRequestedSeasons.includes(movieRequestedSentinel) && !seerrKnowsAboutMovie;
-  const canRequest = selection.source === "seerr" && !locallyRequestedMovie && (!detail?.mediaStatus || (detail.mediaStatus === seerrStatusPartiallyAvailable && mediaType === "tv" && requestableSeasons.length > 0));
+  // Ohne TMDB liefert Sonarr nur eine TVDB-Id. Die als TMDB-Id an Seerr zu
+  // schicken, würde den falschen Titel anfragen — deshalb ist Anfragen nur
+  // möglich, wenn eine echte TMDB-Id vorliegt.
+  const requestTmdbId = selection.source === "seerr" ? selection.id : selection.source === "comingsoon" ? selection.tmdbId : undefined;
+  const canRequest = selection.source !== "emby" && seerrConfigured && !!requestTmdbId && !locallyRequestedMovie && (!detail?.mediaStatus || (detail.mediaStatus === seerrStatusPartiallyAvailable && mediaType === "tv" && requestableSeasons.length > 0));
   // Once this browser has requested everything that's currently missing,
   // keep showing the confirmation across a remount/refetch — but only
   // while Seerr's own data hasn't caught up yet (seerrRequestableSeasons
@@ -1008,14 +1024,14 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated, onHiddenChang
   };
 
   const submitRequest = async () => {
-    if (selection.source !== "seerr") return;
+    if (selection.source === "emby" || !seerrConfigured || !requestTmdbId) return;
     setRequestState("submitting");
     try {
       const response = await fetch("/api/media/seerr/request", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mediaType: selection.mediaType, tmdbId: Number(selection.id), seasons: selection.mediaType === "tv" ? selectedSeasons : undefined }),
+        body: JSON.stringify({ mediaType: selection.mediaType, tmdbId: Number(requestTmdbId), seasons: selection.mediaType === "tv" ? selectedSeasons : undefined }),
       });
       if (!response.ok) throw new Error("request failed");
       setRequestState("done");
@@ -1106,11 +1122,16 @@ function MediaDetailScreen({ selection, onClose, onRequestCreated, onHiddenChang
             {tracking.hiddenInProgress ? "Wieder in „Noch nicht fertig“ zeigen" : "Aus „Noch nicht fertig“ ausblenden"}
           </button>
         </div>}
-        {selection.source === "seerr" && (canRequest || seerrAvailabilityLabel || showRequestConfirmation) && <div className="request-row">
+        {selection.source !== "emby" && (canRequest || seerrAvailabilityLabel || showRequestConfirmation || !seerrConfigured) && <div className="request-row">
           {seerrAvailabilityLabel && !showRequestConfirmation && <span className="media-availability-badge">{seerrAvailabilityLabel}</span>}
-          {(canRequest || showRequestConfirmation) && (showRequestConfirmation
-            ? <p className="request-confirmation">Angefragt ✓</p>
-            : <button type="button" className="request-button" onClick={() => setRequestModalOpen(true)}>Anfragen</button>)}
+          {/* Ohne Seerr bleibt der Knopf sichtbar, sagt aber warum er nichts
+              tut — sonst wirkt es, als fehle die Funktion. */}
+          {!seerrConfigured
+            ? <><button type="button" className="request-button" disabled aria-describedby="request-unconfigured">Anfragen</button>
+                <p id="request-unconfigured" className="request-unconfigured">Dafür muss Seerr in der Verwaltung eingerichtet sein.</p></>
+            : (canRequest || showRequestConfirmation) && (showRequestConfirmation
+              ? <p className="request-confirmation">Angefragt ✓</p>
+              : <button type="button" className="request-button" onClick={() => setRequestModalOpen(true)}>Anfragen</button>)}
         </div>}
         {detail.overview && <section className="media-detail-overview"><h2>Übersicht</h2><OverviewText text={detail.overview} /></section>}
         </div>

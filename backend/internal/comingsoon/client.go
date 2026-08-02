@@ -18,8 +18,16 @@ const posterBaseURL = "https://image.tmdb.org/t/p/w500"
 const cinemaWindowDays = 30
 
 type Item struct {
-	ID               string `json:"id"`
-	TmdbID           string `json:"tmdbId"`
+	ID     string `json:"id"`
+	TmdbID string `json:"tmdbId"`
+	// Source names the service this entry came from, and DetailID is the id
+	// that service knows it by — Radarr hands us a TMDB id, Sonarr only a
+	// TVDB one. Together they identify an entry without TMDB being
+	// configured, which is what TmdbID alone cannot do: translating a TVDB id
+	// into a TMDB one is itself a TMDB call, so series used to end up with an
+	// empty id and a detail screen that could never load.
+	Source           string `json:"source"`
+	DetailID         string `json:"detailId"`
 	Title            string `json:"title"`
 	PosterURL        string `json:"posterUrl"`
 	MediaType        string `json:"mediaType"`
@@ -29,11 +37,31 @@ type Item struct {
 	SeasonNumber     int    `json:"seasonNumber,omitempty"`
 	EpisodeNumber    int    `json:"episodeNumber,omitempty"`
 	EpisodeTitle     string `json:"episodeTitle,omitempty"`
+
+	// The fields below come from the same calendar response the list is built
+	// from — Radarr and Sonarr return their full movie/series resource there,
+	// so a detail screen costs no additional request.
+	Overview       string   `json:"overview,omitempty"`
+	Genres         []string `json:"genres,omitempty"`
+	RuntimeMinutes int      `json:"runtimeMinutes,omitempty"`
+	Year           int      `json:"year,omitempty"`
+	OfficialRating string   `json:"officialRating,omitempty"`
+	Rating         float64  `json:"rating,omitempty"`
+	Studio         string   `json:"studio,omitempty"`
+	Status         string   `json:"status,omitempty"`
+	BackdropURL    string   `json:"backdropUrl,omitempty"`
 }
+
+// Sources the detail lookup accepts.
+const (
+	SourceRadarr = "radarr"
+	SourceSonarr = "sonarr"
+)
 
 type Reader interface {
 	Upcoming(context.Context) ([]Item, error)
 	InCinemas(context.Context) ([]Item, error)
+	Detail(ctx context.Context, source, id string) (Item, bool, error)
 }
 
 type Client struct {
@@ -93,7 +121,14 @@ func (client *Client) Upcoming(ctx context.Context) ([]Item, error) {
 			if err != nil {
 				return nil, err
 			}
-			items = append(items, Item{ID: tmdbID, TmdbID: tmdbID, Title: episode.Title, PosterURL: episode.PosterURL, MediaType: "tv", AvailabilityDate: episode.AirDate.Format(time.RFC3339), SeasonNumber: episode.SeasonNumber, EpisodeNumber: episode.EpisodeNumber, EpisodeTitle: episode.EpisodeTitle})
+			// ID falls back to the Sonarr/TVDB id: without TMDB configured
+			// findTMDBTV returns nothing, and an entry with an empty id used
+			// to be appended anyway — a tile that could never open.
+			id := tmdbID
+			if id == "" {
+				id = fmt.Sprintf("%d", episode.TvdbID)
+			}
+			items = append(items, episode.detail(Item{ID: id, TmdbID: tmdbID, Title: episode.Title, PosterURL: episode.PosterURL, MediaType: "tv", AvailabilityDate: episode.AirDate.Format(time.RFC3339), SeasonNumber: episode.SeasonNumber, EpisodeNumber: episode.EpisodeNumber, EpisodeTitle: episode.EpisodeTitle}))
 		}
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].AvailabilityDate < items[j].AvailabilityDate })
@@ -132,9 +167,31 @@ func (client *Client) InCinemas(ctx context.Context) ([]Item, error) {
 }
 
 type movie struct {
-	Title, PosterURL string
-	TmdbID           int
-	Cinema, Digital  time.Time
+	Title, PosterURL, BackdropURL string
+	TmdbID                        int
+	Cinema, Digital               time.Time
+	Overview, Certification       string
+	Studio, Status                string
+	Genres                        []string
+	Runtime, Year                 int
+	Rating                        float64
+}
+
+// detail copies the fields both calendars carry into the item, so Item stays
+// the single shape the API returns for a list entry and for a detail lookup.
+func (movie movie) detail(item Item) Item {
+	item.Source = SourceRadarr
+	item.DetailID = fmt.Sprintf("%d", movie.TmdbID)
+	item.Overview = movie.Overview
+	item.Genres = movie.Genres
+	item.RuntimeMinutes = movie.Runtime
+	item.Year = movie.Year
+	item.OfficialRating = movie.Certification
+	item.Rating = movie.Rating
+	item.Studio = movie.Studio
+	item.Status = movie.Status
+	item.BackdropURL = movie.BackdropURL
+	return item
 }
 
 func (movie movie) item(available, cinemaEnd time.Time, mediaType string) Item {
@@ -143,15 +200,36 @@ func (movie movie) item(available, cinemaEnd time.Time, mediaType string) Item {
 	if !cinemaEnd.IsZero() {
 		cinemaEndFormatted = cinemaEnd.Format(time.RFC3339)
 	}
-	return Item{ID: id, TmdbID: id, Title: movie.Title, PosterURL: movie.PosterURL, MediaType: mediaType, AvailabilityDate: available.Format(time.RFC3339), CinemaStartDate: available.Format(time.RFC3339), CinemaEndDate: cinemaEndFormatted}
+	return movie.detail(Item{ID: id, TmdbID: id, Title: movie.Title, PosterURL: movie.PosterURL, MediaType: mediaType, AvailabilityDate: available.Format(time.RFC3339), CinemaStartDate: available.Format(time.RFC3339), CinemaEndDate: cinemaEndFormatted})
 }
 
 type episode struct {
-	Title, PosterURL                    string
+	Title, PosterURL, BackdropURL       string
 	TvdbID, SeasonNumber, EpisodeNumber int
 	EpisodeTitle                        string
 	AirDate                             time.Time
+	Overview, Certification             string
+	Studio, Status                      string
+	Genres                              []string
+	Runtime, Year                       int
+	Rating                              float64
 }
+
+func (episode episode) detail(item Item) Item {
+	item.Source = SourceSonarr
+	item.DetailID = fmt.Sprintf("%d", episode.TvdbID)
+	item.Overview = episode.Overview
+	item.Genres = episode.Genres
+	item.RuntimeMinutes = episode.Runtime
+	item.Year = episode.Year
+	item.OfficialRating = episode.Certification
+	item.Rating = episode.Rating
+	item.Studio = episode.Studio
+	item.Status = episode.Status
+	item.BackdropURL = episode.BackdropURL
+	return item
+}
+
 type releaseDates struct{ cinema, digital time.Time }
 
 func (client *Client) movies(ctx context.Context) ([]movie, error) {
@@ -172,7 +250,22 @@ func (client *Client) movies(ctx context.Context) ([]movie, error) {
 		TmdbID         int       `json:"tmdbId"`
 		InCinemas      time.Time `json:"inCinemas"`
 		DigitalRelease time.Time `json:"digitalRelease"`
-		Images         []struct {
+		Overview       string    `json:"overview"`
+		Runtime        int       `json:"runtime"`
+		Year           int       `json:"year"`
+		Certification  string    `json:"certification"`
+		Studio         string    `json:"studio"`
+		Status         string    `json:"status"`
+		Genres         []string  `json:"genres"`
+		Ratings        struct {
+			Tmdb struct {
+				Value float64 `json:"value"`
+			} `json:"tmdb"`
+			Imdb struct {
+				Value float64 `json:"value"`
+			} `json:"imdb"`
+		} `json:"ratings"`
+		Images []struct {
 			CoverType string `json:"coverType"`
 			RemoteURL string `json:"remoteUrl"`
 		} `json:"images"`
@@ -183,7 +276,17 @@ func (client *Client) movies(ctx context.Context) ([]movie, error) {
 	items := make([]movie, 0, len(result))
 	for _, entry := range result {
 		if entry.TmdbID != 0 {
-			items = append(items, movie{Title: entry.Title, TmdbID: entry.TmdbID, Cinema: entry.InCinemas, Digital: entry.DigitalRelease, PosterURL: poster(entry.Images)})
+			rating := entry.Ratings.Tmdb.Value
+			if rating == 0 {
+				rating = entry.Ratings.Imdb.Value
+			}
+			items = append(items, movie{
+				Title: entry.Title, TmdbID: entry.TmdbID, Cinema: entry.InCinemas, Digital: entry.DigitalRelease,
+				PosterURL: poster(entry.Images), BackdropURL: image(entry.Images, "fanart"),
+				Overview: entry.Overview, Runtime: entry.Runtime, Year: entry.Year,
+				Certification: entry.Certification, Studio: entry.Studio, Status: entry.Status,
+				Genres: entry.Genres, Rating: rating,
+			})
 		}
 	}
 	return items, nil
@@ -202,8 +305,18 @@ func (client *Client) episodes(ctx context.Context) ([]episode, error) {
 		EpisodeNumber int       `json:"episodeNumber"`
 		AirDate       time.Time `json:"airDateUtc"`
 		Series        struct {
-			Title  string `json:"title"`
-			TvdbID int    `json:"tvdbId"`
+			Title         string   `json:"title"`
+			TvdbID        int      `json:"tvdbId"`
+			Overview      string   `json:"overview"`
+			Year          int      `json:"year"`
+			Runtime       int      `json:"runtime"`
+			Network       string   `json:"network"`
+			Status        string   `json:"status"`
+			Certification string   `json:"certification"`
+			Genres        []string `json:"genres"`
+			Ratings       struct {
+				Value float64 `json:"value"`
+			} `json:"ratings"`
 			Images []struct {
 				CoverType string `json:"coverType"`
 				RemoteURL string `json:"remoteUrl"`
@@ -216,10 +329,33 @@ func (client *Client) episodes(ctx context.Context) ([]episode, error) {
 	items := make([]episode, 0, len(result))
 	for _, entry := range result {
 		if !entry.AirDate.IsZero() {
-			items = append(items, episode{Title: entry.Series.Title, TvdbID: entry.Series.TvdbID, PosterURL: poster(entry.Series.Images), SeasonNumber: entry.SeasonNumber, EpisodeNumber: entry.EpisodeNumber, EpisodeTitle: entry.Title, AirDate: entry.AirDate})
+			items = append(items, episode{
+				Title: entry.Series.Title, TvdbID: entry.Series.TvdbID,
+				PosterURL: poster(entry.Series.Images), BackdropURL: image(entry.Series.Images, "fanart"),
+				SeasonNumber: entry.SeasonNumber, EpisodeNumber: entry.EpisodeNumber,
+				EpisodeTitle: entry.Title, AirDate: entry.AirDate,
+				Overview: entry.Series.Overview, Year: entry.Series.Year, Runtime: entry.Series.Runtime,
+				Studio: entry.Series.Network, Status: entry.Series.Status,
+				Certification: entry.Series.Certification, Genres: entry.Series.Genres,
+				Rating: entry.Series.Ratings.Value,
+			})
 		}
 	}
 	return items, nil
+}
+
+// image picks one cover type out of what Radarr/Sonarr scraped. Same proxying
+// rationale as poster below.
+func image(images []struct {
+	CoverType string `json:"coverType"`
+	RemoteURL string `json:"remoteUrl"`
+}, coverType string) string {
+	for _, candidate := range images {
+		if candidate.CoverType == coverType {
+			return artwork.ProxyURL(candidate.RemoteURL)
+		}
+	}
+	return ""
 }
 
 func poster(images []struct {
@@ -346,4 +482,43 @@ func (client *Client) get(ctx context.Context, endpoint, apiKey string, target a
 		return fmt.Errorf("returned %s", response.Status)
 	}
 	return json.NewDecoder(response.Body).Decode(target)
+}
+
+// Detail returns the calendar entry a source knows by id. It exists so a
+// detail screen works without Seerr and without TMDB: everything it returns
+// was already in the calendar response the list was built from, so this walks
+// the same two lists rather than calling Radarr or Sonarr again.
+//
+// Matching is by (source, id) rather than by TMDB id alone, because a Sonarr
+// entry has no TMDB id unless TMDB is configured.
+func (client *Client) Detail(ctx context.Context, source, id string) (Item, bool, error) {
+	if client == nil || id == "" || (source != SourceRadarr && source != SourceSonarr) {
+		return Item{}, false, nil
+	}
+	upcoming, err := client.Upcoming(ctx)
+	if err != nil {
+		return Item{}, false, err
+	}
+	cinemas, err := client.InCinemas(ctx)
+	if err != nil {
+		return Item{}, false, err
+	}
+	for _, list := range [][]Item{upcoming, cinemas} {
+		for _, item := range list {
+			if item.Source == source && item.DetailID == id {
+				return item, true, nil
+			}
+		}
+	}
+	// An entry may also be addressed by the TMDB id the tile carries, which is
+	// what the frontend has when TMDB is configured. Still scoped to the
+	// source: a Sonarr id must never resolve through Radarr's list.
+	for _, list := range [][]Item{upcoming, cinemas} {
+		for _, item := range list {
+			if item.Source == source && item.TmdbID != "" && item.TmdbID == id {
+				return item, true, nil
+			}
+		}
+	}
+	return Item{}, false, nil
 }

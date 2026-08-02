@@ -102,6 +102,17 @@ func (reader *fakeComingSoonReader) Upcoming(context.Context) ([]comingsoon.Item
 	return reader.upcoming, nil
 }
 
+func (reader *fakeComingSoonReader) Detail(_ context.Context, source, id string) (comingsoon.Item, bool, error) {
+	for _, list := range [][]comingsoon.Item{reader.upcoming, reader.cinema} {
+		for _, item := range list {
+			if item.Source == source && item.DetailID == id {
+				return item, true, nil
+			}
+		}
+	}
+	return comingsoon.Item{}, false, nil
+}
+
 func (reader *fakeComingSoonReader) InCinemas(context.Context) ([]comingsoon.Item, error) {
 	return reader.cinema, nil
 }

@@ -162,3 +162,8 @@ func (wrapper liveComingSoon) InCinemas(ctx context.Context) ([]comingsoon.Item,
 	_, client, _ := wrapper.live.current()
 	return client.InCinemas(ctx)
 }
+
+func (wrapper liveComingSoon) Detail(ctx context.Context, source, id string) (comingsoon.Item, bool, error) {
+	_, client, _ := wrapper.live.current()
+	return client.Detail(ctx, source, id)
+}

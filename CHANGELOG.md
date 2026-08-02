@@ -8,6 +8,30 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.11.0] - 2026-08-02
+
+### Added
+
+- "Demnaechst" und "Im Kino" haben einen eigenen Detailscreen, der ohne Seerr
+  und ohne TMDB auskommt. Radarr und Sonarr liefern in ihrem Kalender bereits
+  die volle Movie- beziehungsweise Series-Resource; davon wurden bisher fuenf
+  Felder dekodiert. Beschreibung, Genres, Laufzeit, Jahr, Altersfreigabe,
+  Bewertung, Studio und Hintergrundbild kommen jetzt mit, ohne einen einzigen
+  zusaetzlichen Aufruf. Neuer Endpunkt `GET /api/media/comingsoon`.
+- Der Anfrage-Knopf bleibt sichtbar, wenn Seerr nicht eingerichtet ist, und
+  nennt den Grund, statt einfach zu fehlen.
+
+### Fixed
+
+- Serien aus dem Sonarr-Kalender hatten ohne TMDB gar keine ID und liessen
+  sich deshalb nicht oeffnen — auch mit eingerichtetem Seerr nicht. Die
+  Uebersetzung der TVDB- in eine TMDB-ID ist selbst ein TMDB-Aufruf; ohne den
+  wurde eine leere ID vergeben und der Eintrag trotzdem angezeigt. Eintraege
+  tragen jetzt die ID des Dienstes, aus dem sie stammen.
+- Anfragen sind nur moeglich, wenn eine echte TMDB-ID vorliegt. Sonarrs
+  TVDB-ID als TMDB-ID an Seerr zu schicken, haette den falschen Titel
+  angefragt.
+
 ## [0.10.0] - 2026-08-02
 
 ### Changed
