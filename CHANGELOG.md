@@ -8,7 +8,13 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
-## [0.8.75] - 2026-08-02
+## [0.9.0] - 2026-08-02
+
+### Breaking
+
+- `EMBY_INSIGHTS_IMAGE` no longer has a default and has to be set in `.env`.
+  Compose refuses to start without it. Existing deployments that relied on the
+  default image need one line added to their `.env` before the next `up`.
 
 ### Security
 
@@ -31,8 +37,8 @@ The project follows [Semantic Versioning](https://semver.org/):
 ### Changed
 
 - The container registry host is no longer hardcoded. CI reads it from the
-  `REGISTRY_HOST` repository variable, and `EMBY_INSIGHTS_IMAGE` has to be set
-  in `.env` — Compose refuses to start without it.
+  `REGISTRY_HOST` repository variable, so the registry this project pushes to
+  is not baked into a repository that is readable by anyone.
 
 ## [0.8.74] - 2026-08-02
 
