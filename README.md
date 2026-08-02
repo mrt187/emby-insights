@@ -8,7 +8,7 @@ Die Produktgrundlage und das MVP stehen in [docs/PRODUCT-BLUEPRINT.md](docs/PROD
 
 ## Status
 
-Current release: [v0.9.1](CHANGELOG.md#091---2026-08-02).
+Current release: [v0.9.2](CHANGELOG.md#092---2026-08-02).
 
 The personal dashboard foundation is implemented: Emby login, protected
 sessions, personal watch-time statistics, and the all-in-one Docker container.
