@@ -11,7 +11,7 @@ cp .env.example .env
 docker compose up -d
 ```
 ## docker-compose.yaml
-````
+```
 name: emby-insights
 
 services:
