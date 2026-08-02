@@ -8,6 +8,29 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.8.74] - 2026-08-02
+
+### Security
+
+- Remote poster images are now fetched through a locked-down HTTP client:
+  `http`/`https` only, no redirects, a hard timeout, and connections to
+  loopback, private, link-local, carrier-grade NAT and reserved address
+  ranges are refused at the socket layer. A poster URL supplied by a
+  logged-in user can no longer be used to reach internal services or read
+  their responses back out.
+- The format of a poster is determined from the image bytes instead of the
+  `Content-Type` a remote server claims, both when storing and when serving.
+  Only JPEG, PNG, WebP and GIF are accepted, and responses larger than 5 MB
+  are rejected rather than truncated. Posters stored before this change are
+  re-checked on every read, so any unsafe leftovers stop being served without
+  needing a migration.
+- Added a Content-Security-Policy (plus `Referrer-Policy`) to API responses.
+- Login throttling no longer trusts `X-Forwarded-For` from arbitrary clients.
+  The header is only honoured from a reverse proxy listed in the new optional
+  `TRUSTED_PROXIES` setting. Attempts are counted per username and address
+  together, with a looser per-username limit on top, and usernames are
+  normalised so casing or padding cannot reset the counter.
+
 ## [0.8.73] - 2026-08-01
 
 ### Chore

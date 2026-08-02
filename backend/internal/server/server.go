@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"net/http"
@@ -89,11 +88,13 @@ type App struct {
 	embyClient          *emby.Client
 	appconfig           ConfigStore
 	live                *liveConfig
-	loginLimiters       map[string]*ipRateLimiter
-	loginLimitersMu     sync.RWMutex
+	imageFetchClient    *http.Client
+	trustedProxies      []*net.IPNet
+	loginLimiters       map[string]*loginRateLimiter
+	loginLimitersMu     sync.Mutex
 }
 
-type ipRateLimiter struct {
+type loginRateLimiter struct {
 	attempts []time.Time
 }
 
@@ -180,7 +181,9 @@ func New(cfg config.Config) (*App, error) {
 		embyClient:          embyClient,
 		appconfig:           appconfigStore,
 		live:                live,
-		loginLimiters:       make(map[string]*ipRateLimiter),
+		imageFetchClient:    newImageFetchClient(),
+		trustedProxies:      parseTrustedProxies(cfg.TrustedProxies),
+		loginLimiters:       make(map[string]*loginRateLimiter),
 	}
 	// Redis persists across restarts/redeploys (appendonly file on the same
 	// volume as everything else), so a fixed integration response (e.g. the
@@ -241,12 +244,33 @@ func (app *App) invalidateIntegrationCaches(ctx context.Context) {
 
 func (app *App) Close() { app.redis.Close(); app.database.Close() }
 
+// contentSecurityPolicy is the second line of defence behind the image
+// content-type checks: even if something non-image were ever served from our
+// own origin, this stops it from loading scripts or phoning home.
+//
+// 'unsafe-inline' is present for styles only — the frontend build ships
+// inline <style> blocks and inline style attributes. Scripts get no such
+// exemption. img-src allows data: for the inline placeholder artwork and
+// blob: for canvas-rendered chart exports.
+const contentSecurityPolicy = "default-src 'self'; " +
+	"script-src 'self'; " +
+	"style-src 'self' 'unsafe-inline'; " +
+	"img-src 'self' data: blob:; " +
+	"font-src 'self' data:; " +
+	"connect-src 'self'; " +
+	"object-src 'none'; " +
+	"frame-ancestors 'none'; " +
+	"base-uri 'self'; " +
+	"form-action 'self'"
+
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("X-XSS-Protection", "1; mode=block")
 		w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		w.Header().Set("Content-Security-Policy", contentSecurityPolicy)
+		w.Header().Set("Referrer-Policy", "same-origin")
 		next.ServeHTTP(w, r)
 	})
 }
@@ -347,42 +371,131 @@ func (app *App) ready(writer http.ResponseWriter, request *http.Request) {
 	respondJSON(writer, http.StatusOK, map[string]string{"status": "ready"})
 }
 
-func (app *App) isLoginAllowed(clientIP string) bool {
-	app.loginLimitersMu.Lock()
-	limiter, exists := app.loginLimiters[clientIP]
-	if !exists {
-		limiter = &ipRateLimiter{}
-		app.loginLimiters[clientIP] = limiter
+// Login attempts are throttled on two keys at once. The strict per
+// (username, IP) limit is what actually stops password guessing, while the
+// looser per-username limit catches the same account being hammered from many
+// addresses — without letting anyone lock a neighbour out of their account
+// from a single request, which a username-only limit would allow.
+const (
+	loginAttemptsPerUserAndIP = 5
+	loginAttemptsPerUser      = 20
+	loginAttemptWindow        = time.Minute
+)
+
+// parseTrustedProxies turns the configured CIDR list into networks whose
+// X-Forwarded-For header may be believed. Anything unparseable is dropped
+// rather than fatal: a typo in the deployment env should degrade to "trust
+// nobody" instead of refusing to boot.
+func parseTrustedProxies(entries []string) []*net.IPNet {
+	networks := make([]*net.IPNet, 0, len(entries))
+	for _, entry := range entries {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		if !strings.Contains(entry, "/") {
+			if ip := net.ParseIP(entry); ip != nil {
+				bits := 32
+				if ip.To4() == nil {
+					bits = 128
+				}
+				entry = fmt.Sprintf("%s/%d", entry, bits)
+			}
+		}
+		_, network, err := net.ParseCIDR(entry)
+		if err != nil {
+			log.Printf("ignoring invalid TRUSTED_PROXIES entry %q: %v", entry, err)
+			continue
+		}
+		networks = append(networks, network)
 	}
-	app.loginLimitersMu.Unlock()
+	return networks
+}
+
+// clientIP returns the address the login limiter counts against. The
+// X-Forwarded-For header is only consulted when the request actually came
+// from a configured reverse proxy — otherwise any client could hand us a
+// fresh fake address per attempt and never hit a limit at all.
+func (app *App) clientIP(request *http.Request) string {
+	host, _, err := net.SplitHostPort(request.RemoteAddr)
+	if err != nil {
+		host = request.RemoteAddr
+	}
+	if !app.isTrustedProxy(net.ParseIP(host)) {
+		return host
+	}
+	forwarded := request.Header.Get("X-Forwarded-For")
+	if forwarded == "" {
+		return host
+	}
+	// Left-most entry is the original client; the proxy appends, so only a
+	// trusted proxy's own list is read here.
+	original := strings.TrimSpace(strings.Split(forwarded, ",")[0])
+	if net.ParseIP(original) == nil {
+		return host
+	}
+	return original
+}
+
+func (app *App) isTrustedProxy(ip net.IP) bool {
+	if ip == nil {
+		return false
+	}
+	if v4 := ip.To4(); v4 != nil {
+		ip = v4
+	}
+	for _, network := range app.trustedProxies {
+		if network.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// normalizeUsername collapses the spellings of one account onto a single
+// limiter key, so "Tom", "tom " and "TOM" share a budget instead of getting
+// five attempts each.
+func normalizeUsername(username string) string {
+	return strings.ToLower(strings.TrimSpace(username))
+}
+
+// recordLoginAttempt registers an attempt under key and reports whether it is
+// still within limit.
+func (app *App) recordLoginAttempt(key string, limit int) bool {
+	app.loginLimitersMu.Lock()
+	defer app.loginLimitersMu.Unlock()
+
+	limiter, exists := app.loginLimiters[key]
+	if !exists {
+		limiter = &loginRateLimiter{}
+		app.loginLimiters[key] = limiter
+	}
 
 	now := time.Now()
-	var valid []time.Time
+	valid := limiter.attempts[:0]
 	for _, t := range limiter.attempts {
-		if now.Sub(t) < time.Minute {
+		if now.Sub(t) < loginAttemptWindow {
 			valid = append(valid, t)
 		}
 	}
+	limiter.attempts = valid
 
-	if len(valid) >= 5 {
+	if len(valid) >= limit {
 		return false
 	}
-
-	limiter.attempts = append(valid, now)
+	limiter.attempts = append(limiter.attempts, now)
 	return true
 }
 
+func (app *App) isLoginAllowed(username, clientIP string) bool {
+	// Both keys are always recorded, so a caller rotating one dimension still
+	// burns budget on the other.
+	perUserAndIP := app.recordLoginAttempt("user-ip:"+username+"|"+clientIP, loginAttemptsPerUserAndIP)
+	perUser := app.recordLoginAttempt("user:"+username, loginAttemptsPerUser)
+	return perUserAndIP && perUser
+}
+
 func (app *App) login(writer http.ResponseWriter, request *http.Request) {
-	clientIP := request.Header.Get("X-Forwarded-For")
-	if clientIP == "" {
-		clientIP = request.RemoteAddr
-	}
-
-	if !app.isLoginAllowed(clientIP) {
-		respondJSON(writer, http.StatusTooManyRequests, map[string]string{"error": "too many login attempts, try again later"})
-		return
-	}
-
 	var input struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
@@ -390,6 +503,11 @@ func (app *App) login(writer http.ResponseWriter, request *http.Request) {
 	request.Body = http.MaxBytesReader(writer, request.Body, 1<<20)
 	if err := json.NewDecoder(request.Body).Decode(&input); err != nil || input.Username == "" || input.Password == "" {
 		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "username and password are required"})
+		return
+	}
+
+	if !app.isLoginAllowed(normalizeUsername(input.Username), app.clientIP(request)) {
+		respondJSON(writer, http.StatusTooManyRequests, map[string]string{"error": "too many login attempts, try again later"})
 		return
 	}
 	identity, err := app.authenticator.Authenticate(request.Context(), emby.Credentials{Username: input.Username, Password: input.Password})
@@ -1889,12 +2007,22 @@ func (app *App) trackingPosterImage(writer http.ResponseWriter, request *http.Re
 		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "source and id are required"})
 		return
 	}
-	data, contentType, found, err := app.tracking.PosterImage(request.Context(), mediaSource, mediaID)
+	data, _, found, err := app.tracking.PosterImage(request.Context(), mediaSource, mediaID)
 	if err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "poster is unavailable"})
 		return
 	}
 	if !found {
+		http.NotFound(writer, request)
+		return
+	}
+	// The stored content type is deliberately discarded and re-derived from
+	// the bytes. Rows written before poster fetching was hardened could hold
+	// a non-image body with an attacker-chosen content type; re-sniffing on
+	// every read means those simply stop being served instead of needing a
+	// migration to find them.
+	contentType, ok := detectImageContentType(data)
+	if !ok {
 		http.NotFound(writer, request)
 		return
 	}
@@ -1908,9 +2036,14 @@ func (app *App) trackingPosterImage(writer http.ResponseWriter, request *http.Re
 // persisted (see upsertTracking and BackfillPosterImages). Emby-sourced URLs
 // are our own /api/images proxy links (see emby.ImageURL) — those go
 // straight to Emby with the admin API key, bypassing the proxy's Redis cache
-// since this only ever runs once per rating. Anything else (Seerr/TMDB
-// URLs) is already a stable, publicly reachable image and is just fetched
-// directly.
+// since this only ever runs once per rating.
+//
+// Anything else is a Seerr/TMDB URL that arrived in a request body, so it is
+// attacker-controlled and is fetched through app.imageFetchClient: public
+// addresses only, no redirects, hard timeout. Whatever comes back — from
+// either branch — has to sniff as a real image before it is stored, so the
+// content type in the database is one we determined, never one a remote
+// server claimed.
 func (app *App) fetchPosterBytes(ctx context.Context, mediaSource, posterURL string) ([]byte, string, bool) {
 	if posterURL == "" {
 		return nil, "", false
@@ -1924,14 +2057,26 @@ func (app *App) fetchPosterBytes(ctx context.Context, mediaSource, posterURL str
 		if err != nil {
 			return nil, "", false
 		}
-		return image.Data, image.ContentType, true
+		if len(image.Data) > maxPosterBytes {
+			return nil, "", false
+		}
+		contentType, ok := detectImageContentType(image.Data)
+		if !ok {
+			return nil, "", false
+		}
+		return image.Data, contentType, true
+	}
+
+	parsed, err := url.Parse(posterURL)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return nil, "", false
 	}
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, posterURL, nil)
 	if err != nil {
 		return nil, "", false
 	}
-	response, err := http.DefaultClient.Do(request)
+	response, err := app.imageFetchClient.Do(request)
 	if err != nil {
 		return nil, "", false
 	}
@@ -1939,15 +2084,7 @@ func (app *App) fetchPosterBytes(ctx context.Context, mediaSource, posterURL str
 	if response.StatusCode != http.StatusOK {
 		return nil, "", false
 	}
-	data, err := io.ReadAll(io.LimitReader(response.Body, 5<<20))
-	if err != nil {
-		return nil, "", false
-	}
-	contentType := response.Header.Get("Content-Type")
-	if contentType == "" {
-		contentType = "image/jpeg"
-	}
-	return data, contentType, true
+	return readImageBody(response.Body)
 }
 
 // parseImageProxyURL extracts the itemId/tag/maxWidth query parameters back

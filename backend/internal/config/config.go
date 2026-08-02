@@ -20,6 +20,12 @@ type Config struct {
 	AppEncryptionKey string
 	CookieSecure     bool
 	ShutdownTimeout  time.Duration
+
+	// TrustedProxies lists the IPs/CIDRs whose X-Forwarded-For header may be
+	// believed when identifying the client for login throttling. Empty means
+	// trust nobody and always use the peer address — correct for a directly
+	// exposed container, and the safe default when the value is unset.
+	TrustedProxies []string
 }
 
 func Load() (Config, error) {
@@ -57,7 +63,18 @@ func Load() (Config, error) {
 		AppEncryptionKey: appEncryptionKey,
 		CookieSecure:     valueOr("COOKIE_SECURE", "true") != "false",
 		ShutdownTimeout:  10 * time.Second,
+		TrustedProxies:   splitList(os.Getenv("TRUSTED_PROXIES")),
 	}, nil
+}
+
+func splitList(value string) []string {
+	var entries []string
+	for _, entry := range strings.Split(value, ",") {
+		if entry = strings.TrimSpace(entry); entry != "" {
+			entries = append(entries, entry)
+		}
+	}
+	return entries
 }
 
 func required(name string) (string, error) {

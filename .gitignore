@@ -26,3 +26,7 @@ work/
 .agents/skills/
 .claude/skills/
 skills-lock.json
+
+# Separate repositories / local build output (not part of this repo)
+emby-plugin/
+tools/
