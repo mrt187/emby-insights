@@ -3,6 +3,7 @@ package seerr
 import (
 	"context"
 	"fmt"
+	"github.com/mrt187/EmbyInsights/internal/artwork"
 )
 
 type Person struct {
@@ -12,8 +13,8 @@ type Person struct {
 }
 
 type RequestableSeason struct {
-	SeasonNumber int  `json:"seasonNumber"`
-	EpisodeCount int  `json:"episodeCount"`
+	SeasonNumber int `json:"seasonNumber"`
+	EpisodeCount int `json:"episodeCount"`
 	// Available marks a season Seerr already reports as fully available
 	// (status 5) for a partially-available show, so the frontend can hide
 	// it from the season picker — only the seasons still missing should be
@@ -189,10 +190,10 @@ func (client *Client) MediaDetail(ctx context.Context, mediaType string, tmdbID 
 		})
 	}
 	if result.PosterPath != "" {
-		detail.PosterURL = posterBaseURL + result.PosterPath
+		detail.PosterURL = artwork.ProxyURL(posterBaseURL + result.PosterPath)
 	}
 	if result.BackdropPath != "" {
-		detail.BackdropURL = "https://image.tmdb.org/t/p/w1280" + result.BackdropPath
+		detail.BackdropURL = artwork.ProxyURL("https://image.tmdb.org/t/p/w1280" + result.BackdropPath)
 	}
 	for _, genre := range result.Genres {
 		detail.Genres = append(detail.Genres, genre.Name)
@@ -203,7 +204,7 @@ func (client *Client) MediaDetail(ctx context.Context, mediaType string, tmdbID 
 		}
 		var imageURL string
 		if cast.ProfilePath != "" {
-			imageURL = posterBaseURL + cast.ProfilePath
+			imageURL = artwork.ProxyURL(posterBaseURL + cast.ProfilePath)
 		}
 		detail.Cast = append(detail.Cast, Person{Name: cast.Name, Role: cast.Character, ImageURL: imageURL})
 	}
@@ -213,7 +214,7 @@ func (client *Client) MediaDetail(ctx context.Context, mediaType string, tmdbID 
 		}
 		var imageURL string
 		if crew.ProfilePath != "" {
-			imageURL = posterBaseURL + crew.ProfilePath
+			imageURL = artwork.ProxyURL(posterBaseURL + crew.ProfilePath)
 		}
 		detail.Crew = append(detail.Crew, Person{Name: crew.Name, Role: crew.Job, ImageURL: imageURL})
 	}

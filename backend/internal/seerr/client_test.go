@@ -2,6 +2,7 @@ package seerr
 
 import (
 	"context"
+	"github.com/mrt187/EmbyInsights/internal/artwork"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -58,7 +59,7 @@ func TestRequestsFiltersAvailableAndDeclined(t *testing.T) {
 	if requests[0].Title != "Dune: Part Three" || requests[0].Status != "Angefragt" {
 		t.Fatalf("requests[0] = %#v", requests[0])
 	}
-	if requests[0].PosterURL != "https://image.tmdb.org/t/p/w300/dune.jpg" {
+	if requests[0].PosterURL != artwork.ProxyURL("https://image.tmdb.org/t/p/w300/dune.jpg") {
 		t.Fatalf("PosterURL = %q", requests[0].PosterURL)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/mrt187/EmbyInsights/internal/artwork"
 	"net/http"
 	"net/url"
 	"sort"
@@ -227,10 +228,11 @@ func poster(images []struct {
 }) string {
 	for _, image := range images {
 		if image.CoverType == "poster" {
-			// Radarr/Sonarr often hand back plain http:// URLs for these —
-			// harmless over a bare HTTP LAN connection, but a browser on a
-			// HTTPS reverse proxy blocks loading them as mixed content.
-			return strings.Replace(image.RemoteURL, "http://", "https://", 1)
+			// Radarr/Sonarr hand back the CDN URL they scraped. It goes
+			// through our own origin: the proxy normalises the scheme, so the
+			// plain http:// these sometimes return stops being mixed content,
+			// and the browser never talks to the CDN directly.
+			return artwork.ProxyURL(image.RemoteURL)
 		}
 	}
 	return ""

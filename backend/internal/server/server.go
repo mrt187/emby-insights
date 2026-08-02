@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/mrt187/EmbyInsights/internal/artwork"
 	"log"
 	"net"
 	"net/http"
@@ -287,6 +288,7 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/me", app.me)
 	mux.HandleFunc("GET /api/me/avatar", app.avatar)
 	mux.HandleFunc("GET /api/images", app.itemImage)
+	mux.HandleFunc("GET /api/artwork", app.artworkImage)
 	mux.HandleFunc("GET /api/me/profile", app.meProfile)
 	mux.HandleFunc("GET /api/stats", app.stats)
 	mux.HandleFunc("GET /api/stats/rank", app.watchTimeRankStats)
@@ -2187,4 +2189,59 @@ func parseImageProxyURL(raw string) (itemID, tag string, maxWidth int, ok bool) 
 		return "", "", 0, false
 	}
 	return itemID, tag, width, true
+}
+
+// artworkImage serves posters that live on a public artwork CDN through our
+// own origin. Two reasons it exists rather than letting the browser fetch the
+// CDN directly: the page's Content-Security-Policy can stay at `img-src
+// 'self'`, and the CDN never learns which titles a given user is browsing.
+//
+// The URL is only ever produced by artwork.ProxyURL, but it arrives back as a
+// query parameter, so it is treated as untrusted: the host is checked against
+// the allow list again here, and the fetch goes through the same locked-down
+// client as remote poster fetching — public addresses only, no redirects, hard
+// timeout, and the content type is derived from the bytes.
+func (app *App) artworkImage(writer http.ResponseWriter, request *http.Request) {
+	if _, ok := app.identityFromRequest(writer, request); !ok {
+		return
+	}
+	raw := request.URL.Query().Get("u")
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme != "https" || !artwork.AllowedHost(parsed.Host) {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "u must be an artwork URL on a supported host"})
+		return
+	}
+
+	cacheKey := "artwork:" + parsed.String()
+	image, err := cachedJSON(request.Context(), app, cacheKey, imageCacheTTL, func(ctx context.Context) (emby.UserImage, error) {
+		fetchRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
+		if err != nil {
+			return emby.UserImage{}, err
+		}
+		response, err := app.imageFetchClient.Do(fetchRequest)
+		if err != nil {
+			return emby.UserImage{}, fmt.Errorf("fetch artwork: %w", err)
+		}
+		defer response.Body.Close()
+		if response.StatusCode != http.StatusOK {
+			return emby.UserImage{}, fmt.Errorf("%w: artwork CDN returned %s", emby.ErrItemImageUnavailable, response.Status)
+		}
+		data, contentType, ok := readImageBody(response.Body)
+		if !ok {
+			return emby.UserImage{}, fmt.Errorf("%w: artwork is not a usable image", emby.ErrItemImageUnavailable)
+		}
+		return emby.UserImage{ContentType: contentType, Data: data}, nil
+	})
+	if errors.Is(err, emby.ErrItemImageUnavailable) {
+		http.NotFound(writer, request)
+		return
+	}
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "artwork is unavailable"})
+		return
+	}
+	writer.Header().Set("Content-Type", image.ContentType)
+	writer.Header().Set("Cache-Control", "public, max-age=604800, immutable")
+	writer.WriteHeader(http.StatusOK)
+	_, _ = writer.Write(image.Data)
 }

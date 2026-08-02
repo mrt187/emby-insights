@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/mrt187/EmbyInsights/internal/artwork"
 	"net/http"
 	"sort"
 	"strconv"
@@ -229,7 +230,7 @@ func (client *Client) mediaDetail(ctx context.Context, mediaType string, tmdbID 
 	}
 	var posterURL string
 	if result.PosterPath != "" {
-		posterURL = posterBaseURL + result.PosterPath
+		posterURL = artwork.ProxyURL(posterBaseURL + result.PosterPath)
 	}
 	return mediaDetail{title: title, posterURL: posterURL}, nil
 }

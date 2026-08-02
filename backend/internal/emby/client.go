@@ -180,11 +180,13 @@ func (client *Client) ItemImage(ctx context.Context, itemID, imageType, tag stri
 		return UserImage{}, fmt.Errorf("fetch Emby item image: %w", err)
 	}
 	defer response.Body.Close()
-	if response.StatusCode == http.StatusNotFound {
-		return UserImage{}, ErrItemImageUnavailable
-	}
+	// Any answer that is not the image counts as "no image", not as an
+	// outage. Emby returns 500 for an item whose artwork file is missing or
+	// unreadable, and a 502 from us turns that into a broken <img> in the
+	// browser — the UI's placeholder is the better answer, and reaching Emby
+	// at all already proves it is up.
 	if response.StatusCode != http.StatusOK {
-		return UserImage{}, fmt.Errorf("Emby item image returned %s", response.Status)
+		return UserImage{}, fmt.Errorf("%w: Emby returned %s", ErrItemImageUnavailable, response.Status)
 	}
 	data, err := io.ReadAll(io.LimitReader(response.Body, 5<<20))
 	if err != nil {

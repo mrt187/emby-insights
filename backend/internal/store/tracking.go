@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"github.com/mrt187/EmbyInsights/internal/artwork"
 	"net/url"
 
 	"github.com/jackc/pgx/v5"
@@ -64,10 +65,16 @@ func NewPostgresTrackingStore(pool *pgxpool.Pool) *PostgresTrackingStore {
 // once one has been stored, instead of the (possibly stale) URL captured at
 // rating time — see migration 009.
 func posterServingURL(mediaSource, mediaID string, hasImage bool, fallback string) string {
-	if !hasImage {
-		return fallback
+	if hasImage {
+		return "/api/tracking/poster?source=" + url.QueryEscape(mediaSource) + "&id=" + url.QueryEscape(mediaID)
 	}
-	return "/api/tracking/poster?source=" + url.QueryEscape(mediaSource) + "&id=" + url.QueryEscape(mediaID)
+	// No cached copy yet — the backfill job has not reached this row. The
+	// stored URL is whatever was captured at rating time, which for Emby rows
+	// is the server's own LAN address: unreachable for anyone outside that
+	// network and blocked as mixed content behind HTTPS. Route it through the
+	// artwork proxy if it is a CDN we serve, and otherwise hand back nothing
+	// so the UI draws its placeholder instead of a broken image.
+	return artwork.ProxyURL(fallback)
 }
 
 // Get returns the tracking entry for one title, and false if the user has

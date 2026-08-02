@@ -4,7 +4,7 @@ Ein persönliches, mobile-first Medien-Dashboard für Emby-Nutzer. Emby Insights
 ergänzt den Player, statt ihn zu ersetzen: persönliche Statistiken, eigene
 Medienanfragen, kommende Veröffentlichungen und Benachrichtigungen an einem Ort.
 
-Aktuelles Release: [v0.9.5](CHANGELOG.md#095---2026-08-02)
+Aktuelles Release: [v0.10.0](CHANGELOG.md#0100---2026-08-02)
 
 ## Funktionsumfang
 

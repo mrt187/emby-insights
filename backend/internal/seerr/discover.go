@@ -2,6 +2,7 @@ package seerr
 
 import (
 	"context"
+	"github.com/mrt187/EmbyInsights/internal/artwork"
 	"net/url"
 	"strconv"
 )
@@ -126,7 +127,7 @@ func (entry discoverEntry) toDiscoverItem() DiscoverItem {
 	}
 	var posterURL string
 	if entry.PosterPath != "" {
-		posterURL = posterBaseURL + entry.PosterPath
+		posterURL = artwork.ProxyURL(posterBaseURL + entry.PosterPath)
 	}
 	return DiscoverItem{ID: strconv.Itoa(entry.ID), Title: title, PosterURL: posterURL, MediaType: entry.MediaType}
 }

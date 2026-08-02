@@ -12,11 +12,6 @@ import type { NextRequest } from "next/server";
 // styles keep 'unsafe-inline': Tailwind and React both emit inline style
 // attributes, which no nonce can cover. That is a far smaller surface than
 // inline script and is the same trade-off the API-side policy already makes.
-// Artwork hosts the dashboard is allowed to load images from. Extend this if a
-// Radarr/Sonarr instance hands back posters from somewhere else — the browser
-// console names the blocked host in the CSP violation it reports.
-const imageHosts = ["https://image.tmdb.org", "https://artworks.thetvdb.com"];
-
 function contentSecurityPolicy(nonce: string): string {
   return [
     "default-src 'self'",
@@ -25,11 +20,10 @@ function contentSecurityPolicy(nonce: string): string {
     // 'self' covers that tag; the nonce is what admits the inline blocks.
     `script-src 'self' 'nonce-${nonce}'`,
     "style-src 'self' 'unsafe-inline'",
-    // Posters for anything that is not in Emby come straight from the artwork
-    // CDNs: Seerr and the coming-soon lists hand out image.tmdb.org URLs, and
-    // Radarr/Sonarr hand out their own remoteUrl, which is thetvdb for series.
-    // Emby's own posters go through /api/images and are covered by 'self'.
-    `img-src 'self' data: blob: ${imageHosts.join(" ")}`,
+    // Every poster is served from our own origin: Emby artwork through
+    // /api/images, CDN artwork through /api/artwork. Nothing here needs to
+    // name an external host, and the CDNs never see a user's browser.
+    "img-src 'self' data: blob:",
     "font-src 'self' data:",
     "connect-src 'self'",
     "object-src 'none'",

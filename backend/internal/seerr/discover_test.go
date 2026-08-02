@@ -2,6 +2,7 @@ package seerr
 
 import (
 	"context"
+	"github.com/mrt187/EmbyInsights/internal/artwork"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -30,7 +31,7 @@ func TestTrendingDecodesMixedMediaTypes(t *testing.T) {
 	if len(items) != 2 {
 		t.Fatalf("items = %#v", items)
 	}
-	if items[0].Title != "Dune" || items[0].MediaType != "movie" || items[0].PosterURL != "https://image.tmdb.org/t/p/w300/dune.jpg" {
+	if items[0].Title != "Dune" || items[0].MediaType != "movie" || items[0].PosterURL != artwork.ProxyURL("https://image.tmdb.org/t/p/w300/dune.jpg") {
 		t.Fatalf("items[0] = %#v", items[0])
 	}
 	if items[1].Title != "Severance" || items[1].MediaType != "tv" {

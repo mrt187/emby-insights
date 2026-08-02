@@ -8,6 +8,30 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.10.0] - 2026-08-02
+
+### Changed
+
+- Poster von den Artwork-CDNs laufen jetzt ueber die eigene Herkunft. Seerr,
+  Radarr und Sonarr liefern absolute URLs auf `image.tmdb.org` beziehungsweise
+  `artworks.thetvdb.com`; die werden auf `/api/artwork` umgeschrieben und dort
+  serverseitig geholt. Damit steht `img-src` wieder auf `'self'`, und die CDNs
+  erfahren nicht mehr, welche Titel ein Nutzer ansieht. Der Proxy prueft den
+  Ziel-Host gegen eine feste Liste, holt ueber den gehaerteten HTTP-Client
+  (nur oeffentliche Adressen, keine Redirects, hartes Timeout) und leitet den
+  Content-Type aus den Bytes ab.
+
+### Fixed
+
+- Ein Item, dessen Bild Emby nicht ausliefern kann, zeigt jetzt den
+  Platzhalter statt eines kaputten Bildes. Bisher galt nur ein `404` als
+  "kein Bild"; bei einem `500` — was Emby bei defekter Bilddatei liefert —
+  antwortete die App mit `502`.
+- Tracking-Eintraege ohne zwischengespeichertes Poster lieferten die beim
+  Bewerten festgehaltene URL aus. Fuer Emby-Eintraege ist das die LAN-Adresse
+  des Servers: ausserhalb des Netzes nicht erreichbar und hinter HTTPS als
+  Mixed Content blockiert. Solche Adressen werden nicht mehr ausgeliefert.
+
 ## [0.9.5] - 2026-08-02
 
 ### Fixed

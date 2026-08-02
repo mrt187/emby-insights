@@ -2,6 +2,7 @@ package seerr
 
 import (
 	"context"
+	"github.com/mrt187/EmbyInsights/internal/artwork"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -49,7 +50,7 @@ func TestMediaDetailParsesMovie(t *testing.T) {
 	if len(detail.Crew) != 1 || detail.Crew[0].Name != "Jon Favreau" || detail.Crew[0].Role != "Director" {
 		t.Fatalf("crew = %#v", detail.Crew)
 	}
-	if detail.PosterURL != "https://image.tmdb.org/t/p/w300/poster.jpg" {
+	if detail.PosterURL != artwork.ProxyURL("https://image.tmdb.org/t/p/w300/poster.jpg") {
 		t.Fatalf("PosterURL = %q", detail.PosterURL)
 	}
 }
