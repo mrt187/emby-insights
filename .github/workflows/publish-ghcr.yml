@@ -1,0 +1,51 @@
+name: Öffentliches Container-Image veröffentlichen
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version ohne v, zum Beispiel 0.11.3"
+        required: true
+        type: string
+      latest:
+        description: "Auch den Tag latest setzen"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Release-Version auschecken
+        uses: actions/checkout@v4
+        with:
+          ref: v${{ inputs.version }}
+
+      - name: Version prüfen
+        run: test "$(cat VERSION)" = "${{ inputs.version }}"
+
+      - name: Bei GitHub Container Registry anmelden
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image bauen und veröffentlichen
+        run: |
+          TAGS="--tag ghcr.io/${{ github.repository_owner }}/emby-insights:${{ inputs.version }}"
+
+          if [ "${{ inputs.latest }}" = "true" ]; then
+            TAGS="$TAGS --tag ghcr.io/${{ github.repository_owner }}/emby-insights:latest"
+          fi
+
+          docker buildx build --platform linux/amd64 \
+            $TAGS \
+            -f docker/all-in-one/Dockerfile \
+            --push .
