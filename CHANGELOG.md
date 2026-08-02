@@ -8,6 +8,13 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.9.4] - 2026-08-02
+
+### Added
+
+- `LICENSE` (MIT). Das Repository war oeffentlich, aber ohne Lizenzdatei —
+  damit galt volles Urheberrecht und niemand durfte den Code verwenden.
+
 ## [0.9.3] - 2026-08-02
 
 ### Documentation
