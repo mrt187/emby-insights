@@ -34,9 +34,13 @@ type MediaPerson = { name: string; role: string; imageUrl: string };
 // bisher nur gerendert, wenn gar keine URL vorlag — also genau dann nicht, wenn
 // man ihn braucht.
 function PosterImage({ src, fallback, lazy = true }: { src?: string; fallback: ReactNode; lazy?: boolean }) {
+  if (!src) return <span>{fallback}</span>;
+  return <PosterImageSource key={src} src={src} fallback={fallback} lazy={lazy} />;
+}
+
+function PosterImageSource({ src, fallback, lazy }: { src: string; fallback: ReactNode; lazy: boolean }) {
   const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [src]);
-  if (!src || failed) return <span>{fallback}</span>;
+  if (failed) return <span>{fallback}</span>;
   return <img src={src} alt="" loading={lazy ? "lazy" : undefined} onError={() => setFailed(true)} />;
 }
 
@@ -974,7 +978,7 @@ function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreat
       })
       .catch(() => active && setState("error"));
     return () => { active = false; };
-  }, [selection.source, selection.id, mediaType]);
+  }, [selection.source, selection.id, selection.via, mediaType]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1319,34 +1323,46 @@ function AdminSettings() {
   const [activity, activityState] = useApiResource<DailyActivity[]>("/api/admin/activity", []);
   const [settings, settingsState, refetchSettings] = useApiResource<AdminSettingsView | null>("/api/admin/settings", null);
   const [libraries, librariesState] = useApiResource<EmbyLibrary[]>("/api/admin/libraries", []);
+
+  if (settingsState === "loading") return <div className="content page-view admin-page"><p className="poster-status" role="status">Wird geladen …</p></div>;
+  if (settingsState === "error" || !settings) return <div className="content page-view admin-page"><p className="poster-status">Einstellungen nicht verfügbar.</p></div>;
+
+  // A successful save refetches settings. Remounting the editable form then
+  // deliberately resets its draft from that fresh server response.
+  return <AdminSettingsForm
+    key={JSON.stringify(settings)}
+    activity={activity}
+    activityState={activityState}
+    settings={settings}
+    refetchSettings={refetchSettings}
+    libraries={libraries}
+    librariesState={librariesState}
+  />;
+}
+
+function AdminSettingsForm({ activity, activityState, settings, refetchSettings, libraries, librariesState }: {
+  activity: DailyActivity[];
+  activityState: LoadState;
+  settings: AdminSettingsView;
+  refetchSettings: () => void;
+  libraries: EmbyLibrary[];
+  librariesState: LoadState;
+}) {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [showIntro, setShowIntro] = useState(() => typeof window !== "undefined" && !window.localStorage.getItem(SETUP_INTRO_SEEN_KEY));
 
-  const [newForYouIds, setNewForYouIds] = useState<string[]>([]);
-  const [watchedIds, setWatchedIds] = useState<string[]>([]);
+  const [newForYouIds, setNewForYouIds] = useState<string[]>(() => settings.newForYouLibraryIds);
+  const [watchedIds, setWatchedIds] = useState<string[]>(() => settings.watchedLibraryIds);
   const [libraryPicker, setLibraryPicker] = useState<"newForYou" | "watched" | null>(null);
-  const [seerr, setSeerr] = useState<ServiceDraft>({ enabled: false, baseUrl: "", apiKey: "" });
-  const [radarr, setRadarr] = useState<ServiceDraft>({ enabled: false, baseUrl: "", apiKey: "" });
-  const [sonarr, setSonarr] = useState<ServiceDraft>({ enabled: false, baseUrl: "", apiKey: "" });
-  const [tmdb, setTmdb] = useState<ServiceDraft>({ enabled: false, baseUrl: "", apiKey: "" });
-  const [omdb, setOmdb] = useState<ServiceDraft>({ enabled: false, baseUrl: "", apiKey: "" });
-  const [comingSoonRegion, setComingSoonRegion] = useState("DE");
-  const [comingSoonDaysAhead, setComingSoonDaysAhead] = useState(28);
-
-  useEffect(() => {
-    if (!settings) return;
-    setNewForYouIds(settings.newForYouLibraryIds);
-    setWatchedIds(settings.watchedLibraryIds);
-    setSeerr({ enabled: settings.seerr.enabled, baseUrl: settings.seerr.baseUrl ?? "", apiKey: "" });
-    setRadarr({ enabled: settings.radarr.enabled, baseUrl: settings.radarr.baseUrl ?? "", apiKey: "" });
-    setSonarr({ enabled: settings.sonarr.enabled, baseUrl: settings.sonarr.baseUrl ?? "", apiKey: "" });
-    setTmdb({ enabled: settings.tmdb.enabled, baseUrl: "", apiKey: "" });
-    setOmdb({ enabled: settings.omdb.enabled, baseUrl: "", apiKey: "" });
-    setComingSoonRegion(settings.comingSoonRegion || "DE");
-    setComingSoonDaysAhead(settings.comingSoonDaysAhead || 28);
-  }, [settings]);
+  const [seerr, setSeerr] = useState<ServiceDraft>(() => ({ enabled: settings.seerr.enabled, baseUrl: settings.seerr.baseUrl ?? "", apiKey: "" }));
+  const [radarr, setRadarr] = useState<ServiceDraft>(() => ({ enabled: settings.radarr.enabled, baseUrl: settings.radarr.baseUrl ?? "", apiKey: "" }));
+  const [sonarr, setSonarr] = useState<ServiceDraft>(() => ({ enabled: settings.sonarr.enabled, baseUrl: settings.sonarr.baseUrl ?? "", apiKey: "" }));
+  const [tmdb, setTmdb] = useState<ServiceDraft>(() => ({ enabled: settings.tmdb.enabled, baseUrl: "", apiKey: "" }));
+  const [omdb, setOmdb] = useState<ServiceDraft>(() => ({ enabled: settings.omdb.enabled, baseUrl: "", apiKey: "" }));
+  const [comingSoonRegion, setComingSoonRegion] = useState(() => settings.comingSoonRegion || "DE");
+  const [comingSoonDaysAhead, setComingSoonDaysAhead] = useState(() => settings.comingSoonDaysAhead || 28);
 
   const dismissIntro = () => {
     window.localStorage.setItem(SETUP_INTRO_SEEN_KEY, "1");
@@ -1384,9 +1400,6 @@ function AdminSettings() {
       setSaving(false);
     }
   };
-
-  if (settingsState === "loading") return <div className="content page-view admin-page"><p className="poster-status" role="status">Wird geladen …</p></div>;
-  if (settingsState === "error" || !settings) return <div className="content page-view admin-page"><p className="poster-status">Einstellungen nicht verfügbar.</p></div>;
 
   return <div className="content page-view admin-page">
     {showIntro && <section className="admin-intro-banner">

@@ -26,7 +26,7 @@ Die Daten stammen aus Emby, Radarr, Sonarr, TMDB und Seerr.
 Anleitung in [docker/all-in-one/README.md](docker/all-in-one/README.md).
 
 Für die Statistiken wird zusätzlich der
-[Emby Insights Connector](https://gitea.homexxlab.de/Homelab/emby-insights-plugin)
+[Emby Insights Plugin](https://github.com/mrt187/emby-insights-plugin/releases/latest)
 im Emby-Server benötigt.
 
 ## Dokumentation
