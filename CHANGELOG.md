@@ -8,6 +8,20 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.9.5] - 2026-08-02
+
+### Fixed
+
+- Poster aus Seerr, TMDB, Radarr und Sonarr wurden seit 0.9.0 nicht mehr
+  angezeigt. Die in 0.9.0 eingefuehrte Content-Security-Policy des Dokuments
+  erlaubte mit `img-src 'self' data: blob:` nur Bilder von der eigenen Herkunft
+  — Emby-Poster laufen ueber `/api/images` und waren deshalb weiter sichtbar,
+  alles von den Artwork-CDNs wurde vom Browser verworfen. `img-src` erlaubt
+  jetzt zusaetzlich `image.tmdb.org` und `artworks.thetvdb.com`.
+- Ein Test prueft die CSP des ausgelieferten Dokuments: erlaubte Bildquellen,
+  Nonce im `script-src`, kein `unsafe-inline`, und dass jedes gerenderte
+  `<script>` die Nonce des jeweiligen Requests traegt.
+
 ## [0.9.4] - 2026-08-02
 
 ### Added
