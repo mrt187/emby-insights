@@ -18,13 +18,13 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Emby Insights",
     description: "Dein persönlicher Überblick über deine Mediathek.",
-    images: ["/og.png"],
+    images: ["/og.webp"],
   },
   twitter: {
     card: "summary_large_image",
     title: "Emby Insights",
     description: "Dein persönlicher Überblick über deine Mediathek.",
-    images: ["/og.png"],
+    images: ["/og.webp"],
   },
   icons: {
     icon: [{ url: "/emby-insights-logo.svg", type: "image/svg+xml" }],

@@ -20,7 +20,6 @@
       </feMerge>
     </filter>
   </defs>
-  <rect width="512" height="512" fill="#0d150f"></rect>
   <rect x="26" y="26" width="460" height="460" rx="118" fill="url(#glass)"></rect>
   <rect x="26" y="26" width="460" height="460" rx="118" fill="url(#innerGlow)"></rect>
   <rect x="26" y="26" width="460" height="460" rx="118" fill="none" stroke="#7fae86" stroke-width="3" stroke-opacity="0.7" filter="url(#borderGlow)"></rect>

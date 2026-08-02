@@ -8,6 +8,16 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.11.3] - 2026-08-02
+
+### Changed
+
+- Das Vorschaubild liegt als WebP statt als PNG vor: 104 statt 1467 KB bei
+  gleicher Aufloesung und ohne sichtbaren Unterschied. Es steht jetzt auch
+  oben in der README.
+- Das Logo hat keinen undurchsichtigen Hintergrund mehr, SVG und PNG sind
+  transparent.
+
 ## [0.11.2] - 2026-08-02
 
 ### Changed
