@@ -8,6 +8,14 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.11.2] - 2026-08-02
+
+### Changed
+
+- Neues Vorschaubild (`og.png`) fuer Link-Vorschauen.
+- `icon-192.png` heisst jetzt `emby-insights-logo.png`, passend zum
+  gleichnamigen SVG. Die Apple-Touch-Icon-Referenz zeigt entsprechend nach.
+
 ## [0.11.1] - 2026-08-02
 
 ### Fixed

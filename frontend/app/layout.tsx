@@ -29,7 +29,7 @@ export const metadata: Metadata = {
   icons: {
     icon: [{ url: "/emby-insights-logo.svg", type: "image/svg+xml" }],
     shortcut: "/emby-insights-logo.svg",
-    apple: "/icon-192.png",
+    apple: "/emby-insights-logo.png",
   },
 };
 
