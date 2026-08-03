@@ -63,6 +63,40 @@ func (client *Client) SetFavorite(ctx context.Context, userID, itemID string, fa
 	return nil
 }
 
+type PlayedWriter interface {
+	SetPlayed(ctx context.Context, userID, itemID string, played bool) error
+}
+
+// SetPlayed marks or unmarks an item as fully watched in Emby's own play
+// state, the same state every other Emby client and Emby's own "played"
+// counters read from — so marking something played here is immediately
+// reflected in Emby's completed-items and in-progress rollups too.
+//
+// Both IDs are path-escaped for the same reason as SetFavorite: this request
+// carries the admin API key, so an unescaped ID could be used to reach any
+// other Emby endpoint with admin rights.
+func (client *Client) SetPlayed(ctx context.Context, userID, itemID string, played bool) error {
+	method := http.MethodPost
+	if !played {
+		method = http.MethodDelete
+	}
+	endpoint := client.baseURL + "/Users/" + url.PathEscape(userID) + "/PlayedItems/" + url.PathEscape(itemID)
+	request, err := http.NewRequestWithContext(ctx, method, endpoint, nil)
+	if err != nil {
+		return err
+	}
+	request.Header.Set("X-Emby-Token", client.adminAPIKey)
+	response, err := client.httpClient.Do(request)
+	if err != nil {
+		return fmt.Errorf("call Emby played state: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return fmt.Errorf("Emby played state returned %s", response.Status)
+	}
+	return nil
+}
+
 type UserImage struct {
 	ContentType string
 	Data        []byte

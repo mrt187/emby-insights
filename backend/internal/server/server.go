@@ -81,6 +81,7 @@ type App struct {
 	tracking            store.TrackingStore
 	activity            store.ActivityStore
 	favorites           emby.FavoriteWriter
+	playedItems         emby.PlayedWriter
 	sessions            session.Store
 	cookieSecure        bool
 	messages            store.MessageStore
@@ -177,6 +178,7 @@ func New(cfg config.Config) (*App, error) {
 		tracking:            store.NewPostgresTrackingStore(database),
 		activity:            store.NewPostgresActivityStore(database),
 		favorites:           embyClient,
+		playedItems:         embyClient,
 		sessions:            session.NewRedisStore(cache),
 		cookieSecure:        cfg.CookieSecure,
 		messages:            store.NewPostgresMessageStore(database),
@@ -338,6 +340,7 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/tracking/poster", app.trackingPosterImage)
 	mux.HandleFunc("POST /api/media/emby/favorite", app.setFavoriteHandler(true))
 	mux.HandleFunc("DELETE /api/media/emby/favorite", app.setFavoriteHandler(false))
+	mux.HandleFunc("POST /api/media/emby/played", app.setPlayedHandler(true))
 	mux.HandleFunc("GET /api/messages", app.getMessages)
 	mux.HandleFunc("POST /api/messages", app.sendMessage)
 	mux.HandleFunc("POST /api/messages/read", app.markOwnThreadRead)
@@ -1784,6 +1787,33 @@ func (app *App) setFavoriteHandler(favorite bool) http.HandlerFunc {
 		}
 		if err := app.favorites.SetFavorite(request.Context(), identity.UserID, itemID, favorite); err != nil {
 			respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "updating the Emby favorite failed"})
+			return
+		}
+		writer.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// setPlayedHandler returns a handler that marks (or, if favorite is false,
+// unmarks) an Emby item as fully watched. It follows the same shape as
+// setFavoriteHandler since both are thin, validated passthroughs to an Emby
+// per-user item-state endpoint.
+func (app *App) setPlayedHandler(played bool) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		identity, ok := app.identityFromRequest(writer, request)
+		if !ok {
+			return
+		}
+		itemID := request.URL.Query().Get("itemId")
+		if itemID == "" {
+			respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "itemId is required"})
+			return
+		}
+		if !validEmbyItemID.MatchString(itemID) {
+			respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "itemId is malformed"})
+			return
+		}
+		if err := app.playedItems.SetPlayed(request.Context(), identity.UserID, itemID, played); err != nil {
+			respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "updating the Emby played state failed"})
 			return
 		}
 		writer.WriteHeader(http.StatusNoContent)

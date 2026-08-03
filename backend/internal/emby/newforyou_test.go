@@ -46,6 +46,36 @@ func TestNewForYouFiltersToLastFourteenDays(t *testing.T) {
 	}
 }
 
+func TestNewForYouIncludesNewEpisodesWithSeriesPoster(t *testing.T) {
+	recent := time.Now().UTC().Add(-2 * 24 * time.Hour).Format(time.RFC3339)
+
+	testServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if got := request.URL.Query().Get("IncludeItemTypes"); got != "Movie,Series,Episode" {
+			t.Fatalf("IncludeItemTypes = %q", got)
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`[
+			{"Id":"e1","Name":"Chapter 5","DateCreated":"` + recent + `","SeriesName":"Severance","SeriesId":"s1","SeriesPrimaryImageTag":"series-tag","ParentIndexNumber":2,"IndexNumber":5}
+		]`))
+	}))
+	defer testServer.Close()
+
+	items, err := NewClient(testServer.URL+"/emby", "dashboard-device", "admin-key").NewForYou(context.Background(), "user-1", []string{"library-1"})
+	if err != nil {
+		t.Fatalf("NewForYou() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("items = %#v", items)
+	}
+	item := items[0]
+	if item.SeriesName != "Severance" || item.SeasonNumber != 2 || item.EpisodeNumber != 5 {
+		t.Fatalf("episode metadata = %#v", item)
+	}
+	if item.PosterURL == "" {
+		t.Fatalf("expected poster URL falling back to series image")
+	}
+}
+
 func TestNewForYouWithoutLibraryIDsSkipsRequest(t *testing.T) {
 	items, err := NewClient("http://unused", "device", "key").NewForYou(context.Background(), "user-1", nil)
 	if err != nil || items != nil {

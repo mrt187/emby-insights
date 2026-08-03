@@ -343,6 +343,20 @@ func (fake *fakeFavoriteWriter) SetFavorite(_ context.Context, userID, itemID st
 	return fake.err
 }
 
+type fakePlayedWriter struct {
+	userID string
+	itemID string
+	played bool
+	err    error
+}
+
+func (fake *fakePlayedWriter) SetPlayed(_ context.Context, userID, itemID string, played bool) error {
+	fake.userID = userID
+	fake.itemID = itemID
+	fake.played = played
+	return fake.err
+}
+
 type memorySessionStore struct {
 	identity emby.Identity
 	deleted  bool
@@ -1199,6 +1213,68 @@ func TestSetFavoriteHandlerRequiresSession(t *testing.T) {
 	app := &App{sessions: &memorySessionStore{}, favorites: &fakeFavoriteWriter{}}
 
 	request := httptest.NewRequest(http.MethodPost, "/api/media/emby/favorite?itemId=42", nil)
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestSetPlayedHandlerMarksItemPlayed(t *testing.T) {
+	sessions := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	played := &fakePlayedWriter{}
+	app := &App{sessions: sessions, playedItems: played}
+
+	request := httptest.NewRequest(http.MethodPost, "/api/media/emby/played?itemId=42", nil)
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	if played.userID != "user-1" || played.itemID != "42" || !played.played {
+		t.Fatalf("userID = %q, itemID = %q, played = %v", played.userID, played.itemID, played.played)
+	}
+}
+
+func TestSetPlayedHandlerRequiresItemID(t *testing.T) {
+	sessions := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	app := &App{sessions: sessions, playedItems: &fakePlayedWriter{}}
+
+	request := httptest.NewRequest(http.MethodPost, "/api/media/emby/played", nil)
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestSetPlayedHandlerRejectsMalformedItemID(t *testing.T) {
+	sessions := &memorySessionStore{identity: emby.Identity{UserID: "user-1"}}
+	played := &fakePlayedWriter{}
+	app := &App{sessions: sessions, playedItems: played}
+
+	request := httptest.NewRequest(http.MethodPost, "/api/media/emby/played?itemId="+url.QueryEscape("../../../Items/1"), nil)
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-id"})
+	recorder := httptest.NewRecorder()
+	app.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	if played.itemID != "" {
+		t.Fatalf("Emby was called with itemID = %q", played.itemID)
+	}
+}
+
+func TestSetPlayedHandlerRequiresSession(t *testing.T) {
+	app := &App{sessions: &memorySessionStore{}, playedItems: &fakePlayedWriter{}}
+
+	request := httptest.NewRequest(http.MethodPost, "/api/media/emby/played?itemId=42", nil)
 	recorder := httptest.NewRecorder()
 	app.Handler().ServeHTTP(recorder, request)
 

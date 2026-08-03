@@ -16,10 +16,13 @@ const (
 )
 
 type NewForYouItem struct {
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	PosterURL   string `json:"posterUrl"`
-	DateCreated string `json:"dateCreated"`
+	ID            string `json:"id"`
+	Title         string `json:"title"`
+	PosterURL     string `json:"posterUrl"`
+	DateCreated   string `json:"dateCreated"`
+	SeriesName    string `json:"seriesName,omitempty"`
+	SeasonNumber  int    `json:"seasonNumber,omitempty"`
+	EpisodeNumber int    `json:"episodeNumber,omitempty"`
 }
 
 type NewForYouReader interface {
@@ -52,10 +55,21 @@ func (client *Client) NewForYou(ctx context.Context, userID string, libraryIDs [
 				continue
 			}
 			var posterURL string
-			if item.ImageTags.Primary != "" {
+			switch {
+			case item.SeriesId != "" && item.SeriesPrimaryImageTag != "":
+				posterURL = ImageURL(item.SeriesId, "Primary", item.SeriesPrimaryImageTag, 400)
+			case item.ImageTags.Primary != "":
 				posterURL = ImageURL(item.Id, "Primary", item.ImageTags.Primary, 400)
 			}
-			items = append(items, NewForYouItem{ID: item.Id, Title: item.Name, PosterURL: posterURL, DateCreated: item.DateCreated})
+			items = append(items, NewForYouItem{
+				ID:            item.Id,
+				Title:         item.Name,
+				PosterURL:     posterURL,
+				DateCreated:   item.DateCreated,
+				SeriesName:    item.SeriesName,
+				SeasonNumber:  item.ParentIndexNumber,
+				EpisodeNumber: item.IndexNumber,
+			})
 		}
 	}
 
@@ -67,10 +81,15 @@ func (client *Client) NewForYou(ctx context.Context, userID string, libraryIDs [
 }
 
 type embyLatestItem struct {
-	Id          string `json:"Id"`
-	Name        string `json:"Name"`
-	DateCreated string `json:"DateCreated"`
-	ImageTags   struct {
+	Id                    string `json:"Id"`
+	Name                  string `json:"Name"`
+	DateCreated           string `json:"DateCreated"`
+	SeriesName            string `json:"SeriesName"`
+	SeriesId              string `json:"SeriesId"`
+	SeriesPrimaryImageTag string `json:"SeriesPrimaryImageTag"`
+	ParentIndexNumber     int    `json:"ParentIndexNumber"`
+	IndexNumber           int    `json:"IndexNumber"`
+	ImageTags             struct {
 		Primary string `json:"Primary"`
 	} `json:"ImageTags"`
 }
@@ -80,8 +99,8 @@ func (client *Client) latestItems(ctx context.Context, userID, libraryID string)
 		"ParentId":         {libraryID},
 		"IsPlayed":         {"false"},
 		"Limit":            {"50"},
-		"Fields":           {"DateCreated"},
-		"IncludeItemTypes": {"Movie,Series"},
+		"Fields":           {"DateCreated,SeriesName,SeriesPrimaryImageTag,ParentIndexNumber,IndexNumber"},
+		"IncludeItemTypes": {"Movie,Series,Episode"},
 		"GroupItems":       {"false"},
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, client.baseURL+"/Users/"+userID+"/Items/Latest?"+query.Encode(), nil)

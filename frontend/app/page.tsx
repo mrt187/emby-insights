@@ -19,7 +19,7 @@ type MostActiveDay = { date: string; watchSeconds: number };
 type UserProfile = { memberSince: string; lastActiveDate: string; lastLoginDate: string };
 type UpcomingItem = { id: string; tmdbId: string; source: "radarr" | "sonarr"; detailId: string; title: string; posterUrl: string; mediaType: string; availabilityDate: string; cinemaStartDate?: string; cinemaEndDate?: string; seasonNumber?: number; episodeNumber?: number; episodeTitle?: string };
 type RequestItem = { id: string; title: string; posterUrl: string; status: string; tmdbId: string; mediaType: string; availableSince?: string };
-type NewForYouItem = { id: string; title: string; posterUrl: string; dateCreated?: string };
+type NewForYouItem = { id: string; title: string; posterUrl: string; dateCreated?: string; seriesName?: string; seasonNumber?: number; episodeNumber?: number };
 type TopRatedItem = { id: string; mediaSource: string; mediaId: string; mediaType: string; title: string; posterUrl: string; averageRating: number };
 type ContinueWatchingItem = { id: string; title: string; posterUrl: string; progressPercent: number };
 type WatchedItem = { id: string; title: string; posterUrl: string; genres: string[]; lastPlayedDate: string; backdropUrl?: string; dateAdded?: string };
@@ -82,7 +82,7 @@ function visibleNav(user: CurrentUser): { label: Page; icon: IconName }[] {
   return items;
 }
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.11.4";
+const APP_VERSION = "0.11.5";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -110,6 +110,12 @@ function upcomingTitle(item: UpcomingItem) {
   if (item.mediaType !== "tv") return item.title;
   const episode = item.seasonNumber && item.episodeNumber ? `S${item.seasonNumber.toString().padStart(2, "0")}E${item.episodeNumber.toString().padStart(2, "0")}` : "Neue Folge";
   return `${item.title} · ${episode}`;
+}
+
+function newForYouTitle(item: NewForYouItem) {
+  if (!item.seriesName) return item.title;
+  const episode = item.seasonNumber && item.episodeNumber ? `S${item.seasonNumber.toString().padStart(2, "0")}E${item.episodeNumber.toString().padStart(2, "0")}` : item.title;
+  return `${item.seriesName} · ${episode}`;
 }
 const fullDateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "long", year: "numeric" });
 function formatFullDate(value: string) {
@@ -348,12 +354,12 @@ function Today({ upcoming, upcomingState, cinema, cinemaState, requests, request
     {features.upcoming && <PosterRow title="Demnächst" eyebrow="IN DEN NÄCHSTEN 4 WOCHEN AUF EMBY" items={visibleUpcoming} state={upcomingState} emptyLabel="Nichts Neues in den nächsten vier Wochen." itemTitle={upcomingTitle} detail={(item) => availabilityWording(item.availabilityDate)} onSelect={(item) => onSelectMedia(calendarSelection(item, features.requests))} />}
     <PosterRow title="Noch nicht fertig" eyebrow="TEILWEISE GESEHEN" items={seriesInProgress} state={seriesInProgressState} emptyLabel="Keine Serien mit offenen Folgen." detail={(item) => `${item.watchedEpisodes} von ${item.totalEpisodes} Folgen`} progress={(item) => Math.round((item.watchedEpisodes / item.totalEpisodes) * 100)} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
     {features.requests && <PosterRow title="Meine Anfragen" eyebrow="SEERR · OFFEN" items={requests} state={requestState} emptyLabel="Keine offenen Anfragen." detail={(item) => item.status} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />}
-    <PosterRow title="Neu für dich" eyebrow="IN DEN LETZTEN 14 TAGEN" items={newForYou} state={newForYouState} emptyLabel="Nichts Neues in den letzten 14 Tagen." detail={(item) => item.dateCreated ? `Hinzugefügt ${daysAgoWording(item.dateCreated)}` : "Ungesehen"} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
+    <PosterRow title="Neu für dich" eyebrow="IN DEN LETZTEN 14 TAGEN" items={newForYou} state={newForYouState} emptyLabel="Nichts Neues in den letzten 14 Tagen." itemTitle={newForYouTitle} detail={(item) => item.dateCreated ? `Hinzugefügt ${daysAgoWording(item.dateCreated)}` : "Ungesehen"} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
     <PosterRow title="Top Bewertet" eyebrow="EURE BEWERTUNGEN" items={topRated} state={topRatedState} emptyLabel="Noch keine Bewertungen im Plugin." detail={(item) => `★ ${item.averageRating.toFixed(1)}`} onSelect={(item) => onSelectMedia(item.mediaSource === "seerr" ? { source: "seerr", id: item.mediaId, mediaType: item.mediaType } : { source: "emby", id: item.mediaId })} />
     {features.movieDates && <PosterRow title="Im Kino" eyebrow="KOMMENDE UND AKTUELLE KINOSTARTS" items={cinema} state={cinemaState} emptyLabel="Zurzeit keine Kinostarts." detail={cinemaWording} onSelect={(item) => onSelectMedia(calendarSelection(item, features.requests))} />}
 
     {allEventsOpen && <RelevantAllScreen events={events} onClose={() => setAllEventsOpen(false)} />}
-    {newForYouGridOpen && <MediaGridScreen title="Neu für dich" items={newForYou} detail={(item) => item.dateCreated ? `Hinzugefügt ${daysAgoWording(item.dateCreated)}` : "Ungesehen"} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setNewForYouGridOpen(false)} />}
+    {newForYouGridOpen && <MediaGridScreen title="Neu für dich" items={newForYou} itemTitle={newForYouTitle} detail={(item) => item.dateCreated ? `Hinzugefügt ${daysAgoWording(item.dateCreated)}` : "Ungesehen"} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setNewForYouGridOpen(false)} />}
   </div>;
 }
 
@@ -719,8 +725,8 @@ function Stats({ user, onSelectMedia }: { user: { id: string; name: string }; on
   </div>;
 }
 
-function MediaGridScreen<T extends { id: string; title: string; posterUrl?: string }>({ title, items, detail, progress, state, emptyLabel, headerExtra, onSelect, onClose }: {
-  title: string; items: readonly T[]; detail?: (item: T) => string; progress?: (item: T) => number;
+function MediaGridScreen<T extends { id: string; title: string; posterUrl?: string }>({ title, items, detail, itemTitle, progress, state, emptyLabel, headerExtra, onSelect, onClose }: {
+  title: string; items: readonly T[]; detail?: (item: T) => string; itemTitle?: (item: T) => string; progress?: (item: T) => number;
   state?: LoadState; emptyLabel?: string; headerExtra?: ReactNode;
   onSelect?: (item: T) => void; onClose: () => void;
 }) {
@@ -744,11 +750,11 @@ function MediaGridScreen<T extends { id: string; title: string; posterUrl?: stri
       {state === "error" && <p className="poster-status">Nicht verfügbar</p>}
       {state !== "loading" && state !== "error" && items.length === 0 && <p className="poster-status">{emptyLabel ?? "Nichts vorhanden."}</p>}
       {items.length > 0 && <div className="media-grid">{items.map((item) => <button type="button" className="media-grid-entry" key={item.id} onClick={() => onSelect?.(item)}>
-        <div className="poster wide" role="img" aria-label={item.title}>
+        <div className="poster wide" role="img" aria-label={itemTitle?.(item) ?? item.title}>
           <PosterImage src={item.posterUrl} fallback={item.title} />
           {progress && <div className="poster-progress"><div className="poster-progress-fill" style={{ width: `${progress(item)}%` }} /></div>}
         </div>
-        <strong>{item.title}</strong>
+        <strong>{itemTitle?.(item) ?? item.title}</strong>
         {detail && <small>{detail(item)}</small>}
       </button>)}</div>}
     </div>
@@ -879,6 +885,7 @@ function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreat
   const [tracking, setTracking] = useState<{ rating: number; onWatchlist: boolean; hiddenInProgress: boolean }>({ rating: 0, onWatchlist: false, hiddenInProgress: false });
   const [favorite, setFavorite] = useState(false);
   const [favoriteBusy, setFavoriteBusy] = useState(false);
+  const [markPlayedBusy, setMarkPlayedBusy] = useState(false);
   const mediaType = selection.source === "emby" ? undefined : selection.mediaType;
 
   // Seerr can take a moment to reflect a just-created request in its own
@@ -955,6 +962,25 @@ function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreat
       setFavorite(!next);
     } finally {
       setFavoriteBusy(false);
+    }
+  };
+
+  const markAsWatched = async () => {
+    if (selection.source !== "emby" || markPlayedBusy) return;
+    setMarkPlayedBusy(true);
+    try {
+      const response = await fetch(`/api/media/emby/played?itemId=${encodeURIComponent(selection.id)}`, { method: "POST", credentials: "include" });
+      if (!response.ok) throw new Error("mark as watched failed");
+      setDetail((current) => current && (current.isSeries
+        ? { ...current, watchedEpisodes: current.totalEpisodes }
+        : { ...current, played: true }));
+      onHiddenChanged?.();
+    } catch {
+      // Best effort — Emby stays the source of truth, so a failed request
+      // just means the item keeps showing up in "Noch nicht fertig" until
+      // the user retries, not that anything is left in an inconsistent state.
+    } finally {
+      setMarkPlayedBusy(false);
     }
   };
 
@@ -1129,8 +1155,8 @@ function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreat
           </label>
         </div>
         {selection.source === "emby" && detail.isSeries && status !== "Angesehen" && <div className="request-row">
-          <button type="button" className="request-button secondary" onClick={() => saveTracking({ ...tracking, hiddenInProgress: !tracking.hiddenInProgress })}>
-            {tracking.hiddenInProgress ? "Wieder in „Noch nicht fertig“ zeigen" : "Aus „Noch nicht fertig“ ausblenden"}
+          <button type="button" className="request-button secondary" onClick={markAsWatched} disabled={markPlayedBusy}>
+            Als gesehen markieren
           </button>
         </div>}
         {selection.source !== "emby" && (canRequest || seerrAvailabilityLabel || showRequestConfirmation || !seerrConfigured) && <div className="request-row">

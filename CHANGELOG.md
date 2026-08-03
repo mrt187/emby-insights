@@ -8,6 +8,18 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.11.5] - 2026-08-03
+
+### Added
+
+- "Neu für dich" zeigt jetzt auch neue Folgen bereits bekannter Serien, nicht
+  mehr nur neue Filme und komplett neue Serien.
+- Der Button im Serien-Detailscreen unter "Noch nicht fertig" heisst jetzt
+  "Als gesehen markieren" statt "Ausblenden" — ein Klick markiert die Serie
+  in Emby als vollstaendig gesehen, statt sie nur aus der Liste zu verstecken.
+  Dadurch zaehlt sie danach auch in der Statistikseite unter den
+  abgeschlossenen Serien.
+
 ## [0.11.4] - 2026-08-02
 
 ### Fixed
