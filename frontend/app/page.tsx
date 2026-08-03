@@ -82,7 +82,7 @@ function visibleNav(user: CurrentUser): { label: Page; icon: IconName }[] {
   return items;
 }
 const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
-const APP_VERSION = "0.11.5";
+const APP_VERSION = "0.11.6";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
 function formatPremiereDate(value: string) {
@@ -350,11 +350,11 @@ function Today({ upcoming, upcomingState, cinema, cinemaState, requests, request
 
   return <div className="content today-view">
     <RelevantNow events={events} onShowAll={() => setAllEventsOpen(true)} />
+    <PosterRow title="Neu für dich" eyebrow="IN DEN LETZTEN 14 TAGEN" items={newForYou} state={newForYouState} emptyLabel="Nichts Neues in den letzten 14 Tagen." itemTitle={newForYouTitle} detail={(item) => item.dateCreated ? `Hinzugefügt ${daysAgoWording(item.dateCreated)}` : "Ungesehen"} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
     <PosterRow title="Was ich gerade schaue" eyebrow="WEITERSCHAUEN" items={continueWatching} state={continueWatchingState} emptyLabel="Nichts in Bearbeitung." detail={(item) => `${item.progressPercent} % gesehen`} progress={(item) => item.progressPercent} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
     {features.upcoming && <PosterRow title="Demnächst" eyebrow="IN DEN NÄCHSTEN 4 WOCHEN AUF EMBY" items={visibleUpcoming} state={upcomingState} emptyLabel="Nichts Neues in den nächsten vier Wochen." itemTitle={upcomingTitle} detail={(item) => availabilityWording(item.availabilityDate)} onSelect={(item) => onSelectMedia(calendarSelection(item, features.requests))} />}
     <PosterRow title="Noch nicht fertig" eyebrow="TEILWEISE GESEHEN" items={seriesInProgress} state={seriesInProgressState} emptyLabel="Keine Serien mit offenen Folgen." detail={(item) => `${item.watchedEpisodes} von ${item.totalEpisodes} Folgen`} progress={(item) => Math.round((item.watchedEpisodes / item.totalEpisodes) * 100)} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
     {features.requests && <PosterRow title="Meine Anfragen" eyebrow="SEERR · OFFEN" items={requests} state={requestState} emptyLabel="Keine offenen Anfragen." detail={(item) => item.status} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />}
-    <PosterRow title="Neu für dich" eyebrow="IN DEN LETZTEN 14 TAGEN" items={newForYou} state={newForYouState} emptyLabel="Nichts Neues in den letzten 14 Tagen." itemTitle={newForYouTitle} detail={(item) => item.dateCreated ? `Hinzugefügt ${daysAgoWording(item.dateCreated)}` : "Ungesehen"} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
     <PosterRow title="Top Bewertet" eyebrow="EURE BEWERTUNGEN" items={topRated} state={topRatedState} emptyLabel="Noch keine Bewertungen im Plugin." detail={(item) => `★ ${item.averageRating.toFixed(1)}`} onSelect={(item) => onSelectMedia(item.mediaSource === "seerr" ? { source: "seerr", id: item.mediaId, mediaType: item.mediaType } : { source: "emby", id: item.mediaId })} />
     {features.movieDates && <PosterRow title="Im Kino" eyebrow="KOMMENDE UND AKTUELLE KINOSTARTS" items={cinema} state={cinemaState} emptyLabel="Zurzeit keine Kinostarts." detail={cinemaWording} onSelect={(item) => onSelectMedia(calendarSelection(item, features.requests))} />}
 

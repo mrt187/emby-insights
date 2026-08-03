@@ -8,6 +8,13 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.11.6] - 2026-08-03
+
+### Changed
+
+- "Neu für dich" steht auf der Startseite jetzt ganz oben, vor "Was ich
+  gerade schaue".
+
 ## [0.11.5] - 2026-08-03
 
 ### Added
