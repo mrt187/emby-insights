@@ -661,7 +661,7 @@ export function isLang(value: unknown): value is Lang {
 
 // Components read the language from context; plain helper functions take it
 // as an explicit `lang` parameter instead, since hooks can't be called there.
-export const LanguageContext = createContext<Lang>("de");
+export const LanguageContext = createContext<Lang>("en");
 
 export function useLang(): Lang {
   return useContext(LanguageContext);

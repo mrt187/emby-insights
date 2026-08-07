@@ -2010,22 +2010,22 @@ func (app *App) recordActivity(embyUserID string) {
 
 // uiLanguage clamps a stored or submitted value to a language the frontend
 // actually ships a dictionary for. An unknown value is silently normalised
-// to German rather than rejected, so a hand-edited database row or an older
+// to English rather than rejected, so a hand-edited database row or an older
 // client can never lock the admin out of the settings page.
 func uiLanguage(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "en":
-		return "en"
-	default:
+	case "de":
 		return "de"
+	default:
+		return "en"
 	}
 }
 
 // uiLanguageHandler serves the global UI language to unauthenticated clients.
-// Any failure degrades to German instead of erroring: the login screen must
+// Any failure degrades to English instead of erroring: the login screen must
 // render even when the database is briefly unavailable.
 func (app *App) uiLanguageHandler(writer http.ResponseWriter, request *http.Request) {
-	language := "de"
+	language := "en"
 	if app.appconfig != nil {
 		if settings, err := app.appconfig.Get(request.Context()); err == nil {
 			language = uiLanguage(settings.Language)

@@ -196,7 +196,7 @@ func (store *Store) Update(ctx context.Context, settings Settings) error {
 		settings.TMDB.Enabled, tmdbKeyCipher,
 		settings.OMDB.Enabled, omdbKeyCipher,
 		settings.ComingSoonRegion, settings.ComingSoonDaysAhead,
-		valueOr(settings.Language, "de"),
+		valueOr(settings.Language, "en"),
 	)
 	if err != nil {
 		return fmt.Errorf("update app_config: %w", err)
@@ -289,7 +289,7 @@ func (store *Store) SeedFromEnvIfEmpty(ctx context.Context) error {
 		TMDB:                ServiceSetting{Enabled: os.Getenv("TMDB_API_KEY") != "", APIKey: os.Getenv("TMDB_API_KEY")},
 		ComingSoonRegion:    valueOr(os.Getenv("COMINGSOON_REGION"), "DE"),
 		ComingSoonDaysAhead: intValueOr(os.Getenv("COMINGSOON_DAYS_AHEAD"), 28),
-		Language:            valueOr(os.Getenv("UI_LANGUAGE"), "de"),
+		Language:            valueOr(os.Getenv("UI_LANGUAGE"), "en"),
 	}
 	if !settings.Seerr.Enabled && !settings.Radarr.Enabled && !settings.Sonarr.Enabled &&
 		!settings.TMDB.Enabled && settings.NewForYouLibraryIDs == nil && settings.WatchedLibraryIDs == nil {

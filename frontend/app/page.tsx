@@ -202,7 +202,7 @@ export default function Home() {
   const [page, setPage] = useState<Page>("today");
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [user, setUser] = useState<CurrentUser | null>(null);
-  const [publicLang, setPublicLang] = useState<Lang>("de");
+  const [publicLang, setPublicLang] = useState<Lang>("en");
   const [savedLang, setSavedLang] = useState<Lang | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
   const [selectedMedia, setSelectedMedia] = useState<MediaSelection | null>(null);
@@ -1468,7 +1468,7 @@ function AdminSettingsForm({ activity, activityState, settings, refetchSettings,
   const [omdb, setOmdb] = useState<ServiceDraft>(() => ({ enabled: settings.omdb.enabled, baseUrl: "", apiKey: "" }));
   const [comingSoonRegion, setComingSoonRegion] = useState(() => settings.comingSoonRegion || "DE");
   const [comingSoonDaysAhead, setComingSoonDaysAhead] = useState(() => settings.comingSoonDaysAhead || 28);
-  const [language, setLanguage] = useState<Lang>(() => isLang(settings.language) ? settings.language : "de");
+  const [language, setLanguage] = useState<Lang>(() => isLang(settings.language) ? settings.language : "en");
 
   const dismissIntro = () => {
     window.localStorage.setItem(SETUP_INTRO_SEEN_KEY, "1");
@@ -1600,7 +1600,7 @@ function AdminSettingsForm({ activity, activityState, settings, refetchSettings,
       <div className="admin-service-grid">
         <label className="admin-field">
           <span>{translate("field_language")}</span>
-          <select className="search-input" value={language} onChange={(event) => setLanguage(isLang(event.target.value) ? event.target.value : "de")}>
+          <select className="search-input" value={language} onChange={(event) => setLanguage(isLang(event.target.value) ? event.target.value : "en")}>
             <option value="de">{translate("language_german")}</option>
             <option value="en">{translate("language_english")}</option>
           </select>
