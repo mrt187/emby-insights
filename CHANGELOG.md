@@ -8,6 +8,14 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.11.7] - 2026-08-07
+
+### Fixed
+
+- Suchfeld unter "Anfragen" auf Mobilgeräten: Schriftgröße auf 16px erhöht,
+  damit iOS Safari beim Fokussieren nicht mehr hinein- und danach nicht
+  wieder herauszoomt.
+
 ## [0.11.6] - 2026-08-03
 
 ### Changed
