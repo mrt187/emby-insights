@@ -1,0 +1,82 @@
+<Container version="2">
+  <Name>emby-insights</Name>
+  <Repository>ghcr.io/mrt187/emby-insights:latest</Repository>
+  <Registry>https://ghcr.io/mrt187/emby-insights</Registry>
+  <Network>bridge</Network>
+
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+
+  <Icon>https://raw.githubusercontent.com/mrt187/emby-insights/main/frontend/public/emby-insights-logo.png</Icon>
+
+  <!-- NOTE: The port in the entry ALWAYS refers to the container port, not the host port-->
+  <WebUI>http://[IP]:[PORT:8080]</WebUI>
+
+  <Overview>
+Emby Insights is a personal, mobile-first media dashboard for Emby users. It complements the
+Emby player instead of replacing it: personal playback statistics (genres, weekdays, watch
+hours, longest sessions, most active days), a detail view per title, recently watched content,
+recommendations, upcoming movies/shows, and optional media requests via Seerr — all in one
+place, backed by the user's normal Emby login.
+
+The first Emby account to log in via the dashboard is automatically made the Emby Insights
+admin and configures everything else (library selection, optional Seerr/Radarr/Sonarr/TMDB/OMDB
+integrations) from the Verwaltung/Admin screen at runtime — no container restart needed.
+
+This is an all-in-one image: the Emby Insights backend, PostgreSQL, and Redis all run inside
+this single container, persisted under /config. For personal playback statistics you also need
+the companion Emby Insights Plugin installed on your Emby server:
+https://github.com/mrt187/emby-insights-plugin/releases/latest
+
+UI is available in German and English, selectable by the admin.
+  </Overview>
+
+  <!-- Either Support or Project is REQUIRED -->
+  <Project>https://github.com/mrt187/emby-insights</Project>
+
+  <TemplateURL>https://raw.githubusercontent.com/mrt187/emby-insights/main/templates/emby-insights.xml</TemplateURL>
+
+  <ReadMe>https://raw.githubusercontent.com/mrt187/emby-insights/main/README.md</ReadMe>
+
+  <Category>MediaApp:Video</Category>
+
+  <ExtraSearchTerms>emby dashboard statistics requests seerr radarr sonarr</ExtraSearchTerms>
+
+  <Requires>
+Needs a reachable Emby server (EMBY_BASE_URL) and an Emby admin API key (EMBY_ADMIN_API_KEY,
+created in Emby under Dashboard -> Advanced -> API Keys). For personal statistics, the
+companion Emby Insights Plugin must also be installed on the Emby server.
+  </Requires>
+
+  <Changes>
+### 0.12.0
+- Added an English UI translation, selectable by the admin (Verwaltung).
+
+See full changelog: https://github.com/mrt187/emby-insights/blob/main/CHANGELOG.md
+  </Changes>
+
+  <Date>2026-08-07</Date>
+
+  <MinVer>6.12</MinVer>
+
+  <License>MIT</License>
+
+  <Screenshot>https://raw.githubusercontent.com/mrt187/emby-insights/main/frontend/public/og.webp</Screenshot>
+
+  <Config Name="WebUI" Target="8080" Default="8081" Mode="tcp" Description="Host port for the Emby Insights web UI." Type="Port" Display="always" Required="true" Mask="false"/>
+
+  <Config Name="Appdata" Target="/config" Default="/mnt/user/appdata/emby-insights" Mode="rw" Description="Persistent storage: bundled PostgreSQL database and Redis session store." Type="Path" Display="always" Required="true" Mask="false"/>
+
+  <Config Name="EMBY_BASE_URL" Target="EMBY_BASE_URL" Default="" Description="Emby server address, including /emby (e.g. http://192.168.1.10:8096/emby)." Type="Variable" Display="always" Required="true" Mask="false"/>
+
+  <Config Name="EMBY_ADMIN_API_KEY" Target="EMBY_ADMIN_API_KEY" Default="" Description="Emby API key: Emby Dashboard -> Advanced -> Security -> API Keys." Type="Variable" Display="always" Required="true" Mask="true"/>
+
+  <Config Name="POSTGRES_PASSWORD" Target="POSTGRES_PASSWORD" Default="" Description="Password for the bundled PostgreSQL database. Set it once on first start and never change it afterwards, or the database becomes inaccessible." Type="Variable" Display="always" Required="true" Mask="true"/>
+
+  <Config Name="APP_ENCRYPTION_KEY" Target="APP_ENCRYPTION_KEY" Default="" Description="Generate once with 'openssl rand -base64 32' and keep it stable. Encrypts stored API keys for Seerr/Radarr/Sonarr/TMDB; if lost, those become unreadable." Type="Variable" Display="always" Required="true" Mask="true"/>
+
+  <Config Name="COOKIE_SECURE" Target="COOKIE_SECURE" Default="true" Description="Set to false only for an initial plain-HTTP test without a reverse proxy/TLS in front, then set back to true." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+
+  <Config Name="TRUSTED_PROXIES" Target="TRUSTED_PROXIES" Default="" Description="Comma-separated IPs/CIDRs of an upstream reverse proxy allowed to set X-Forwarded-For. Leave empty if the container is reached directly." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+
+</Container>

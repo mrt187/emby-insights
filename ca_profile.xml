@@ -1,0 +1,17 @@
+<CommunityApplications>
+  <!-- Required profile -->
+  <Profile>
+Emby Insights is a personal, mobile-first media dashboard for Emby users. It complements
+the Emby player instead of replacing it: personal playback statistics, recently watched
+content, recommendations, upcoming movies/shows, and (optional) media requests via Seerr —
+all in the user's own login, backed by their normal Emby account.
+
+This repository hosts the single Docker template for the all-in-one Emby Insights
+container (backend + PostgreSQL + Redis in one image). Support and bug reports via GitHub
+Issues on the main repository.
+  </Profile>
+  <!-- Optional icon -->
+  <Icon>https://raw.githubusercontent.com/mrt187/emby-insights/main/frontend/public/emby-insights-logo.png</Icon>
+  <!-- Optional web page -->
+  <WebPage>https://github.com/mrt187/emby-insights</WebPage>
+</CommunityApplications>
