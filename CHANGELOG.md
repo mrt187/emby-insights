@@ -8,6 +8,15 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.12.1] - 2026-08-08
+
+### Fixed
+
+- New installations now default to English instead of German (database
+  column default, env seed, backend normalisation, and frontend
+  fallbacks). Existing installs that already have a language stored keep
+  their current setting.
+
 ## [0.12.0] - 2026-08-07
 
 ### Added
