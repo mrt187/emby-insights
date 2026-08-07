@@ -8,6 +8,15 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.12.0] - 2026-08-07
+
+### Added
+
+- Englische Übersetzung der Oberfläche, umschaltbar über die Verwaltung
+  (Deutsch/English). Die Sprache gilt global für alle Nutzer und wird in
+  Postgres gespeichert. Inhalte von Demnächst (Radarr/Sonarr/TMDB) bleiben
+  unverändert von der `ComingSoonRegion`-Einstellung abhängig.
+
 ## [0.11.8] - 2026-08-07
 
 ### Fixed
