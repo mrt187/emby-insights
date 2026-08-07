@@ -286,6 +286,9 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("GET /healthz", health)
 	mux.HandleFunc("GET /readyz", app.ready)
 	mux.HandleFunc("POST /api/auth/emby/login", app.login)
+	// Unauthenticated on purpose: the login screen renders before any session
+	// exists and still has to label itself in the configured language.
+	mux.HandleFunc("GET /api/language", app.uiLanguageHandler)
 	mux.HandleFunc("POST /api/auth/logout", app.logout)
 	mux.HandleFunc("GET /api/me", app.me)
 	mux.HandleFunc("GET /api/me/avatar", app.avatar)
@@ -1610,6 +1613,7 @@ func (app *App) adminGetSettings(writer http.ResponseWriter, request *http.Reque
 		"omdb":                viewOfService(settings.OMDB),
 		"comingSoonRegion":    settings.ComingSoonRegion,
 		"comingSoonDaysAhead": settings.ComingSoonDaysAhead,
+		"language":            uiLanguage(settings.Language),
 	})
 }
 
@@ -1654,6 +1658,7 @@ func (app *App) adminPutSettings(writer http.ResponseWriter, request *http.Reque
 		} `json:"omdb"`
 		ComingSoonRegion    string `json:"comingSoonRegion"`
 		ComingSoonDaysAhead int    `json:"comingSoonDaysAhead"`
+		Language            string `json:"language"`
 	}
 	request.Body = http.MaxBytesReader(writer, request.Body, 1<<16)
 	if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
@@ -1697,6 +1702,7 @@ func (app *App) adminPutSettings(writer http.ResponseWriter, request *http.Reque
 		OMDB:                appconfig.ServiceSetting{Enabled: input.OMDB.Enabled, APIKey: input.OMDB.APIKey},
 		ComingSoonRegion:    region,
 		ComingSoonDaysAhead: daysAhead,
+		Language:            uiLanguage(input.Language),
 	}
 
 	if err := app.applySettings(request.Context(), settings); err != nil {
@@ -2002,6 +2008,32 @@ func (app *App) recordActivity(embyUserID string) {
 	}()
 }
 
+// uiLanguage clamps a stored or submitted value to a language the frontend
+// actually ships a dictionary for. An unknown value is silently normalised
+// to German rather than rejected, so a hand-edited database row or an older
+// client can never lock the admin out of the settings page.
+func uiLanguage(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "en":
+		return "en"
+	default:
+		return "de"
+	}
+}
+
+// uiLanguageHandler serves the global UI language to unauthenticated clients.
+// Any failure degrades to German instead of erroring: the login screen must
+// render even when the database is briefly unavailable.
+func (app *App) uiLanguageHandler(writer http.ResponseWriter, request *http.Request) {
+	language := "de"
+	if app.appconfig != nil {
+		if settings, err := app.appconfig.Get(request.Context()); err == nil {
+			language = uiLanguage(settings.Language)
+		}
+	}
+	respondJSON(writer, http.StatusOK, map[string]string{"language": language})
+}
+
 func (app *App) identityProfile(ctx context.Context, identity emby.Identity) map[string]any {
 	var settings appconfig.Settings
 	if app.appconfig != nil {
@@ -2011,9 +2043,10 @@ func (app *App) identityProfile(ctx context.Context, identity emby.Identity) map
 	}
 	ownerID := app.currentAdminOwner(ctx)
 	return map[string]any{
-		"id":      identity.UserID,
-		"name":    identity.DisplayName,
-		"isAdmin": ownerID != "" && identity.UserID == ownerID,
+		"id":       identity.UserID,
+		"name":     identity.DisplayName,
+		"isAdmin":  ownerID != "" && identity.UserID == ownerID,
+		"language": uiLanguage(settings.Language),
 		"features": map[string]bool{
 			"requests":    settings.Seerr.Enabled,
 			"movieDates":  settings.Radarr.Enabled,

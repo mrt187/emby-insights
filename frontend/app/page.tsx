@@ -3,12 +3,12 @@
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { LoginScreen } from "./login-screen";
 import { calendarSelection, type MediaSelection } from "./media-selection";
+import { isLang, LanguageContext, type Lang, locales, t, type TranslationKey, useLang, useT } from "./translations";
 
-type Page = "Heute" | "Statistik" | "Anfragen" | "Chats" | "Profil" | "Verwaltung";
+type Page = "today" | "stats" | "requests" | "chats" | "profile" | "admin";
 type Features = { requests: boolean; movieDates: boolean; seriesDates: boolean; upcoming: boolean; statistics: boolean };
-type CurrentUser = { id: string; name: string; isAdmin: boolean; features: Features };
-type Period = "Woche" | "Monat" | "Jahr";
-type StatisticsPeriod = "week" | "month" | "year";
+type CurrentUser = { id: string; name: string; isAdmin: boolean; features: Features; language?: Lang };
+type Period = "week" | "month" | "year";
 type PersonalStats = { watchSeconds: number; previousWatchSeconds: number; completedMovies: number; completedSeries: number; favouriteGenre: string; periodStartsAt: string; periodEndsAt: string };
 type WatchTimeRank = { rank: number };
 type DeviceWatchTime = { deviceName: string; watchSeconds: number };
@@ -73,42 +73,50 @@ const CHAT_POLL_MS = 20_000;
 // Which nav entries a user sees depends on which optional services the admin
 // has configured in Verwaltung: Statistik needs tracked watch data, Anfragen
 // needs Seerr, and Verwaltung only ever shows for the Emby Insights admin.
-function visibleNav(user: CurrentUser): { label: Page; icon: IconName }[] {
-  const items: { label: Page; icon: IconName }[] = [{ label: "Heute", icon: "home" }];
-  if (user.features.statistics) items.push({ label: "Statistik", icon: "chart" });
-  if (user.features.requests) items.push({ label: "Anfragen", icon: "sparkle" });
-  items.push({ label: "Chats", icon: "chat" }, { label: "Profil", icon: "user" });
-  if (user.isAdmin) items.push({ label: "Verwaltung", icon: "settings" });
+// The entry carries a translation key rather than a label, so `page` stays a
+// stable internal identifier no matter which language the UI speaks.
+function visibleNav(user: CurrentUser): { page: Page; labelKey: TranslationKey; icon: IconName }[] {
+  const items: { page: Page; labelKey: TranslationKey; icon: IconName }[] = [{ page: "today", labelKey: "nav_today", icon: "home" }];
+  if (user.features.statistics) items.push({ page: "stats", labelKey: "nav_stats", icon: "chart" });
+  if (user.features.requests) items.push({ page: "requests", labelKey: "nav_requests", icon: "sparkle" });
+  items.push({ page: "chats", labelKey: "nav_chats", icon: "chat" }, { page: "profile", labelKey: "nav_profile", icon: "user" });
+  if (user.isAdmin) items.push({ page: "admin", labelKey: "nav_admin", icon: "settings" });
   return items;
 }
-const apiPeriod: Record<Period, StatisticsPeriod> = { Woche: "week", Monat: "month", Jahr: "year" };
+const pageTitleKey: Record<Page, TranslationKey> = { today: "nav_today", stats: "nav_stats", requests: "nav_requests", chats: "nav_chats", profile: "nav_profile", admin: "nav_admin" };
+const periodLabelKey: Record<Period, TranslationKey> = { week: "period_week", month: "period_month", year: "period_year" };
 const APP_VERSION = "0.11.8";
 
-const dateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" });
-function formatPremiereDate(value: string) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : dateFormatter.format(date);
+// One formatter per language and purpose, built once: Intl.DateTimeFormat is
+// expensive enough that constructing it inside a render loop is wasteful.
+function localeFormatter(options: Intl.DateTimeFormatOptions): Record<Lang, Intl.DateTimeFormat> {
+  return { de: new Intl.DateTimeFormat(locales.de, options), en: new Intl.DateTimeFormat(locales.en, options) };
 }
-function availabilityWording(value: string) {
+const dateFormatters = localeFormatter({ day: "2-digit", month: "short" });
+function formatPremiereDate(value: string, lang: Lang) {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Demnächst verfügbar";
+  return Number.isNaN(date.getTime()) ? "" : dateFormatters[lang].format(date);
+}
+function availabilityWording(value: string, lang: Lang) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return t(lang, "availability_soon");
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const release = new Date(date); release.setHours(0, 0, 0, 0);
   const days = Math.round((release.getTime() - today.getTime()) / 86_400_000);
-  if (days <= 0) return "Heute verfügbar";
-  if (days === 1) return "Verfügbar morgen";
-  if (days < 7) return `Verfügbar in ${days} Tagen`;
+  if (days <= 0) return t(lang, "availability_today");
+  if (days === 1) return t(lang, "availability_tomorrow");
+  if (days < 7) return t(lang, "availability_in_days", { days });
   const weeks = Math.ceil(days / 7);
-  return `Verfügbar in ${weeks} ${weeks === 1 ? "Woche" : "Wochen"}`;
+  return weeks === 1 ? t(lang, "availability_in_one_week") : t(lang, "availability_in_weeks", { weeks });
 }
-function cinemaWording(item: UpcomingItem) {
+function cinemaWording(item: UpcomingItem, lang: Lang) {
   const start = item.cinemaStartDate ? new Date(item.cinemaStartDate) : null;
-  if (start && start.getTime() > Date.now()) return `Kinostart ${formatPremiereDate(item.cinemaStartDate!)}`;
-  return item.cinemaEndDate ? `Im Kino bis ${formatPremiereDate(item.cinemaEndDate)}` : "Im Kino";
+  if (start && start.getTime() > Date.now()) return t(lang, "cinema_start", { date: formatPremiereDate(item.cinemaStartDate!, lang) });
+  return item.cinemaEndDate ? t(lang, "cinema_until", { date: formatPremiereDate(item.cinemaEndDate, lang) }) : t(lang, "cinema_now");
 }
-function upcomingTitle(item: UpcomingItem) {
+function upcomingTitle(item: UpcomingItem, lang: Lang) {
   if (item.mediaType !== "tv") return item.title;
-  const episode = item.seasonNumber && item.episodeNumber ? `S${item.seasonNumber.toString().padStart(2, "0")}E${item.episodeNumber.toString().padStart(2, "0")}` : "Neue Folge";
+  const episode = item.seasonNumber && item.episodeNumber ? `S${item.seasonNumber.toString().padStart(2, "0")}E${item.episodeNumber.toString().padStart(2, "0")}` : t(lang, "new_episode");
   return `${item.title} · ${episode}`;
 }
 
@@ -117,25 +125,29 @@ function newForYouTitle(item: NewForYouItem) {
   const episode = item.seasonNumber && item.episodeNumber ? `S${item.seasonNumber.toString().padStart(2, "0")}E${item.episodeNumber.toString().padStart(2, "0")}` : item.title;
   return `${item.seriesName} · ${episode}`;
 }
-const fullDateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "long", year: "numeric" });
-function formatFullDate(value: string) {
+const fullDateFormatters = localeFormatter({ day: "2-digit", month: "long", year: "numeric" });
+function formatFullDate(value: string, lang: Lang) {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : fullDateFormatter.format(date);
+  return Number.isNaN(date.getTime()) ? "" : fullDateFormatters[lang].format(date);
 }
-function daysAgoWording(value: string) {
+function daysAgoWording(value: string, lang: Lang) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   const days = Math.round((Date.now() - date.getTime()) / 86_400_000);
-  if (days <= 0) return "heute";
-  if (days === 1) return "gestern";
-  return `vor ${days} Tagen`;
+  if (days <= 0) return t(lang, "day_today");
+  if (days === 1) return t(lang, "day_yesterday");
+  return t(lang, "days_ago", { days });
 }
-const shortDateFormatter = new Intl.DateTimeFormat("de-DE", { day: "numeric", month: "long" });
-function dateRangeWording(start: string, end: string) {
+const shortDateFormatters = localeFormatter({ day: "numeric", month: "long" });
+function dateRangeWording(start: string, end: string, lang: Lang) {
   const startDate = new Date(start);
   const endDate = new Date(end);
   if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return "";
-  return `${startDate.getDate()}.–${shortDateFormatter.format(endDate)}`;
+  // German abbreviates the range start to its bare day number ("3.–9. Mai");
+  // English has no equivalent shorthand, so both ends are spelled out.
+  return lang === "de"
+    ? `${startDate.getDate()}.–${shortDateFormatters.de.format(endDate)}`
+    : `${shortDateFormatters.en.format(startDate)} – ${shortDateFormatters.en.format(endDate)}`;
 }
 
 function useApiResource<T>(path: string | null, initialValue: T, pollMs?: number): [T, LoadState, () => void] {
@@ -187,9 +199,11 @@ function useBodyScrollLock() {
 }
 
 export default function Home() {
-  const [page, setPage] = useState<Page>("Heute");
+  const [page, setPage] = useState<Page>("today");
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [user, setUser] = useState<CurrentUser | null>(null);
+  const [publicLang, setPublicLang] = useState<Lang>("de");
+  const [savedLang, setSavedLang] = useState<Lang | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
   const [selectedMedia, setSelectedMedia] = useState<MediaSelection | null>(null);
   const noticeRef = useRef<HTMLDivElement>(null);
@@ -201,6 +215,29 @@ export default function Home() {
       .catch(() => null)
       .finally(() => setCheckingSession(false));
   }, []);
+
+  // Runs in parallel with /api/me because the login screen needs the language
+  // before any session exists. /api/me carries it too, so a logged-in user
+  // never depends on this second response landing first.
+  useEffect(() => {
+    fetch("/api/language", { credentials: "include" })
+      .then(async (response) => {
+        if (!response.ok) return;
+        const data: { language?: string } = await response.json();
+        if (isLang(data.language)) setPublicLang(data.language);
+      })
+      .catch(() => null);
+  }, []);
+
+  // Derived rather than synced through an effect, so there is never a render
+  // showing the previous language after a newer source has already resolved.
+  // Precedence: what the admin just saved, then the session payload, then the
+  // unauthenticated fallback above.
+  const lang: Lang = savedLang ?? (user && isLang(user.language) ? user.language : publicLang);
+
+  // layout.tsx ships a static lang="de" (it stays a plain, non-async Server
+  // Component); the live value is stamped on from here instead.
+  useEffect(() => { document.documentElement.lang = lang; }, [lang]);
 
   const [upcomingItems, upcomingState] = useApiResource<UpcomingItem[]>(user?.features.upcoming ? "/api/upcoming" : null, []);
   const [cinemaItems, cinemaState] = useApiResource<UpcomingItem[]>(user?.features.movieDates ? "/api/in-cinemas" : null, []);
@@ -221,8 +258,8 @@ export default function Home() {
   const [ownThread] = useApiResource<ChatMessage[]>(user && !user.isAdmin && unread > 0 ? "/api/messages" : null, [], CHAT_POLL_MS);
   const latestAdminMessage = [...ownThread].reverse().find((message) => message.fromAdmin);
   const messagePreview = !user || unread === 0 ? null
-    : user.isAdmin ? { preview: `${unread} neue ${unread === 1 ? "Nachricht" : "Nachrichten"} von Nutzern` }
-    : { preview: latestAdminMessage ? latestAdminMessage.body : "Neue Nachricht erhalten" };
+    : user.isAdmin ? { preview: unread === 1 ? t(lang, "msg_preview_admin_one") : t(lang, "msg_preview_admin_other", { count: unread }) }
+    : { preview: latestAdminMessage ? latestAdminMessage.body : t(lang, "msg_preview_user") };
 
   useEffect(() => {
     if (!noticeOpen) return;
@@ -237,49 +274,49 @@ export default function Home() {
     return () => { document.removeEventListener("keydown", onKeyDown); document.removeEventListener("pointerdown", onPointerDown); };
   }, [noticeOpen]);
 
-  if (checkingSession) return <main className="login-shell"><p className="loading-copy" role="status">Emby Insights wird geladen …</p></main>;
-  if (!user) return <LoginScreen onAuthenticated={setUser} />;
+  if (checkingSession) return <main className="login-shell"><p className="loading-copy" role="status">{t(lang, "app_loading")}</p></main>;
+  if (!user) return <LoginScreen lang={lang} onAuthenticated={setUser} />;
 
   const selectPage = (next: Page) => { setPage(next); setNoticeOpen(false); };
   const openNotices = () => setNoticeOpen((open) => !open);
   const nav = visibleNav(user);
 
-  return <main className="app-shell">
+  return <LanguageContext.Provider value={lang}><main className="app-shell">
     {selectedMedia && <MediaDetailScreen selection={selectedMedia} seerrConfigured={user.features.requests} onClose={() => setSelectedMedia(null)} onRequestCreated={refetchRequests} onHiddenChanged={refetchSeriesInProgress} />}
-    <a className="skip-link" href="#dashboard-content">Zum Inhalt springen</a>
-    <aside className="side-nav" aria-label="Hauptnavigation">
-      <button type="button" className="brand" onClick={goHomeAndRefresh} aria-label="Zu Heute und Dashboard aktualisieren"><img className="brand-logo" src="/emby-insights-logo.svg" alt="Emby Insights" width="31" height="31" /><span>insights</span></button>
-      <nav>{nav.map((item) => <button className={page === item.label ? "nav-item active" : "nav-item"} key={item.label} onClick={() => selectPage(item.label)} aria-current={page === item.label ? "page" : undefined}><Icon name={item.icon} />{item.label}</button>)}</nav>
+    <a className="skip-link" href="#dashboard-content">{t(lang, "skip_to_content")}</a>
+    <aside className="side-nav" aria-label={t(lang, "nav_main")}>
+      <button type="button" className="brand" onClick={goHomeAndRefresh} aria-label={t(lang, "brand_home_aria")}><img className="brand-logo" src="/emby-insights-logo.svg" alt="Emby Insights" width="31" height="31" /><span>insights</span></button>
+      <nav>{nav.map((item) => <button className={page === item.page ? "nav-item active" : "nav-item"} key={item.page} onClick={() => selectPage(item.page)} aria-current={page === item.page ? "page" : undefined}><Icon name={item.icon} />{t(lang, item.labelKey)}</button>)}</nav>
       <div className="sidebar-meta">
-        <div className="server-status"><i aria-hidden="true" /> Verbunden mit Emby</div>
-        <p className="app-version">Version <strong>v{APP_VERSION}</strong></p>
+        <div className="server-status"><i aria-hidden="true" /> {t(lang, "connected_to_emby")}</div>
+        <p className="app-version">{t(lang, "version")} <strong>v{APP_VERSION}</strong></p>
       </div>
     </aside>
 
     <section className="screen" id="dashboard-content" tabIndex={-1}>
       <header className="topbar">
-        <div><p className="eyebrow">DEIN PERSÖNLICHER ÜBERBLICK</p><h1>{page === "Heute" ? `${greeting()}, ${user.name}` : page}</h1></div>
+        <div><p className="eyebrow">{t(lang, "topbar_eyebrow")}</p><h1>{page === "today" ? `${greeting(lang)}, ${user.name}` : t(lang, pageTitleKey[page])}</h1></div>
         <div className="header-actions">
-          <button type="button" className="refresh-button" aria-label="Dashboard aktualisieren" onClick={() => window.location.reload()}><Icon name="refresh" /></button>
-          <button ref={noticeButtonRef} className="notice-button" aria-label="Benachrichtigungen" aria-expanded={noticeOpen} aria-controls="notifications" onClick={openNotices}><Icon name="bell" />{unread > 0 && <b><span className="sr-only">{unread} ungelesene Benachrichtigungen</span></b>}</button>
-          <button className="avatar" aria-label="Profil öffnen" onClick={() => selectPage("Profil")}><UserAvatar name={user.name} userId={user.id} /></button>
-          {noticeOpen && <div ref={noticeRef} className="notifications" id="notifications" role="dialog" aria-label="Benachrichtigungen">
-            <strong>Benachrichtigungen</strong>
-            {messagePreview ? <p>{messagePreview.preview}</p> : <p>Keine neuen Benachrichtigungen.</p>}
-            {unread > 0 && <button type="button" className="text-button" onClick={() => selectPage("Chats")}>Zu den Chats <Icon name="arrow" /></button>}
+          <button type="button" className="refresh-button" aria-label={t(lang, "refresh_dashboard")} onClick={() => window.location.reload()}><Icon name="refresh" /></button>
+          <button ref={noticeButtonRef} className="notice-button" aria-label={t(lang, "notifications")} aria-expanded={noticeOpen} aria-controls="notifications" onClick={openNotices}><Icon name="bell" />{unread > 0 && <b><span className="sr-only">{t(lang, "unread_notifications", { count: unread })}</span></b>}</button>
+          <button className="avatar" aria-label={t(lang, "open_profile")} onClick={() => selectPage("profile")}><UserAvatar name={user.name} userId={user.id} /></button>
+          {noticeOpen && <div ref={noticeRef} className="notifications" id="notifications" role="dialog" aria-label={t(lang, "notifications")}>
+            <strong>{t(lang, "notifications")}</strong>
+            {messagePreview ? <p>{messagePreview.preview}</p> : <p>{t(lang, "no_new_notifications")}</p>}
+            {unread > 0 && <button type="button" className="text-button" onClick={() => selectPage("chats")}>{t(lang, "go_to_chats")} <Icon name="arrow" /></button>}
           </div>}
         </div>
       </header>
-      {page === "Heute" && <Today upcoming={upcomingItems} upcomingState={upcomingState} cinema={cinemaItems} cinemaState={cinemaState} requests={requestItems} requestState={requestState} newForYou={newForYouItems} newForYouState={newForYouState} topRated={topRatedItems} topRatedState={topRatedState} seriesInProgress={seriesInProgress} seriesInProgressState={seriesInProgressState} continueWatching={continueWatching} continueWatchingState={continueWatchingState} availableRequests={availableRequests} features={user.features} message={messagePreview} onSelectMedia={setSelectedMedia} onOpenChats={() => selectPage("Chats")} />}
-      {page === "Statistik" && user.features.statistics && <Stats user={user} onSelectMedia={setSelectedMedia} />}
-      {page === "Anfragen" && user.features.requests && <Requests onSelectMedia={setSelectedMedia} />}
-      {page === "Chats" && <Chats user={user} />}
-      {page === "Profil" && <Profile user={user} userProfile={userProfile} totalRequests={user.features.requests ? totalRequests : null} onSelectMedia={setSelectedMedia} />}
-      {page === "Verwaltung" && user.isAdmin && <AdminSettings />}
+      {page === "today" && <Today upcoming={upcomingItems} upcomingState={upcomingState} cinema={cinemaItems} cinemaState={cinemaState} requests={requestItems} requestState={requestState} newForYou={newForYouItems} newForYouState={newForYouState} topRated={topRatedItems} topRatedState={topRatedState} seriesInProgress={seriesInProgress} seriesInProgressState={seriesInProgressState} continueWatching={continueWatching} continueWatchingState={continueWatchingState} availableRequests={availableRequests} features={user.features} message={messagePreview} onSelectMedia={setSelectedMedia} onOpenChats={() => selectPage("chats")} />}
+      {page === "stats" && user.features.statistics && <Stats user={user} onSelectMedia={setSelectedMedia} />}
+      {page === "requests" && user.features.requests && <Requests onSelectMedia={setSelectedMedia} />}
+      {page === "chats" && <Chats user={user} />}
+      {page === "profile" && <Profile user={user} userProfile={userProfile} totalRequests={user.features.requests ? totalRequests : null} onSelectMedia={setSelectedMedia} />}
+      {page === "admin" && user.isAdmin && <AdminSettings onLanguageChange={setSavedLang} />}
     </section>
 
-    <nav className="bottom-nav" aria-label="Hauptnavigation (mobil)">{nav.filter((item) => item.label !== "Profil").map((item) => <button key={item.label} className={page === item.label ? "active" : ""} onClick={() => selectPage(item.label)} aria-current={page === item.label ? "page" : undefined}><Icon name={item.icon} /><span className="sr-only">{item.label}</span></button>)}</nav>
-  </main>;
+    <nav className="bottom-nav" aria-label={t(lang, "nav_main_mobile")}>{nav.filter((item) => item.page !== "profile").map((item) => <button key={item.page} className={page === item.page ? "active" : ""} onClick={() => selectPage(item.page)} aria-current={page === item.page ? "page" : undefined}><Icon name={item.icon} /><span className="sr-only">{t(lang, item.labelKey)}</span></button>)}</nav>
+  </main></LanguageContext.Provider>;
 }
 
 function Icon({ name }: { name: IconName }) {
@@ -328,6 +365,8 @@ function Today({ upcoming, upcomingState, cinema, cinemaState, requests, request
   message: { preview: string } | null;
   onSelectMedia: (selection: MediaSelection) => void; onOpenChats: () => void;
 }) {
+  const lang = useLang();
+  const translate = useT();
   const [allEventsOpen, setAllEventsOpen] = useState(false);
   const [newForYouGridOpen, setNewForYouGridOpen] = useState(false);
 
@@ -343,23 +382,26 @@ function Today({ upcoming, upcomingState, cinema, cinemaState, requests, request
     newForYou: newForYouState === "ready" ? newForYou : [],
     message,
     seerrConfigured: features.requests,
+    lang,
     onSelectMedia,
     onShowNewForYou: () => setNewForYouGridOpen(true),
     onOpenChats,
   });
 
+  const newForYouDetail = (item: NewForYouItem) => item.dateCreated ? translate("added_when", { when: daysAgoWording(item.dateCreated, lang) }) : translate("unwatched");
+
   return <div className="content today-view">
     <RelevantNow events={events} onShowAll={() => setAllEventsOpen(true)} />
-    <PosterRow title="Neu für dich" eyebrow="IN DEN LETZTEN 14 TAGEN" items={newForYou} state={newForYouState} emptyLabel="Nichts Neues in den letzten 14 Tagen." itemTitle={newForYouTitle} detail={(item) => item.dateCreated ? `Hinzugefügt ${daysAgoWording(item.dateCreated)}` : "Ungesehen"} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
-    <PosterRow title="Was ich gerade schaue" eyebrow="WEITERSCHAUEN" items={continueWatching} state={continueWatchingState} emptyLabel="Nichts in Bearbeitung." detail={(item) => `${item.progressPercent} % gesehen`} progress={(item) => item.progressPercent} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
-    {features.upcoming && <PosterRow title="Demnächst" eyebrow="IN DEN NÄCHSTEN 4 WOCHEN AUF EMBY" items={visibleUpcoming} state={upcomingState} emptyLabel="Nichts Neues in den nächsten vier Wochen." itemTitle={upcomingTitle} detail={(item) => availabilityWording(item.availabilityDate)} onSelect={(item) => onSelectMedia(calendarSelection(item, features.requests))} />}
-    <PosterRow title="Noch nicht fertig" eyebrow="TEILWEISE GESEHEN" items={seriesInProgress} state={seriesInProgressState} emptyLabel="Keine Serien mit offenen Folgen." detail={(item) => `${item.watchedEpisodes} von ${item.totalEpisodes} Folgen`} progress={(item) => Math.round((item.watchedEpisodes / item.totalEpisodes) * 100)} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
-    {features.requests && <PosterRow title="Meine Anfragen" eyebrow="SEERR · OFFEN" items={requests} state={requestState} emptyLabel="Keine offenen Anfragen." detail={(item) => item.status} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />}
-    <PosterRow title="Top Bewertet" eyebrow="EURE BEWERTUNGEN" items={topRated} state={topRatedState} emptyLabel="Noch keine Bewertungen im Plugin." detail={(item) => `★ ${item.averageRating.toFixed(1)}`} onSelect={(item) => onSelectMedia(item.mediaSource === "seerr" ? { source: "seerr", id: item.mediaId, mediaType: item.mediaType } : { source: "emby", id: item.mediaId })} />
-    {features.movieDates && <PosterRow title="Im Kino" eyebrow="KOMMENDE UND AKTUELLE KINOSTARTS" items={cinema} state={cinemaState} emptyLabel="Zurzeit keine Kinostarts." detail={cinemaWording} onSelect={(item) => onSelectMedia(calendarSelection(item, features.requests))} />}
+    <PosterRow title={translate("row_new_for_you")} eyebrow={translate("row_new_for_you_eyebrow")} items={newForYou} state={newForYouState} emptyLabel={translate("row_new_for_you_empty")} itemTitle={newForYouTitle} detail={newForYouDetail} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
+    <PosterRow title={translate("row_continue")} eyebrow={translate("row_continue_eyebrow")} items={continueWatching} state={continueWatchingState} emptyLabel={translate("row_continue_empty")} detail={(item) => translate("percent_watched", { percent: item.progressPercent })} progress={(item) => item.progressPercent} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
+    {features.upcoming && <PosterRow title={translate("row_upcoming")} eyebrow={translate("row_upcoming_eyebrow")} items={visibleUpcoming} state={upcomingState} emptyLabel={translate("row_upcoming_empty")} itemTitle={(item) => upcomingTitle(item, lang)} detail={(item) => availabilityWording(item.availabilityDate, lang)} onSelect={(item) => onSelectMedia(calendarSelection(item, features.requests))} />}
+    <PosterRow title={translate("row_series_progress")} eyebrow={translate("row_series_progress_eyebrow")} items={seriesInProgress} state={seriesInProgressState} emptyLabel={translate("row_series_progress_empty")} detail={(item) => translate("episodes_of", { watched: item.watchedEpisodes, total: item.totalEpisodes })} progress={(item) => Math.round((item.watchedEpisodes / item.totalEpisodes) * 100)} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
+    {features.requests && <PosterRow title={translate("row_my_requests")} eyebrow={translate("row_my_requests_eyebrow")} items={requests} state={requestState} emptyLabel={translate("row_my_requests_empty")} detail={(item) => item.status} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />}
+    <PosterRow title={translate("row_top_rated")} eyebrow={translate("row_top_rated_eyebrow")} items={topRated} state={topRatedState} emptyLabel={translate("row_top_rated_empty")} detail={(item) => `★ ${item.averageRating.toFixed(1)}`} onSelect={(item) => onSelectMedia(item.mediaSource === "seerr" ? { source: "seerr", id: item.mediaId, mediaType: item.mediaType } : { source: "emby", id: item.mediaId })} />
+    {features.movieDates && <PosterRow title={translate("row_cinema")} eyebrow={translate("row_cinema_eyebrow")} items={cinema} state={cinemaState} emptyLabel={translate("row_cinema_empty")} detail={(item) => cinemaWording(item, lang)} onSelect={(item) => onSelectMedia(calendarSelection(item, features.requests))} />}
 
     {allEventsOpen && <RelevantAllScreen events={events} onClose={() => setAllEventsOpen(false)} />}
-    {newForYouGridOpen && <MediaGridScreen title="Neu für dich" items={newForYou} itemTitle={newForYouTitle} detail={(item) => item.dateCreated ? `Hinzugefügt ${daysAgoWording(item.dateCreated)}` : "Ungesehen"} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setNewForYouGridOpen(false)} />}
+    {newForYouGridOpen && <MediaGridScreen title={translate("row_new_for_you")} items={newForYou} itemTitle={newForYouTitle} detail={newForYouDetail} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setNewForYouGridOpen(false)} />}
   </div>;
 }
 
@@ -367,29 +409,29 @@ type RelevantEvent = { key: string; tone: Tone; icon: IconName; status: string; 
 
 const RELEASE_WINDOW_HOURS = 48;
 
-function releaseWording(premiereDate: string) {
+function releaseWording(premiereDate: string, lang: Lang) {
   const date = new Date(premiereDate);
-  if (Number.isNaN(date.getTime())) return "Erscheint bald";
+  if (Number.isNaN(date.getTime())) return t(lang, "release_soon");
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
   const days = Math.round((new Date(date).setHours(0, 0, 0, 0) - startOfToday.getTime()) / 86_400_000);
-  if (days <= 0) return "Erscheint heute";
-  if (days === 1) return "Erscheint morgen";
-  return "Erscheint bald";
+  if (days <= 0) return t(lang, "release_today");
+  if (days === 1) return t(lang, "release_tomorrow");
+  return t(lang, "release_soon");
 }
 
 // Builds the prioritised event list: newly available requests first, then
 // releases due within the next two days, then the unseen-titles summary.
-function relevantEvents({ availableRequests, upcoming, cinema, newForYou, message, seerrConfigured, onSelectMedia, onShowNewForYou, onOpenChats }: {
+function relevantEvents({ availableRequests, upcoming, cinema, newForYou, message, seerrConfigured, lang, onSelectMedia, onShowNewForYou, onOpenChats }: {
   availableRequests: RequestItem[]; upcoming: UpcomingItem[]; cinema: UpcomingItem[]; newForYou: NewForYouItem[];
-  message: { preview: string } | null; seerrConfigured: boolean;
+  message: { preview: string } | null; seerrConfigured: boolean; lang: Lang;
   onSelectMedia: (selection: MediaSelection) => void; onShowNewForYou: () => void; onOpenChats: () => void;
 }): RelevantEvent[] {
   const events: RelevantEvent[] = [];
 
   if (message) {
     events.push({
-      key: "message", tone: "blue", icon: "chat", status: "Neue Nachricht",
+      key: "message", tone: "blue", icon: "chat", status: t(lang, "event_new_message"),
       detail: message.preview,
       onOpen: onOpenChats,
     });
@@ -397,8 +439,10 @@ function relevantEvents({ availableRequests, upcoming, cinema, newForYou, messag
 
   for (const request of availableRequests) {
     events.push({
-      key: `available-${request.id}`, tone: "mint", icon: "sparkle", status: "Jetzt verfügbar",
-      detail: <>Deine Anfrage „{request.title}“ ist{request.availableSince ? ` seit ${daysAgoWording(request.availableSince)}` : ""} in Emby</>,
+      key: `available-${request.id}`, tone: "mint", icon: "sparkle", status: t(lang, "event_now_available"),
+      detail: request.availableSince
+        ? t(lang, "event_request_available_since", { title: request.title, when: daysAgoWording(request.availableSince, lang) })
+        : t(lang, "event_request_available", { title: request.title }),
       onOpen: () => onSelectMedia({ source: "seerr", id: request.tmdbId, mediaType: request.mediaType }),
     });
   }
@@ -408,8 +452,8 @@ function relevantEvents({ availableRequests, upcoming, cinema, newForYou, messag
     const premiere = new Date(item.availabilityDate).getTime();
     if (Number.isNaN(premiere) || premiere > horizon) continue;
     events.push({
-      key: `release-${item.id}`, tone: "lilac", icon: "clock", status: upcomingTitle(item),
-      detail: releaseWording(item.availabilityDate),
+      key: `release-${item.id}`, tone: "lilac", icon: "clock", status: upcomingTitle(item, lang),
+      detail: releaseWording(item.availabilityDate, lang),
       onOpen: () => onSelectMedia(calendarSelection(item, seerrConfigured)),
     });
   }
@@ -419,15 +463,15 @@ function relevantEvents({ availableRequests, upcoming, cinema, newForYou, messag
     if (Number.isNaN(premiere) || premiere > horizon || premiere < Date.now() - 24 * 60 * 60 * 1000) continue;
     events.push({
       key: `cinema-${item.id}`, tone: "lilac", icon: "movie", status: item.title,
-      detail: premiere <= Date.now() ? "Jetzt im Kino" : "Bald im Kino",
+      detail: premiere <= Date.now() ? t(lang, "event_cinema_now") : t(lang, "event_cinema_soon"),
       onOpen: () => onSelectMedia(calendarSelection(item, seerrConfigured)),
     });
   }
 
   if (newForYou.length > 0) {
     events.push({
-      key: "new-for-you", tone: "blue", icon: "genre", status: "Neu für dich",
-      detail: <><b>{newForYou.length}</b> ungesehene Titel</>,
+      key: "new-for-you", tone: "blue", icon: "genre", status: t(lang, "row_new_for_you"),
+      detail: <><b>{newForYou.length}</b> {t(lang, "unwatched_titles")}</>,
       onOpen: onShowNewForYou,
     });
   }
@@ -436,13 +480,14 @@ function relevantEvents({ availableRequests, upcoming, cinema, newForYou, messag
 }
 
 function RelevantNow({ events, onShowAll }: { events: RelevantEvent[]; onShowAll: () => void }) {
-  return <section className="relevant-card" aria-label="Jetzt relevant">
+  const translate = useT();
+  return <section className="relevant-card" aria-label={translate("relevant_now")}>
     <div className="relevant-head">
-      <p className="eyebrow">JETZT RELEVANT</p>
-      {events.length > 3 && <button type="button" className="text-button" onClick={onShowAll}>Alle ansehen <Icon name="arrow" /></button>}
+      <p className="eyebrow">{translate("relevant_now_eyebrow")}</p>
+      {events.length > 3 && <button type="button" className="text-button" onClick={onShowAll}>{translate("view_all")} <Icon name="arrow" /></button>}
     </div>
     {events.length === 0
-      ? <p className="relevant-empty">Heute nichts Neues für dich.</p>
+      ? <p className="relevant-empty">{translate("relevant_empty")}</p>
       : <ul className="relevant-list">{events.slice(0, 3).map((event) => <RelevantRow key={event.key} event={event} />)}</ul>}
   </section>;
 }
@@ -460,19 +505,21 @@ function RelevantRow({ event, onOpen }: { event: RelevantEvent; onOpen?: () => v
 function RelevantAllScreen({ events, onClose }: { events: RelevantEvent[]; onClose: () => void }) {
   useEscapeKey(onClose);
   useBodyScrollLock();
+  const translate = useT();
 
-  return <div className="media-detail-overlay media-grid-overlay" role="dialog" aria-modal="true" aria-label="Jetzt relevant">
+  return <div className="media-detail-overlay media-grid-overlay" role="dialog" aria-modal="true" aria-label={translate("relevant_now")}>
     <div className="media-detail-scroll">
-      <button type="button" className="media-detail-close" onClick={onClose} aria-label="Schließen"><Icon name="close" /></button>
-      <h1 className="media-grid-title">Jetzt relevant</h1>
+      <button type="button" className="media-detail-close" onClick={onClose} aria-label={translate("close")}><Icon name="close" /></button>
+      <h1 className="media-grid-title">{translate("relevant_now")}</h1>
       <ul className="relevant-list">{events.map((event) => <RelevantRow key={event.key} event={event} onOpen={() => { onClose(); event.onOpen(); }} />)}</ul>
     </div>
   </div>;
 }
 
 function MetricCard({ icon, tone, value, label, detail, positive, loading, onClick }: { icon: IconName; tone: Tone; value: string | number; label: string; detail: string; positive?: boolean; loading?: boolean; onClick?: () => void }) {
+  const translate = useT();
   const inner = loading
-    ? <><span className="metric-icon"><Icon name={icon} /></span><span className="skeleton skeleton-value" aria-hidden="true" /><p>{label}</p><span className="skeleton skeleton-detail" aria-hidden="true" /><span className="sr-only" role="status">Wird geladen …</span></>
+    ? <><span className="metric-icon"><Icon name={icon} /></span><span className="skeleton skeleton-value" aria-hidden="true" /><p>{label}</p><span className="skeleton skeleton-detail" aria-hidden="true" /><span className="sr-only" role="status">{translate("loading")}</span></>
     : <><span className="metric-icon"><Icon name={icon} /></span><strong>{value}</strong><p>{label}</p><small className={positive ? "up" : undefined}>{detail}</small></>;
   return onClick
     ? <button type="button" className={`metric-card metric-card-button tone-${tone}`} onClick={onClick}>{inner}</button>
@@ -485,17 +532,18 @@ function MetricCard({ icon, tone, value, label, detail, positive, loading, onCli
 // heavy, so both counts live in one compact card as independently
 // clickable segments instead.
 function CompletedCard({ movies, series, loading, onOpenMovies, onOpenSeries }: { movies?: number; series?: number; loading?: boolean; onOpenMovies?: () => void; onOpenSeries?: () => void }) {
+  const translate = useT();
   return <article className="metric-card completed-card tone-peach">
     <button type="button" className="completed-card-segment" onClick={onOpenMovies} disabled={!onOpenMovies}>
       <span className="metric-icon"><Icon name="movie" /></span>
       {loading ? <span className="skeleton skeleton-value" aria-hidden="true" /> : <strong>{movies ?? "—"}</strong>}
-      <small>Filme</small>
+      <small>{translate("movies")}</small>
     </button>
     <span className="completed-card-divider" aria-hidden="true" />
     <button type="button" className="completed-card-segment" onClick={onOpenSeries} disabled={!onOpenSeries}>
       <span className="metric-icon"><Icon name="series" /></span>
       {loading ? <span className="skeleton skeleton-value" aria-hidden="true" /> : <strong>{series ?? "—"}</strong>}
-      <small>Serien</small>
+      <small>{translate("series")}</small>
     </button>
   </article>;
 }
@@ -512,26 +560,29 @@ function RecordsCard({ longestSession, longestSessionState, mostActiveDay, mostA
   longestSession: LongestSession | null; longestSessionState: LoadState;
   mostActiveDay: MostActiveDay | null; mostActiveDayState: LoadState;
 }) {
+  const lang = useLang();
+  const translate = useT();
   return <article className="metric-card completed-card tone-lilac">
     <div className="completed-card-segment static">
       <span className="metric-icon"><Icon name="clock" /></span>
       {longestSessionState === "loading"
         ? <span className="skeleton skeleton-value" aria-hidden="true" />
-        : <strong>{longestSessionState === "ready" && longestSession ? formatDuration(longestSession.watchSeconds) : "—"}</strong>}
-      <small>Längste Session</small>
+        : <strong>{longestSessionState === "ready" && longestSession ? formatDuration(longestSession.watchSeconds, lang) : "—"}</strong>}
+      <small>{translate("longest_session")}</small>
     </div>
     <span className="completed-card-divider" aria-hidden="true" />
     <div className="completed-card-segment static">
       <span className="metric-icon"><Icon name="genre" /></span>
       {mostActiveDayState === "loading"
         ? <span className="skeleton skeleton-value" aria-hidden="true" />
-        : <strong>{mostActiveDayState === "ready" && mostActiveDay ? formatPremiereDate(mostActiveDay.date) : "—"}</strong>}
-      <small>Aktivster Tag</small>
+        : <strong>{mostActiveDayState === "ready" && mostActiveDay ? formatPremiereDate(mostActiveDay.date, lang) : "—"}</strong>}
+      <small>{translate("most_active_day")}</small>
     </div>
   </article>;
 }
 
 function WatchedCategoryTile({ label, items, onOpen }: { label: string; items: readonly WatchedItem[]; onOpen: () => void }) {
+  const translate = useT();
   const featured = items.length > 0
     ? [...items].sort((a, b) => (b.dateAdded ?? "").localeCompare(a.dateAdded ?? ""))[0]
     : undefined;
@@ -540,7 +591,7 @@ function WatchedCategoryTile({ label, items, onOpen }: { label: string; items: r
     className="watched-tile"
     style={featured?.backdropUrl ? { backgroundImage: `url(${featured.backdropUrl})` } : undefined}
     onClick={onOpen}
-    aria-label={`${label} anzeigen`}
+    aria-label={translate("show_label_aria", { label })}
   >
     <span className="watched-tile-scrim" />
     <span className="watched-tile-label">{label}</span>
@@ -553,6 +604,7 @@ function WatchedCategoryTile({ label, items, onOpen }: { label: string; items: r
 // both fit a fixed row height, and on narrower widths the text overflowed
 // above the card instead of just growing the box like every other card.
 function RankCard({ rank, name, userId }: { rank: number | null; name: string; userId: string }) {
+  const translate = useT();
   const hasRank = rank !== null && rank > 0;
   const medalClass = rank === 1 ? " gold" : rank === 3 ? " bronze" : "";
   return <article className="metric-card rank-card tone-lilac">
@@ -560,24 +612,25 @@ function RankCard({ rank, name, userId }: { rank: number | null; name: string; u
       <span className="rank-avatar"><UserAvatar name={name} userId={userId} /></span>
       <span className={`rank-badge${medalClass}`}>{hasRank ? rank : "—"}</span>
     </span>
-    <strong>{hasRank ? `Platz ${rank}` : "—"}</strong>
-    <small>Nach Sehzeit</small>
+    <strong>{hasRank ? translate("rank_place", { rank }) : "—"}</strong>
+    <small>{translate("rank_by_watch_time")}</small>
   </article>;
 }
 
 function PosterRow<T extends { id: string; title: string; posterUrl?: string }>({ title, eyebrow, gridTitle, items, detail, itemTitle, state, emptyLabel, progress, onSelect }: {
   title?: string; eyebrow?: string; gridTitle?: string; items: readonly T[]; detail: (item: T) => string; itemTitle?: (item: T) => string; state?: LoadState; emptyLabel?: string; progress?: (item: T) => number; onSelect?: (item: T) => void;
 }) {
+  const translate = useT();
   const [gridOpen, setGridOpen] = useState(false);
-  const resolvedGridTitle = gridTitle ?? title ?? "Übersicht";
+  const resolvedGridTitle = gridTitle ?? title ?? translate("overview");
   return <section className="poster-section">
     {(title || eyebrow) && <div className="section-heading">
       <div>{eyebrow && <p className="eyebrow">{eyebrow}</p>}{title && <h2>{title}</h2>}</div>
-      {items.length > 0 && <button type="button" className="text-button poster-view-all" onClick={() => setGridOpen(true)} aria-label={`Alle ${resolvedGridTitle} anzeigen`}><Icon name="arrow" /></button>}
+      {items.length > 0 && <button type="button" className="text-button poster-view-all" onClick={() => setGridOpen(true)} aria-label={translate("show_all_aria", { title: resolvedGridTitle })}><Icon name="arrow" /></button>}
     </div>}
     {state === "loading" && <PosterSkeletonRow />}
-    {state === "error" && <p className="poster-status">Nicht verfügbar</p>}
-    {state !== "loading" && state !== "error" && items.length === 0 && <p className="poster-status">{emptyLabel ?? "Nichts vorhanden."}</p>}
+    {state === "error" && <p className="poster-status">{translate("not_available")}</p>}
+    {state !== "loading" && state !== "error" && items.length === 0 && <p className="poster-status">{emptyLabel ?? translate("nothing_here")}</p>}
     {items.length > 0 && <div className="poster-scroller">{items.map((item) => {
       const inner = <>
         <div className="poster wide" role="img" aria-label={itemTitle?.(item) ?? item.title}>
@@ -595,8 +648,9 @@ function PosterRow<T extends { id: string; title: string; posterUrl?: string }>(
 }
 
 function PosterSkeletonRow({ count = 4 }: { count?: number }) {
+  const translate = useT();
   return <>
-    <p className="poster-status sr-only" role="status">Wird geladen …</p>
+    <p className="poster-status sr-only" role="status">{translate("loading")}</p>
     <div className="poster-scroller" aria-hidden="true">
       {Array.from({ length: count }, (_, index) => <div className="poster-entry" key={index}>
         <div className="poster wide skeleton" />
@@ -614,35 +668,36 @@ function topGenres(movies: readonly WatchedItem[], series: readonly WatchedItem[
   return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([label, value]) => ({ label, value }));
 }
 
-function watchedItemDetail(item: WatchedItem) {
+function watchedItemDetail(item: WatchedItem, lang: Lang) {
   const genre = item.genres[0] ?? "";
   if (!item.lastPlayedDate) return genre;
-  const lastPlayed = `zuletzt ${daysAgoWording(item.lastPlayedDate)}`;
+  const lastPlayed = t(lang, "last_played_when", { when: daysAgoWording(item.lastPlayedDate, lang) });
   return genre ? `${genre} · ${lastPlayed}` : lastPlayed;
 }
 
-const WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+const WEEKDAY_KEYS: TranslationKey[] = ["weekday_mon", "weekday_tue", "weekday_wed", "weekday_thu", "weekday_fri", "weekday_sat", "weekday_sun"];
 
-function weekdayChartData(weekdays: readonly WeekdayWatchTime[]) {
+function weekdayChartData(weekdays: readonly WeekdayWatchTime[], lang: Lang) {
   const seconds = new Array(7).fill(0);
   for (const entry of weekdays) seconds[entry.weekday] = entry.watchSeconds;
-  return WEEKDAYS.map((label, index) => ({ label, value: seconds[index] }));
+  return WEEKDAY_KEYS.map((key, index) => ({ label: t(lang, key), value: seconds[index] }));
 }
 
-const DAYPARTS = [
-  { label: "Nacht", hours: [0, 1, 2, 3, 4, 5] },
-  { label: "Morgen", hours: [6, 7, 8, 9, 10, 11] },
-  { label: "Nachmittag", hours: [12, 13, 14, 15, 16, 17] },
-  { label: "Abend", hours: [18, 19, 20, 21, 22, 23] },
+const DAYPARTS: { key: TranslationKey; hours: number[] }[] = [
+  { key: "daypart_night", hours: [0, 1, 2, 3, 4, 5] },
+  { key: "daypart_morning", hours: [6, 7, 8, 9, 10, 11] },
+  { key: "daypart_afternoon", hours: [12, 13, 14, 15, 16, 17] },
+  { key: "daypart_evening", hours: [18, 19, 20, 21, 22, 23] },
 ];
 
-function daypartChartData(hours: readonly HourWatchTime[]) {
+function daypartChartData(hours: readonly HourWatchTime[], lang: Lang) {
   const secondsByHour = new Array(24).fill(0);
   for (const entry of hours) secondsByHour[entry.hour] = entry.watchSeconds;
-  return DAYPARTS.map((daypart) => ({ label: daypart.label, value: daypart.hours.reduce((sum, hour) => sum + secondsByHour[hour], 0) }));
+  return DAYPARTS.map((daypart) => ({ label: t(lang, daypart.key), value: daypart.hours.reduce((sum, hour) => sum + secondsByHour[hour], 0) }));
 }
 
 function BarChart({ title, subtitle, data, formatValue, loading }: { title: string; subtitle?: string; data: { label: string; value: number }[]; formatValue?: (value: number) => string; loading?: boolean }) {
+  const translate = useT();
   const max = Math.max(1, ...data.map((entry) => entry.value));
   const hasData = data.some((entry) => entry.value > 0);
   return <section className="chart-card">
@@ -650,7 +705,7 @@ function BarChart({ title, subtitle, data, formatValue, loading }: { title: stri
     {subtitle && <p className="chart-card-subtitle">{subtitle}</p>}
     {loading
       ? <div className="bar-chart" aria-hidden="true">
-        <p className="sr-only" role="status">Wird geladen …</p>
+        <p className="sr-only" role="status">{translate("loading")}</p>
         {Array.from({ length: 4 }, (_, index) => <div className="bar-row" key={index}>
           <span className="skeleton skeleton-line-xs" />
           <div className="bar-track"><div className="skeleton bar-fill-skeleton" /></div>
@@ -665,34 +720,37 @@ function BarChart({ title, subtitle, data, formatValue, loading }: { title: stri
           <span className="bar-value">{formatValue ? formatValue(entry.value) : entry.value}</span>
         </div>)}
       </div>
-      : <p className="poster-status">Noch keine Daten für diesen Zeitraum.</p>}
+      : <p className="poster-status">{translate("chart_no_data")}</p>}
   </section>;
 }
 
 function Stats({ user, onSelectMedia }: { user: { id: string; name: string }; onSelectMedia: (selection: MediaSelection) => void }) {
-  const [period, setPeriod] = useState<Period>("Woche");
+  const lang = useLang();
+  const translate = useT();
+  const [period, setPeriod] = useState<Period>("week");
   const [completedGridView, setCompletedGridView] = useState<"movies" | "series" | null>(null);
   const [watchedGridView, setWatchedGridView] = useState<"movies" | "series" | null>(null);
+  const periodLabel = translate(periodLabelKey[period]);
 
-  const [statistics, state] = useApiResource<PersonalStats | null>(`/api/stats?period=${apiPeriod[period]}`, null);
+  const [statistics, state] = useApiResource<PersonalStats | null>(`/api/stats?period=${period}`, null);
   const [watchTimeRankData] = useApiResource<WatchTimeRank | null>("/api/stats/rank", null);
   const watchTimeRank = watchTimeRankData?.rank ?? null;
   const [watchedMovies, watchedMoviesState] = useApiResource<WatchedItem[]>("/api/watched-movies", []);
   const [watchedSeries, watchedSeriesState] = useApiResource<WatchedItem[]>("/api/watched-series", []);
-  const [completedMovies, completedMoviesState] = useApiResource<WatchedItem[]>(`/api/completed-movies?period=${apiPeriod[period]}`, []);
-  const [completedSeries, completedSeriesState] = useApiResource<WatchedItem[]>(`/api/completed-series?period=${apiPeriod[period]}`, []);
-  const [deviceStats, deviceStatsState] = useApiResource<DeviceWatchTime[]>(`/api/stats/devices?period=${apiPeriod[period]}`, []);
-  const [hourStats, hourStatsState] = useApiResource<HourWatchTime[]>(`/api/stats/hours?period=${apiPeriod[period]}`, []);
-  const [weekdayStats, weekdayStatsState] = useApiResource<WeekdayWatchTime[]>(`/api/stats/weekdays?period=${apiPeriod[period]}`, []);
-  const [longestSession, longestSessionState] = useApiResource<LongestSession | null>(`/api/stats/longest-session?period=${apiPeriod[period]}`, null);
-  const [mostActiveDay, mostActiveDayState] = useApiResource<MostActiveDay | null>(`/api/stats/most-active-day?period=${apiPeriod[period]}`, null);
+  const [completedMovies, completedMoviesState] = useApiResource<WatchedItem[]>(`/api/completed-movies?period=${period}`, []);
+  const [completedSeries, completedSeriesState] = useApiResource<WatchedItem[]>(`/api/completed-series?period=${period}`, []);
+  const [deviceStats, deviceStatsState] = useApiResource<DeviceWatchTime[]>(`/api/stats/devices?period=${period}`, []);
+  const [hourStats, hourStatsState] = useApiResource<HourWatchTime[]>(`/api/stats/hours?period=${period}`, []);
+  const [weekdayStats, weekdayStatsState] = useApiResource<WeekdayWatchTime[]>(`/api/stats/weekdays?period=${period}`, []);
+  const [longestSession, longestSessionState] = useApiResource<LongestSession | null>(`/api/stats/longest-session?period=${period}`, null);
+  const [mostActiveDay, mostActiveDayState] = useApiResource<MostActiveDay | null>(`/api/stats/most-active-day?period=${period}`, null);
 
   return <div className="content page-view">
-    <section className="period-tabs" aria-label="Zeitraum auswählen">{(["Woche", "Monat", "Jahr"] as Period[]).map((item) => <button className={period === item ? "selected" : ""} onClick={() => setPeriod(item)} key={item} aria-pressed={period === item}>{item}</button>)}</section>
-    {statistics?.periodStartsAt && statistics?.periodEndsAt && <p className="period-range">{dateRangeWording(statistics.periodStartsAt, statistics.periodEndsAt)}</p>}
-    <section className="week-grid" aria-label={`Kennzahlen für ${period}`}>
+    <section className="period-tabs" aria-label={translate("select_period")}>{(["week", "month", "year"] as Period[]).map((item) => <button className={period === item ? "selected" : ""} onClick={() => setPeriod(item)} key={item} aria-pressed={period === item}>{translate(periodLabelKey[item])}</button>)}</section>
+    {statistics?.periodStartsAt && statistics?.periodEndsAt && <p className="period-range">{dateRangeWording(statistics.periodStartsAt, statistics.periodEndsAt, lang)}</p>}
+    <section className="week-grid" aria-label={translate("metrics_for", { period: periodLabel })}>
       <RankCard rank={watchTimeRank} name={user.name} userId={user.id} />
-      <MetricCard icon="clock" tone="blue" value={statistics ? formatDuration(statistics.watchSeconds) : "—"} label="Sehzeit" detail={statistics ? comparisonText(statistics) : loadingCopy(state)} loading={state === "loading"} />
+      <MetricCard icon="clock" tone="blue" value={statistics ? formatDuration(statistics.watchSeconds, lang) : "—"} label={translate("watch_time")} detail={statistics ? comparisonText(statistics, lang) : loadingCopy(state, lang)} loading={state === "loading"} />
       <CompletedCard
         loading={state === "loading"}
         movies={statistics?.completedMovies}
@@ -704,24 +762,24 @@ function Stats({ user, onSelectMedia }: { user: { id: string; name: string }; on
     </section>
 
     <section className="chart-grid">
-      <BarChart title="Meistgesehene Genres" subtitle={statistics?.favouriteGenre ? `Dein Favorit: ${statistics.favouriteGenre}` : undefined} data={topGenres(watchedMovies, watchedSeries)} loading={watchedMoviesState === "loading" || watchedSeriesState === "loading"} />
-      <BarChart title="Aktivität nach Wochentag" data={weekdayStatsState === "ready" ? weekdayChartData(weekdayStats) : []} formatValue={formatDuration} loading={weekdayStatsState === "loading"} />
-      <BarChart title="Aktivität nach Uhrzeit" data={hourStatsState === "ready" ? daypartChartData(hourStats) : []} formatValue={formatDuration} loading={hourStatsState === "loading"} />
-      <BarChart title="Nach Gerät" data={deviceStatsState === "ready" ? deviceStats.slice(0, 6).map((device) => ({ label: device.deviceName, value: device.watchSeconds })) : []} formatValue={formatDuration} loading={deviceStatsState === "loading"} />
+      <BarChart title={translate("chart_top_genres")} subtitle={statistics?.favouriteGenre ? translate("chart_favourite_genre", { genre: statistics.favouriteGenre }) : undefined} data={topGenres(watchedMovies, watchedSeries)} loading={watchedMoviesState === "loading" || watchedSeriesState === "loading"} />
+      <BarChart title={translate("chart_by_weekday")} data={weekdayStatsState === "ready" ? weekdayChartData(weekdayStats, lang) : []} formatValue={(value) => formatDuration(value, lang)} loading={weekdayStatsState === "loading"} />
+      <BarChart title={translate("chart_by_hour")} data={hourStatsState === "ready" ? daypartChartData(hourStats, lang) : []} formatValue={(value) => formatDuration(value, lang)} loading={hourStatsState === "loading"} />
+      <BarChart title={translate("chart_by_device")} data={deviceStatsState === "ready" ? deviceStats.slice(0, 6).map((device) => ({ label: device.deviceName, value: device.watchSeconds })) : []} formatValue={(value) => formatDuration(value, lang)} loading={deviceStatsState === "loading"} />
     </section>
 
-    <section aria-label="Gesehene Inhalte">
-      <h2 className="watched-tiles-heading">Komplett angeschaut</h2>
+    <section aria-label={translate("watched_content")}>
+      <h2 className="watched-tiles-heading">{translate("fully_watched")}</h2>
       <div className="watched-tiles">
-        <WatchedCategoryTile label="Filme" items={watchedMovies} onOpen={() => setWatchedGridView("movies")} />
-        <WatchedCategoryTile label="Serien" items={watchedSeries} onOpen={() => setWatchedGridView("series")} />
+        <WatchedCategoryTile label={translate("movies")} items={watchedMovies} onOpen={() => setWatchedGridView("movies")} />
+        <WatchedCategoryTile label={translate("series")} items={watchedSeries} onOpen={() => setWatchedGridView("series")} />
       </div>
     </section>
 
-    {completedGridView === "movies" && <MediaGridScreen title={`Filme abgeschlossen · ${period}`} items={completedMovies} detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setCompletedGridView(null)} />}
-    {completedGridView === "series" && <MediaGridScreen title={`Serien abgeschlossen · ${period}`} items={completedSeries} detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setCompletedGridView(null)} />}
-    {watchedGridView === "movies" && <MediaGridScreen title="Gesehene Filme" items={watchedMovies} detail={(item) => watchedItemDetail(item)} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setWatchedGridView(null)} />}
-    {watchedGridView === "series" && <MediaGridScreen title="Gesehene Serien" items={watchedSeries} detail={(item) => watchedItemDetail(item)} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setWatchedGridView(null)} />}
+    {completedGridView === "movies" && <MediaGridScreen title={translate("grid_completed_movies", { period: periodLabel })} items={completedMovies} detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setCompletedGridView(null)} />}
+    {completedGridView === "series" && <MediaGridScreen title={translate("grid_completed_series", { period: periodLabel })} items={completedSeries} detail={(item) => item.genres[0] ?? ""} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setCompletedGridView(null)} />}
+    {watchedGridView === "movies" && <MediaGridScreen title={translate("grid_watched_movies")} items={watchedMovies} detail={(item) => watchedItemDetail(item, lang)} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setWatchedGridView(null)} />}
+    {watchedGridView === "series" && <MediaGridScreen title={translate("grid_watched_series")} items={watchedSeries} detail={(item) => watchedItemDetail(item, lang)} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} onClose={() => setWatchedGridView(null)} />}
   </div>;
 }
 
@@ -732,14 +790,15 @@ function MediaGridScreen<T extends { id: string; title: string; posterUrl?: stri
 }) {
   useEscapeKey(onClose);
   useBodyScrollLock();
+  const translate = useT();
 
   return <div className="media-detail-overlay media-grid-overlay" role="dialog" aria-modal="true" aria-label={title}>
     <div className="media-detail-scroll">
-      <button type="button" className="media-detail-close" onClick={onClose} aria-label="Schließen"><Icon name="close" /></button>
+      <button type="button" className="media-detail-close" onClick={onClose} aria-label={translate("close")}><Icon name="close" /></button>
       <h1 className="media-grid-title">{title}</h1>
       {headerExtra}
       {state === "loading" && <>
-        <p className="poster-status sr-only" role="status">Wird geladen …</p>
+        <p className="poster-status sr-only" role="status">{translate("loading")}</p>
         <div className="media-grid" aria-hidden="true">
           {Array.from({ length: 8 }, (_, index) => <div className="media-grid-entry" key={index}>
             <div className="poster wide skeleton" />
@@ -747,8 +806,8 @@ function MediaGridScreen<T extends { id: string; title: string; posterUrl?: stri
           </div>)}
         </div>
       </>}
-      {state === "error" && <p className="poster-status">Nicht verfügbar</p>}
-      {state !== "loading" && state !== "error" && items.length === 0 && <p className="poster-status">{emptyLabel ?? "Nichts vorhanden."}</p>}
+      {state === "error" && <p className="poster-status">{translate("not_available")}</p>}
+      {state !== "loading" && state !== "error" && items.length === 0 && <p className="poster-status">{emptyLabel ?? translate("nothing_here")}</p>}
       {items.length > 0 && <div className="media-grid">{items.map((item) => <button type="button" className="media-grid-entry" key={item.id} onClick={() => onSelect?.(item)}>
         <div className="poster wide" role="img" aria-label={itemTitle?.(item) ?? item.title}>
           <PosterImage src={item.posterUrl} fallback={item.title} />
@@ -785,6 +844,7 @@ const STREAMING_PROVIDERS: { id: string; name: string }[] = [
 ];
 
 function Requests({ onSelectMedia }: { onSelectMedia: (selection: MediaSelection) => void }) {
+  const translate = useT();
   const [trending, trendingState] = useDiscoverList("/api/discover/trending");
   const [popularMovies, popularMoviesState] = useDiscoverList("/api/discover/movies/popular");
   const [upcomingMovies, upcomingMoviesState] = useDiscoverList("/api/discover/movies/upcoming");
@@ -820,35 +880,35 @@ function Requests({ onSelectMedia }: { onSelectMedia: (selection: MediaSelection
       <input
         type="search"
         className="search-input"
-        placeholder="Filme oder Serien suchen …"
+        placeholder={translate("search_placeholder")}
         value={query}
         onChange={(event) => setQuery(event.target.value)}
-        aria-label="Bei Seerr suchen"
+        aria-label={translate("search_aria")}
       />
-      <button type="submit" className="search-button" disabled={query.trim() === ""}>Suchen</button>
+      <button type="submit" className="search-button" disabled={query.trim() === ""}>{translate("search_submit")}</button>
     </form>
     {searchScreenQuery !== null && <MediaGridScreen
-      title={`Suchergebnisse für „${searchScreenQuery}“`}
+      title={translate("search_results_for", { query: searchScreenQuery })}
       items={searchResults}
       state={searchState}
-      emptyLabel="Keine Treffer."
-      detail={(item) => item.mediaType === "tv" ? "Serie" : "Film"}
+      emptyLabel={translate("no_results")}
+      detail={(item) => translate(item.mediaType === "tv" ? "media_type_series" : "media_type_movie")}
       onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })}
       onClose={() => setSearchScreenQuery(null)}
       headerExtra={<form className="search-form media-grid-search" onSubmit={(event) => { event.preventDefault(); runSearch(query); }}>
-        <input type="search" className="search-input" placeholder="Filme oder Serien suchen …" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Bei Seerr suchen" />
-        <button type="submit" className="search-button" disabled={query.trim() === ""}>Suchen</button>
+        <input type="search" className="search-input" placeholder={translate("search_placeholder")} value={query} onChange={(event) => setQuery(event.target.value)} aria-label={translate("search_aria")} />
+        <button type="submit" className="search-button" disabled={query.trim() === ""}>{translate("search_submit")}</button>
       </form>}
     />}
 
-    <PosterRow title="Im Trend" eyebrow="SEERR · TMDB" items={trending} state={trendingState} emptyLabel="Nichts im Trend." detail={(item) => item.mediaType === "tv" ? "Serie" : "Film"} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />
-    <PosterRow title="Beliebte Filme" eyebrow="SEERR · TMDB" items={popularMovies} state={popularMoviesState} emptyLabel="Keine Daten." detail={() => "Beliebt"} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />
-    <PosterRow title="Demnächst erscheinende Filme" eyebrow="SEERR · TMDB" items={upcomingMovies} state={upcomingMoviesState} emptyLabel="Keine Daten." detail={() => "Demnächst"} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />
-    <PosterRow title="Beliebte Serien" eyebrow="SEERR · TMDB" items={popularSeries} state={popularSeriesState} emptyLabel="Keine Daten." detail={() => "Beliebt"} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />
-    <PosterRow title="Demnächst erscheinende Serien" eyebrow="SEERR · TMDB" items={upcomingSeries} state={upcomingSeriesState} emptyLabel="Keine Daten." detail={() => "Demnächst"} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />
+    <PosterRow title={translate("row_trending")} eyebrow="SEERR · TMDB" items={trending} state={trendingState} emptyLabel={translate("row_trending_empty")} detail={(item) => translate(item.mediaType === "tv" ? "media_type_series" : "media_type_movie")} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />
+    <PosterRow title={translate("row_popular_movies")} eyebrow="SEERR · TMDB" items={popularMovies} state={popularMoviesState} emptyLabel={translate("no_data")} detail={() => translate("label_popular")} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />
+    <PosterRow title={translate("row_upcoming_movies")} eyebrow="SEERR · TMDB" items={upcomingMovies} state={upcomingMoviesState} emptyLabel={translate("no_data")} detail={() => translate("label_upcoming")} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />
+    <PosterRow title={translate("row_popular_series")} eyebrow="SEERR · TMDB" items={popularSeries} state={popularSeriesState} emptyLabel={translate("no_data")} detail={() => translate("label_popular")} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />
+    <PosterRow title={translate("row_upcoming_series")} eyebrow="SEERR · TMDB" items={upcomingSeries} state={upcomingSeriesState} emptyLabel={translate("no_data")} detail={() => translate("label_upcoming")} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />
 
     <section className="poster-section">
-      <div className="section-heading"><div><p className="eyebrow">WO STREAMEN?</p><h2>Anbieter</h2></div></div>
+      <div className="section-heading"><div><p className="eyebrow">{translate("providers_eyebrow")}</p><h2>{translate("providers")}</h2></div></div>
       <div className="provider-scroller">
         {STREAMING_PROVIDERS.map((provider) => <button type="button" key={provider.id} className="provider-chip" onClick={() => setProviderId(provider.id)}>{provider.name}</button>)}
       </div>
@@ -857,8 +917,8 @@ function Requests({ onSelectMedia }: { onSelectMedia: (selection: MediaSelection
       title={selectedProvider.name}
       items={providerItems}
       state={providerItemsState}
-      emptyLabel="Keine Titel gefunden."
-      detail={(item) => item.mediaType === "tv" ? "Serie" : "Film"}
+      emptyLabel={translate("no_titles_found")}
+      detail={(item) => translate(item.mediaType === "tv" ? "media_type_series" : "media_type_movie")}
       onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })}
       onClose={() => setProviderId(null)}
     />}
@@ -868,15 +928,18 @@ function Requests({ onSelectMedia }: { onSelectMedia: (selection: MediaSelection
 const OVERVIEW_CLAMP_THRESHOLD = 220;
 
 function OverviewText({ text }: { text: string }) {
+  const translate = useT();
   const [expanded, setExpanded] = useState(false);
   const isLong = text.length > OVERVIEW_CLAMP_THRESHOLD;
   return <>
     <p className={isLong && !expanded ? "media-detail-overview-text clamped" : "media-detail-overview-text"}>{text}</p>
-    {isLong && <button type="button" className="text-button overview-toggle" onClick={() => setExpanded((value) => !value)}>{expanded ? "Weniger anzeigen" : "Mehr anzeigen"}</button>}
+    {isLong && <button type="button" className="text-button overview-toggle" onClick={() => setExpanded((value) => !value)}>{translate(expanded ? "show_less" : "show_more")}</button>}
   </>;
 }
 function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreated, onHiddenChanged }: { selection: MediaSelection; seerrConfigured: boolean; onClose: () => void; onRequestCreated: () => void; onHiddenChanged?: () => void }) {
   useBodyScrollLock();
+  const lang = useLang();
+  const translate = useT();
   const [detail, setDetail] = useState<MediaDetail | null>(null);
   const [state, setState] = useState<LoadState>("loading");
   const [selectedSeasons, setSelectedSeasons] = useState<number[]>([]);
@@ -1016,7 +1079,7 @@ function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreat
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose, requestModalOpen]);
 
-  const status = detail ? mediaStatus(detail) : null;
+  const status = detail ? mediaStatus(detail, lang) : null;
   const crewAndCast = detail ? [...(detail.crew ?? []), ...(detail.cast ?? [])] : [];
   const embySeasons = (detail?.seasons?.filter((season): season is MediaSeason => !isRequestableSeason(season)) ?? []).slice().sort((a, b) => a.indexNumber - b.indexNumber);
   // Seerr's own MediaStatus enum: 4 = partially available. Only for that
@@ -1051,9 +1114,9 @@ function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreat
   // already-requested one instead of staying stuck on "Angefragt ✓".
   const showRequestConfirmation = requestState === "done" || locallyRequestedMovie
     || (mediaType === "tv" && locallyRequestedSeasons.length > 0 && requestableSeasons.length === 0 && seerrRequestableSeasons.length > 0);
-  const seerrAvailabilityLabel = detail?.mediaStatus === seerrStatusAvailable ? "Verfügbar"
-    : detail?.mediaStatus === seerrStatusPartiallyAvailable ? "Teilweise verfügbar"
-    : detail?.mediaStatus === seerrStatusPending || detail?.mediaStatus === seerrStatusProcessing ? "Bereits angefragt"
+  const seerrAvailabilityLabel = detail?.mediaStatus === seerrStatusAvailable ? translate("status_available")
+    : detail?.mediaStatus === seerrStatusPartiallyAvailable ? translate("status_partially_available")
+    : detail?.mediaStatus === seerrStatusPending || detail?.mediaStatus === seerrStatusProcessing ? translate("status_already_requested")
     : null;
 
   const toggleSeason = (seasonNumber: number) => {
@@ -1091,23 +1154,23 @@ function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreat
     }
   };
 
-  return <div className="media-detail-overlay" role="dialog" aria-modal="true" aria-label={detail?.title ?? "Details"}>
+  return <div className="media-detail-overlay" role="dialog" aria-modal="true" aria-label={detail?.title ?? translate("details")}>
     {detail && <div className="media-detail-backdrop" style={detail.backdropUrl ? { backgroundImage: `url(${detail.backdropUrl})` } : undefined} />}
     <div className="media-detail-scroll">
-      <button type="button" className="media-detail-close" onClick={onClose} aria-label="Schließen"><Icon name="close" /></button>
-      {state === "loading" && <p className="poster-status media-detail-status" role="status">Wird geladen …</p>}
-      {state === "error" && <p className="poster-status media-detail-status">Details nicht verfügbar.</p>}
+      <button type="button" className="media-detail-close" onClick={onClose} aria-label={translate("close")}><Icon name="close" /></button>
+      {state === "loading" && <p className="poster-status media-detail-status" role="status">{translate("loading")}</p>}
+      {state === "error" && <p className="poster-status media-detail-status">{translate("details_unavailable")}</p>}
       {detail && <div className="media-detail">
         <div className="media-detail-above-fold">
         <div className="media-detail-hero">
           <div className="media-detail-poster"><PosterImage src={detail.posterUrl} fallback={detail.title} lazy={false} /></div>
           <div className="media-detail-info">
             {status && <span className="media-status-badge">{status}</span>}
-            {detail.currentSeasonNumber !== undefined && detail.currentEpisodeNumber !== undefined && <span className="media-status-badge media-status-badge-progress">Staffel {detail.currentSeasonNumber} · Folge {detail.currentEpisodeNumber}</span>}
+            {detail.currentSeasonNumber !== undefined && detail.currentEpisodeNumber !== undefined && <span className="media-status-badge media-status-badge-progress">{translate("season_episode_badge", { season: detail.currentSeasonNumber, episode: detail.currentEpisodeNumber })}</span>}
             <h1>{detail.title}{detail.year ? ` (${detail.year})` : ""}</h1>
             <p className="media-detail-meta">
               {detail.officialRating && <span>{detail.officialRating}</span>}
-              {detail.runtimeMinutes > 0 && <span>{detail.runtimeMinutes} Minuten</span>}
+              {detail.runtimeMinutes > 0 && <span>{translate("minutes_long", { minutes: detail.runtimeMinutes })}</span>}
               {detail.genres?.length > 0 && <span>{detail.genres.join(", ")}</span>}
             </p>
             {(detail.communityRating > 0 || detail.imdbRating || detail.rottenTomatoesRating) && <div className="media-detail-ratings">
@@ -1119,20 +1182,20 @@ function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreat
         </div>
         {(detail.status || detail.releaseDate || (detail.studios && detail.studios.length > 0)) && <section className="media-detail-facts">
           <dl>
-            {detail.status && <div><dt>Status</dt><dd>{detail.status}</dd></div>}
-            {detail.releaseDate && <div><dt>Erscheinungsdatum</dt><dd>{formatFullDate(detail.releaseDate)}</dd></div>}
-            {detail.studios && detail.studios.length > 0 && <div><dt>Studios</dt><dd>{detail.studios.join(", ")}</dd></div>}
+            {detail.status && <div><dt>{translate("fact_status")}</dt><dd>{detail.status}</dd></div>}
+            {detail.releaseDate && <div><dt>{translate("fact_release_date")}</dt><dd>{formatFullDate(detail.releaseDate, lang)}</dd></div>}
+            {detail.studios && detail.studios.length > 0 && <div><dt>{translate("fact_studios")}</dt><dd>{detail.studios.join(", ")}</dd></div>}
           </dl>
         </section>}
         <div className="tracking-bar">
           {selection.source === "emby" && <>
-            <div className="star-rating" role="radiogroup" aria-label="Deine Bewertung">
+            <div className="star-rating" role="radiogroup" aria-label={translate("your_rating")}>
               {[1, 2, 3, 4, 5].map((value) => <button
                 key={value}
                 type="button"
                 className={value <= tracking.rating ? "star-button filled" : "star-button"}
                 aria-pressed={value <= tracking.rating}
-                aria-label={`${value} von 5 Sternen`}
+                aria-label={translate("stars_of_five", { value })}
                 onClick={() => saveTracking({ ...tracking, rating: value === tracking.rating ? 0 : value })}
               >★</button>)}
             </div>
@@ -1142,21 +1205,21 @@ function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreat
               onClick={toggleFavorite}
               disabled={favoriteBusy}
               aria-pressed={favorite}
-              aria-label={favorite ? "Als Favorit in Emby entfernen" : "Als Favorit in Emby markieren"}
-              title={favorite ? "Als Favorit in Emby entfernen" : "Als Favorit in Emby markieren"}
+              aria-label={translate(favorite ? "favorite_remove" : "favorite_add")}
+              title={translate(favorite ? "favorite_remove" : "favorite_add")}
             ><Icon name="heart" /></button>
           </>}
           <label className="watchlist-toggle">
-            <span>Merkliste</span>
+            <span>{translate("watchlist")}</span>
             <span className="toggle-switch">
               <input type="checkbox" checked={tracking.onWatchlist} onChange={() => saveTracking({ ...tracking, onWatchlist: !tracking.onWatchlist })} />
               <span className="toggle-track"><span className="toggle-thumb" /></span>
             </span>
           </label>
         </div>
-        {selection.source === "emby" && detail.isSeries && status !== "Angesehen" && <div className="request-row">
+        {selection.source === "emby" && detail.isSeries && !isFullyWatched(detail) && <div className="request-row">
           <button type="button" className="request-button secondary" onClick={markAsWatched} disabled={markPlayedBusy}>
-            Als gesehen markieren
+            {translate("mark_as_watched")}
           </button>
         </div>}
         {selection.source !== "emby" && (canRequest || seerrAvailabilityLabel || showRequestConfirmation || !seerrConfigured) && <div className="request-row">
@@ -1164,16 +1227,16 @@ function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreat
           {/* Ohne Seerr bleibt der Knopf sichtbar, sagt aber warum er nichts
               tut — sonst wirkt es, als fehle die Funktion. */}
           {!seerrConfigured
-            ? <><button type="button" className="request-button" disabled aria-describedby="request-unconfigured">Anfragen</button>
-                <p id="request-unconfigured" className="request-unconfigured">Dafür muss Seerr in der Verwaltung eingerichtet sein.</p></>
+            ? <><button type="button" className="request-button" disabled aria-describedby="request-unconfigured">{translate("request")}</button>
+                <p id="request-unconfigured" className="request-unconfigured">{translate("request_unconfigured")}</p></>
             : (canRequest || showRequestConfirmation) && (showRequestConfirmation
-              ? <p className="request-confirmation">Angefragt ✓</p>
-              : <button type="button" className="request-button" onClick={() => setRequestModalOpen(true)}>Anfragen</button>)}
+              ? <p className="request-confirmation">{translate("requested_confirmation")}</p>
+              : <button type="button" className="request-button" onClick={() => setRequestModalOpen(true)}>{translate("request")}</button>)}
         </div>}
-        {detail.overview && <section className="media-detail-overview"><h2>Übersicht</h2><OverviewText text={detail.overview} /></section>}
+        {detail.overview && <section className="media-detail-overview"><h2>{translate("overview")}</h2><OverviewText text={detail.overview} /></section>}
         </div>
         {embySeasons.length > 0 && <section className="media-detail-seasons">
-          <h2>Staffeln</h2>
+          <h2>{translate("seasons")}</h2>
           <div className="poster-scroller">{embySeasons.map((season) => {
             const progress = season.totalEpisodes > 0 ? Math.round((season.watchedEpisodes / season.totalEpisodes) * 100) : 0;
             return <article className="poster-entry" key={season.id}>
@@ -1182,12 +1245,12 @@ function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreat
                 <div className="poster-progress"><div className="poster-progress-fill" style={{ width: `${progress}%` }} /></div>
               </div>
               <strong>{season.title}</strong>
-              <small>{season.played ? "Angesehen" : `${season.watchedEpisodes} von ${season.totalEpisodes} Folgen`}</small>
+              <small>{season.played ? translate("watched") : translate("episodes_of", { watched: season.watchedEpisodes, total: season.totalEpisodes })}</small>
             </article>;
           })}</div>
         </section>}
         {crewAndCast.length > 0 && <section className="media-detail-cast">
-          <h2>Besetzung</h2>
+          <h2>{translate("cast")}</h2>
           <div className="cast-grid">
             {crewAndCast.slice(0, 12).map((person, index) => <div className="cast-entry" key={`${person.name}-${index}`}>
               <div className="cast-avatar"><PosterImage src={person.imageUrl} fallback={person.name.charAt(0)} /></div>
@@ -1198,30 +1261,30 @@ function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreat
       </div>}
     </div>
     {detail && requestModalOpen && <div className="request-modal-backdrop" role="presentation" onClick={() => requestState !== "submitting" && setRequestModalOpen(false)}>
-      <div className="request-modal" role="dialog" aria-modal="true" aria-label={`${detail.title} anfragen`} onClick={(event) => event.stopPropagation()}>
+      <div className="request-modal" role="dialog" aria-modal="true" aria-label={translate("request_title_aria", { title: detail.title })} onClick={(event) => event.stopPropagation()}>
         <div className="request-modal-head">
           <div className="request-modal-poster"><PosterImage src={detail.posterUrl} fallback="" lazy={false} /></div>
-          <div><p className="eyebrow">ANFRAGE</p><h3>{detail.title}</h3></div>
+          <div><p className="eyebrow">{translate("request_eyebrow")}</p><h3>{detail.title}</h3></div>
         </div>
         {requestableSeasons.length > 0 && <div className="season-list">
           {requestableSeasons.map((season) => <label className="season-toggle-row" key={season.seasonNumber}>
-            <span>Staffel {season.seasonNumber} <small>({season.episodeCount} Folgen)</small></span>
+            <span>{translate("season_number", { number: season.seasonNumber })} <small>{translate("season_episode_count", { count: season.episodeCount })}</small></span>
             <span className="toggle-switch">
               <input type="checkbox" checked={selectedSeasons.includes(season.seasonNumber)} onChange={() => toggleSeason(season.seasonNumber)} />
               <span className="toggle-track"><span className="toggle-thumb" /></span>
             </span>
           </label>)}
         </div>}
-        {requestState === "error" && <p className="request-error">Anfrage fehlgeschlagen. Bitte erneut versuchen.</p>}
+        {requestState === "error" && <p className="request-error">{translate("request_failed")}</p>}
         <div className="request-modal-actions">
-          <button type="button" className="request-button secondary" disabled={requestState === "submitting"} onClick={() => setRequestModalOpen(false)}>Abbrechen</button>
+          <button type="button" className="request-button secondary" disabled={requestState === "submitting"} onClick={() => setRequestModalOpen(false)}>{translate("cancel")}</button>
           <button
             type="button"
             className="request-button"
             disabled={requestState === "submitting" || (requestableSeasons.length > 0 && selectedSeasons.length === 0)}
             onClick={submitRequest}
           >
-            {requestState === "submitting" ? "Wird angefragt …" : "Jetzt anfragen"}
+            {translate(requestState === "submitting" ? "requesting" : "request_now")}
           </button>
         </div>
       </div>
@@ -1229,14 +1292,21 @@ function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreat
   </div>;
 }
 
-function mediaStatus(detail: MediaDetail) {
+function mediaStatus(detail: MediaDetail, lang: Lang) {
   if (detail.isSeries) {
     if (!detail.totalEpisodes) return null;
-    if ((detail.watchedEpisodes ?? 0) >= detail.totalEpisodes) return "Angesehen";
-    return `${detail.watchedEpisodes ?? 0} von ${detail.totalEpisodes} Folgen`;
+    if (isFullyWatched(detail)) return t(lang, "watched");
+    return t(lang, "episodes_of", { watched: detail.watchedEpisodes ?? 0, total: detail.totalEpisodes });
   }
-  if (detail.played !== undefined) return detail.played ? "Angesehen" : "Verfügbar";
+  if (detail.played !== undefined) return t(lang, detail.played ? "watched" : "status_available");
   return null;
+}
+
+// Split out of mediaStatus so "is this series finished?" stays a data question
+// — comparing the rendered label against "Angesehen" would silently stop
+// matching the moment the UI language changes.
+function isFullyWatched(detail: MediaDetail) {
+  return !!detail.totalEpisodes && (detail.watchedEpisodes ?? 0) >= detail.totalEpisodes;
 }
 
 function useTrackingList(path: string) {
@@ -1253,6 +1323,8 @@ function useTrackingList(path: string) {
 }
 
 function Profile({ user, userProfile, totalRequests, onSelectMedia }: { user: CurrentUser; userProfile: UserProfile | null; totalRequests: number | null; onSelectMedia: (selection: MediaSelection) => void }) {
+  const lang = useLang();
+  const translate = useT();
   const [signingOut, setSigningOut] = useState(false);
   const [watchlist, watchlistState] = useTrackingList("/api/tracking/watchlist");
   const [ratings, ratingsState] = useTrackingList("/api/tracking/ratings");
@@ -1265,19 +1337,19 @@ function Profile({ user, userProfile, totalRequests, onSelectMedia }: { user: Cu
     window.location.reload();
   };
   return <div className="content page-view profile">
-    <section className="profile-head"><div className="avatar big"><UserAvatar name={user.name} userId={user.id} /></div><div><p className="eyebrow">EMBY-PROFIL</p><h2>{user.name}</h2></div></section>
+    <section className="profile-head"><div className="avatar big"><UserAvatar name={user.name} userId={user.id} /></div><div><p className="eyebrow">{translate("profile_eyebrow")}</p><h2>{user.name}</h2></div></section>
     <section className="media-detail-facts profile-facts">
       <dl>
-        <div><dt>Mitglied seit</dt><dd>{userProfile ? formatFullDate(userProfile.memberSince) : "—"}</dd></div>
-        <div><dt>Zuletzt aktiv</dt><dd>{userProfile ? formatFullDate(userProfile.lastActiveDate) : "—"}</dd></div>
-        <div><dt>Letzter Login</dt><dd>{userProfile ? formatFullDate(userProfile.lastLoginDate) : "—"}</dd></div>
-        {user.features.requests && <div><dt>Anfragen insgesamt</dt><dd>{totalRequests !== null ? totalRequests : "—"}</dd></div>}
-        <div><dt>Version</dt><dd>v{APP_VERSION}</dd></div>
+        <div><dt>{translate("member_since")}</dt><dd>{userProfile ? formatFullDate(userProfile.memberSince, lang) : "—"}</dd></div>
+        <div><dt>{translate("last_active")}</dt><dd>{userProfile ? formatFullDate(userProfile.lastActiveDate, lang) : "—"}</dd></div>
+        <div><dt>{translate("last_login")}</dt><dd>{userProfile ? formatFullDate(userProfile.lastLoginDate, lang) : "—"}</dd></div>
+        {user.features.requests && <div><dt>{translate("total_requests")}</dt><dd>{totalRequests !== null ? totalRequests : "—"}</dd></div>}
+        <div><dt>{translate("version")}</dt><dd>v{APP_VERSION}</dd></div>
       </dl>
     </section>
-    <PosterRow title="Meine Merkliste" eyebrow="MEINE LISTEN" items={withId(watchlist)} state={watchlistState} emptyLabel="Noch nichts auf der Merkliste." detail={() => "Merkliste"} onSelect={(item) => onSelectMedia(toSelection(item))} />
-    <PosterRow title="Meine Bewertungen" items={withId(ratings)} state={ratingsState} emptyLabel="Noch keine Bewertungen." detail={(item) => "★".repeat(item.rating ?? 0)} onSelect={(item) => onSelectMedia(toSelection(item))} />
-    <button className="logout-button" onClick={logout} disabled={signingOut}>{signingOut ? "Abmeldung läuft …" : "Abmelden"}</button>
+    <PosterRow title={translate("my_watchlist")} eyebrow={translate("my_lists_eyebrow")} items={withId(watchlist)} state={watchlistState} emptyLabel={translate("watchlist_empty")} detail={() => translate("watchlist")} onSelect={(item) => onSelectMedia(toSelection(item))} />
+    <PosterRow title={translate("my_ratings")} items={withId(ratings)} state={ratingsState} emptyLabel={translate("ratings_empty")} detail={(item) => "★".repeat(item.rating ?? 0)} onSelect={(item) => onSelectMedia(toSelection(item))} />
+    <button className="logout-button" onClick={logout} disabled={signingOut}>{translate(signingOut ? "signing_out" : "sign_out")}</button>
   </div>;
 }
 
@@ -1287,12 +1359,13 @@ type AdminSettingsView = {
   newForYouLibraryIds: string[]; watchedLibraryIds: string[];
   seerr: ServiceView; radarr: ServiceView; sonarr: ServiceView; tmdb: ServiceView; omdb: ServiceView;
   comingSoonRegion: string; comingSoonDaysAhead: number;
+  language: Lang;
 };
 type DailyActivity = { date: string; requestCount: number; activeUsers: number };
 type ServiceDraft = { enabled: boolean; baseUrl: string; apiKey: string };
 const SETUP_INTRO_SEEN_KEY = "emby-insights-setup-intro-seen";
 
-const activityDayFormatter = new Intl.DateTimeFormat("de-DE", { weekday: "short" });
+const activityDayFormatters = localeFormatter({ weekday: "short" });
 
 // ActivityChart answers "is Emby Insights actually being used?" — grouped
 // columns, one shared count axis (never two y-scales for two count series
@@ -1300,41 +1373,43 @@ const activityDayFormatter = new Intl.DateTimeFormat("de-DE", { weekday: "short"
 // non-visual/accessible path since a hand-rolled SVG-free bar chart has no
 // other way to expose exact values to a screen reader.
 function ActivityChart({ data, state }: { data: DailyActivity[]; state: LoadState }) {
+  const lang = useLang();
+  const translate = useT();
   const max = Math.max(1, ...data.flatMap((day) => [day.activeUsers, day.requestCount]));
   const hasData = data.some((day) => day.activeUsers > 0 || day.requestCount > 0);
-  return <section className="admin-section activity-chart-card" aria-label="Aktivität">
-    <div className="section-heading"><div><p className="eyebrow">AKTIVITÄT</p><h2>Aktive Nutzer &amp; Seerr-Anfragen (letzte 7 Tage)</h2></div></div>
+  return <section className="admin-section activity-chart-card" aria-label={translate("activity")}>
+    <div className="section-heading"><div><p className="eyebrow">{translate("activity_eyebrow")}</p><h2>{translate("activity_heading")}</h2></div></div>
     {state === "loading" && <div className="activity-chart" aria-hidden="true">
-      <p className="sr-only" role="status">Wird geladen …</p>
+      <p className="sr-only" role="status">{translate("loading")}</p>
       <div className="activity-chart-columns">{Array.from({ length: 7 }, (_, index) => <div className="activity-chart-column" key={index}>
         <div className="activity-chart-bars"><span className="skeleton activity-chart-bar-skeleton" /><span className="skeleton activity-chart-bar-skeleton" /></div>
         <span className="skeleton skeleton-line-xs" />
       </div>)}</div>
     </div>}
-    {state === "error" && <p className="poster-status">Aktivitätsdaten nicht verfügbar.</p>}
-    {state === "ready" && !hasData && <p className="poster-status">Noch keine Aktivität in den letzten 7 Tagen.</p>}
+    {state === "error" && <p className="poster-status">{translate("activity_unavailable")}</p>}
+    {state === "ready" && !hasData && <p className="poster-status">{translate("activity_empty")}</p>}
     {state === "ready" && hasData && <>
       <div className="activity-chart-legend">
-        <span className="activity-legend-item"><span className="activity-legend-swatch activity-swatch-users" /> Aktive Nutzer</span>
-        <span className="activity-legend-item"><span className="activity-legend-swatch activity-swatch-requests" /> Seerr-Anfragen</span>
+        <span className="activity-legend-item"><span className="activity-legend-swatch activity-swatch-users" /> {translate("legend_active_users")}</span>
+        <span className="activity-legend-item"><span className="activity-legend-swatch activity-swatch-requests" /> {translate("legend_seerr_requests")}</span>
       </div>
-      <div className="activity-chart-columns" role="img" aria-label="Balkendiagramm: aktive Nutzer und ausgelöste Seerr-Anfragen pro Tag über die letzten 7 Tage">
+      <div className="activity-chart-columns" role="img" aria-label={translate("activity_chart_aria")}>
         {data.map((day) => {
-          const weekday = activityDayFormatter.format(new Date(`${day.date}T00:00:00`));
+          const weekday = activityDayFormatters[lang].format(new Date(`${day.date}T00:00:00`));
           return <div className="activity-chart-column" key={day.date}>
             <div className="activity-chart-bars">
-              <div className="activity-chart-bar activity-bar-users" style={{ height: `${(day.activeUsers / max) * 100}%` }} title={`${weekday}: ${day.activeUsers} aktive Nutzer`} />
-              <div className="activity-chart-bar activity-bar-requests" style={{ height: `${(day.requestCount / max) * 100}%` }} title={`${weekday}: ${day.requestCount} Seerr-Anfragen`} />
+              <div className="activity-chart-bar activity-bar-users" style={{ height: `${(day.activeUsers / max) * 100}%` }} title={translate("activity_bar_users", { weekday, count: day.activeUsers })} />
+              <div className="activity-chart-bar activity-bar-requests" style={{ height: `${(day.requestCount / max) * 100}%` }} title={translate("activity_bar_requests", { weekday, count: day.requestCount })} />
             </div>
             <span className="activity-chart-day-label">{weekday}</span>
           </div>;
         })}
       </div>
       <details className="activity-chart-table-details">
-        <summary>Als Tabelle anzeigen</summary>
+        <summary>{translate("show_as_table")}</summary>
         <table className="activity-chart-table">
-          <thead><tr><th scope="col">Tag</th><th scope="col">Aktive Nutzer</th><th scope="col">Seerr-Anfragen</th></tr></thead>
-          <tbody>{data.map((day) => <tr key={day.date}><th scope="row">{formatFullDate(day.date)}</th><td>{day.activeUsers}</td><td>{day.requestCount}</td></tr>)}</tbody>
+          <thead><tr><th scope="col">{translate("table_day")}</th><th scope="col">{translate("legend_active_users")}</th><th scope="col">{translate("legend_seerr_requests")}</th></tr></thead>
+          <tbody>{data.map((day) => <tr key={day.date}><th scope="row">{formatFullDate(day.date, lang)}</th><td>{day.activeUsers}</td><td>{day.requestCount}</td></tr>)}</tbody>
         </table>
       </details>
     </>}
@@ -1345,13 +1420,14 @@ function ActivityChart({ data, state }: { data: DailyActivity[]; state: LoadStat
 // with a GUI for library selection and the four optional integrations.
 // Nothing here is enforced client-side only — every /api/admin/* call is
 // re-checked server-side (see requireAdmin in the backend).
-function AdminSettings() {
+function AdminSettings({ onLanguageChange }: { onLanguageChange: (lang: Lang) => void }) {
+  const translate = useT();
   const [activity, activityState] = useApiResource<DailyActivity[]>("/api/admin/activity", []);
   const [settings, settingsState, refetchSettings] = useApiResource<AdminSettingsView | null>("/api/admin/settings", null);
   const [libraries, librariesState] = useApiResource<EmbyLibrary[]>("/api/admin/libraries", []);
 
-  if (settingsState === "loading") return <div className="content page-view admin-page"><p className="poster-status" role="status">Wird geladen …</p></div>;
-  if (settingsState === "error" || !settings) return <div className="content page-view admin-page"><p className="poster-status">Einstellungen nicht verfügbar.</p></div>;
+  if (settingsState === "loading") return <div className="content page-view admin-page"><p className="poster-status" role="status">{translate("loading")}</p></div>;
+  if (settingsState === "error" || !settings) return <div className="content page-view admin-page"><p className="poster-status">{translate("settings_unavailable")}</p></div>;
 
   // A successful save refetches settings. Remounting the editable form then
   // deliberately resets its draft from that fresh server response.
@@ -1361,19 +1437,22 @@ function AdminSettings() {
     activityState={activityState}
     settings={settings}
     refetchSettings={refetchSettings}
+    onLanguageChange={onLanguageChange}
     libraries={libraries}
     librariesState={librariesState}
   />;
 }
 
-function AdminSettingsForm({ activity, activityState, settings, refetchSettings, libraries, librariesState }: {
+function AdminSettingsForm({ activity, activityState, settings, refetchSettings, onLanguageChange, libraries, librariesState }: {
   activity: DailyActivity[];
   activityState: LoadState;
   settings: AdminSettingsView;
   refetchSettings: () => void;
+  onLanguageChange: (lang: Lang) => void;
   libraries: EmbyLibrary[];
   librariesState: LoadState;
 }) {
+  const translate = useT();
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
@@ -1389,6 +1468,7 @@ function AdminSettingsForm({ activity, activityState, settings, refetchSettings,
   const [omdb, setOmdb] = useState<ServiceDraft>(() => ({ enabled: settings.omdb.enabled, baseUrl: "", apiKey: "" }));
   const [comingSoonRegion, setComingSoonRegion] = useState(() => settings.comingSoonRegion || "DE");
   const [comingSoonDaysAhead, setComingSoonDaysAhead] = useState(() => settings.comingSoonDaysAhead || 28);
+  const [language, setLanguage] = useState<Lang>(() => isLang(settings.language) ? settings.language : "de");
 
   const dismissIntro = () => {
     window.localStorage.setItem(SETUP_INTRO_SEEN_KEY, "1");
@@ -1415,10 +1495,14 @@ function AdminSettingsForm({ activity, activityState, settings, refetchSettings,
           omdb: { enabled: omdb.enabled, apiKey: omdb.apiKey },
           comingSoonRegion,
           comingSoonDaysAhead,
+          language,
         }),
       });
       if (!response.ok) throw new Error("saving settings failed");
       setSavedAt(Date.now());
+      // Lifts the saved language to the root component so the whole tree
+      // relabels immediately, without waiting for a reload or a fresh /api/me.
+      onLanguageChange(language);
       refetchSettings();
     } catch {
       setSaveError(true);
@@ -1429,88 +1513,106 @@ function AdminSettingsForm({ activity, activityState, settings, refetchSettings,
 
   return <div className="content page-view admin-page">
     {showIntro && <section className="admin-intro-banner">
-      <p className="eyebrow">WILLKOMMEN</p>
-      <h2>Du bist jetzt Admin von Emby Insights</h2>
-      <p>Richte hier ein, welche Bibliotheken genutzt werden und welche optionalen Dienste (Seerr, Radarr, Sonarr, TMDB) angebunden sind. Alles ist optional — ohne Einrichtung bleiben die zugehörigen Bereiche einfach ausgeblendet.</p>
-      <button type="button" className="request-button" onClick={dismissIntro}>Verstanden</button>
+      <p className="eyebrow">{translate("welcome_eyebrow")}</p>
+      <h2>{translate("admin_intro_title")}</h2>
+      <p>{translate("admin_intro_body")}</p>
+      <button type="button" className="request-button" onClick={dismissIntro}>{translate("got_it")}</button>
     </section>}
 
     <ActivityChart data={activity} state={activityState} />
 
-    <section className="admin-section" aria-label="Bibliotheken">
-      <div className="section-heading"><div><p className="eyebrow">BIBLIOTHEKEN</p><h2>Welche Bibliotheken sollen genutzt werden?</h2></div></div>
-      {librariesState === "loading" && <p className="poster-status" role="status">Bibliotheken werden geladen …</p>}
-      {librariesState === "error" && <p className="poster-status">Emby-Bibliotheken nicht verfügbar.</p>}
-      {librariesState === "ready" && libraries.length === 0 && <p className="poster-status">Keine Bibliotheken gefunden.</p>}
+    <section className="admin-section" aria-label={translate("libraries")}>
+      <div className="section-heading"><div><p className="eyebrow">{translate("libraries_eyebrow")}</p><h2>{translate("libraries_heading")}</h2></div></div>
+      {librariesState === "loading" && <p className="poster-status" role="status">{translate("libraries_loading")}</p>}
+      {librariesState === "error" && <p className="poster-status">{translate("libraries_unavailable")}</p>}
+      {librariesState === "ready" && libraries.length === 0 && <p className="poster-status">{translate("libraries_none")}</p>}
       {libraries.length > 0 && <div className="admin-service-grid">
         <LibraryTile
-          title="Neu für dich" description="Bibliotheken, aus denen kürzlich hinzugefügte, ungesehene Titel vorgeschlagen werden."
+          title={translate("row_new_for_you")} description={translate("library_new_for_you_description")}
           selectedCount={newForYouIds.length} onOpen={() => setLibraryPicker("newForYou")}
         />
         <LibraryTile
-          title="Gesehene Filme und Serien" description="Bibliotheken, aus denen die Statistik- und Verlaufslisten gespeist werden."
+          title={translate("library_watched_title")} description={translate("library_watched_description")}
           selectedCount={watchedIds.length} onOpen={() => setLibraryPicker("watched")}
         />
       </div>}
     </section>
 
     {libraryPicker && <LibraryPickerModal
-      title={libraryPicker === "newForYou" ? "Neu für dich" : "Gesehene Filme und Serien"}
+      title={translate(libraryPicker === "newForYou" ? "row_new_for_you" : "library_watched_title")}
       libraries={libraries}
       selectedIds={libraryPicker === "newForYou" ? newForYouIds : watchedIds}
       onToggle={(id) => libraryPicker === "newForYou" ? toggleLibrary(newForYouIds, setNewForYouIds, id) : toggleLibrary(watchedIds, setWatchedIds, id)}
       onClose={() => setLibraryPicker(null)}
     />}
 
-    <section className="admin-section" aria-label="Optionale Dienste">
-      <div className="section-heading"><div><p className="eyebrow">OPTIONALE DIENSTE</p><h2>Verbindungen</h2></div></div>
+    <section className="admin-section" aria-label={translate("optional_services")}>
+      <div className="section-heading"><div><p className="eyebrow">{translate("optional_services_eyebrow")}</p><h2>{translate("connections")}</h2></div></div>
       <div className="admin-service-grid">
         <ServiceCard
-          title="Seerr" description="Für Medienanfragen, Suche, Trends und Streaming-Anbieter."
-          shows="Schaltet die Seite „Anfragen“ frei, inklusive Suche, Trends, Streaming-Anbieter und die Anfrage-Zahl im Profil."
+          title="Seerr" description={translate("service_seerr_description")}
+          shows={translate("service_seerr_shows")}
           draft={seerr} onChange={setSeerr} existing={settings.seerr} showsBaseUrl
         />
         <ServiceCard
-          title="Radarr" description="Für Filmtermine unter „Demnächst“ und „Im Kino“."
-          shows="Schaltet Filmtermine unter „Demnächst“ und die Reihe „Im Kino“ frei."
+          title="Radarr" description={translate("service_radarr_description")}
+          shows={translate("service_radarr_shows")}
           draft={radarr} onChange={setRadarr} existing={settings.radarr} showsBaseUrl
         />
         <ServiceCard
-          title="Sonarr" description="Für Serien- und Folgentermine unter „Demnächst“."
-          shows="Schaltet Serien- und Folgentermine unter „Demnächst“ frei."
+          title="Sonarr" description={translate("service_sonarr_description")}
+          shows={translate("service_sonarr_shows")}
           draft={sonarr} onChange={setSonarr} existing={settings.sonarr} showsBaseUrl
         />
         <ServiceCard
-          title="TMDB" description="Für genauere regionale Filmtermine."
-          shows="Ohne TMDB bleiben Termine aus Radarr/Sonarr nutzbar, nur etwas ungenauer."
+          title="TMDB" description={translate("service_tmdb_description")}
+          shows={translate("service_tmdb_shows")}
           draft={tmdb} onChange={setTmdb} existing={settings.tmdb} showsBaseUrl={false}
         />
         <ServiceCard
-          title="OMDB" description="Für IMDb- und Rotten-Tomatoes-Bewertungen im Detailscreen."
-          shows="Ohne OMDb bleibt nur die TMDB-eigene Bewertung sichtbar."
+          title="OMDB" description={translate("service_omdb_description")}
+          shows={translate("service_omdb_shows")}
           draft={omdb} onChange={setOmdb} existing={settings.omdb} showsBaseUrl={false}
         />
       </div>
     </section>
 
-    <section className="admin-section" aria-label="Demnächst">
-      <div className="section-heading"><div><p className="eyebrow">DEMNÄCHST</p><h2>Kino- und Erscheinungstermine</h2></div></div>
+    <section className="admin-section" aria-label={translate("row_upcoming")}>
+      <div className="section-heading"><div><p className="eyebrow">{translate("comingsoon_eyebrow")}</p><h2>{translate("comingsoon_heading")}</h2></div></div>
       <div className="admin-service-grid">
         <label className="admin-field">
-          <span>Region</span>
+          <span>{translate("field_region")}</span>
           <input type="text" className="search-input" maxLength={2} value={comingSoonRegion} onChange={(event) => setComingSoonRegion(event.target.value.toUpperCase())} placeholder="DE" />
         </label>
         <label className="admin-field">
-          <span>Tage im Voraus</span>
+          <span>{translate("field_days_ahead")}</span>
           <input type="number" className="search-input" min={1} max={90} value={comingSoonDaysAhead} onChange={(event) => setComingSoonDaysAhead(Number(event.target.value) || 1)} />
         </label>
       </div>
     </section>
 
+    {/* Deliberately its own section, away from the Demnächst region field:
+        the two answer different questions (which language the app speaks vs.
+        which country's release dates it shows) and pairing them would suggest
+        they move together. */}
+    <section className="admin-section" aria-label={translate("interface_section")}>
+      <div className="section-heading"><div><p className="eyebrow">{translate("interface_eyebrow")}</p><h2>{translate("interface_heading")}</h2></div></div>
+      <div className="admin-service-grid">
+        <label className="admin-field">
+          <span>{translate("field_language")}</span>
+          <select className="search-input" value={language} onChange={(event) => setLanguage(isLang(event.target.value) ? event.target.value : "de")}>
+            <option value="de">{translate("language_german")}</option>
+            <option value="en">{translate("language_english")}</option>
+          </select>
+        </label>
+      </div>
+      <p className="admin-hint">{translate("language_hint")}</p>
+    </section>
+
     <div className="admin-save-bar">
-      {saveError && <p className="request-error">Speichern fehlgeschlagen. Bitte erneut versuchen.</p>}
-      {savedAt !== null && !saveError && <p className="request-confirmation">Gespeichert ✓</p>}
-      <button type="button" className="request-button" disabled={saving} onClick={save}>{saving ? "Wird gespeichert …" : "Einstellungen speichern"}</button>
+      {saveError && <p className="request-error">{translate("save_failed")}</p>}
+      {savedAt !== null && !saveError && <p className="request-confirmation">{translate("saved")}</p>}
+      <button type="button" className="request-button" disabled={saving} onClick={save}>{translate(saving ? "saving" : "save_settings")}</button>
     </div>
   </div>;
 }
@@ -1522,13 +1624,14 @@ function ServiceCard({ title, description, shows, draft, onChange, existing, sho
   title: string; description: string; shows: string;
   draft: ServiceDraft; onChange: (next: ServiceDraft) => void; existing: ServiceView; showsBaseUrl: boolean;
 }) {
+  const translate = useT();
   const [expanded, setExpanded] = useState(false);
   return <article className={expanded ? "admin-service-card expanded" : "admin-service-card"}>
     <button type="button" className="admin-service-head" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded}>
       <div><strong>{title}</strong><p className="admin-hint">{description}</p></div>
       <span className="admin-service-head-controls">
         <label className="toggle-switch" onClick={(event) => event.stopPropagation()}>
-          <input type="checkbox" checked={draft.enabled} onChange={(event) => onChange({ ...draft, enabled: event.target.checked })} aria-label={`${title} aktivieren`} />
+          <input type="checkbox" checked={draft.enabled} onChange={(event) => onChange({ ...draft, enabled: event.target.checked })} aria-label={translate("service_enable_aria", { title })} />
           <span className="toggle-track"><span className="toggle-thumb" /></span>
         </label>
         <span className="admin-service-chevron"><Icon name="arrow" /></span>
@@ -1536,12 +1639,12 @@ function ServiceCard({ title, description, shows, draft, onChange, existing, sho
     </button>
     {expanded && <div className="admin-service-body">
       {showsBaseUrl && <label className="admin-field">
-        <span>Server-Adresse</span>
+        <span>{translate("field_server_address")}</span>
         <input type="text" className="search-input" placeholder="https://…" value={draft.baseUrl} onChange={(event) => onChange({ ...draft, baseUrl: event.target.value })} />
       </label>}
       <label className="admin-field">
-        <span>API-Schlüssel{existing.apiKeySet ? ` (aktuell ${existing.apiKeyPreview})` : ""}</span>
-        <input type="password" className="search-input" placeholder={existing.apiKeySet ? "Neuen Schlüssel eingeben, um ihn zu ersetzen" : "API-Schlüssel eingeben"} value={draft.apiKey} onChange={(event) => onChange({ ...draft, apiKey: event.target.value })} autoComplete="off" />
+        <span>{translate("field_api_key")}{existing.apiKeySet ? translate("field_api_key_current", { preview: existing.apiKeyPreview ?? "" }) : ""}</span>
+        <input type="password" className="search-input" placeholder={translate(existing.apiKeySet ? "api_key_replace_placeholder" : "api_key_placeholder")} value={draft.apiKey} onChange={(event) => onChange({ ...draft, apiKey: event.target.value })} autoComplete="off" />
       </label>
     </div>}
     <p className="admin-service-shows">{shows}</p>
@@ -1553,12 +1656,13 @@ function ServiceCard({ title, description, shows, draft, onChange, existing, sho
 // of tiles, even though a library group opens a picker instead of expanding
 // inline fields.
 function LibraryTile({ title, description, selectedCount, onOpen }: { title: string; description: string; selectedCount: number; onOpen: () => void }) {
+  const translate = useT();
   return <button type="button" className="admin-service-card admin-library-tile" onClick={onOpen}>
     <div className="admin-service-head">
       <div><strong>{title}</strong><p className="admin-hint">{description}</p></div>
       <Icon name="arrow" />
     </div>
-    <p className="admin-library-tile-count">{selectedCount === 0 ? "Keine Bibliothek ausgewählt" : `${selectedCount} ${selectedCount === 1 ? "Bibliothek" : "Bibliotheken"} ausgewählt`}</p>
+    <p className="admin-library-tile-count">{selectedCount === 0 ? translate("library_none_selected") : selectedCount === 1 ? translate("library_selected_one") : translate("library_selected_other", { count: selectedCount })}</p>
   </button>;
 }
 
@@ -1566,11 +1670,12 @@ function LibraryPickerModal({ title, libraries, selectedIds, onToggle, onClose }
   title: string; libraries: EmbyLibrary[]; selectedIds: string[]; onToggle: (id: string) => void; onClose: () => void;
 }) {
   useEscapeKey(onClose);
+  const translate = useT();
   return <div className="request-modal-backdrop" role="presentation" onClick={onClose}>
     <div className="request-modal" role="dialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()}>
-      <div><p className="eyebrow">BIBLIOTHEKEN</p><h3>{title}</h3></div>
+      <div><p className="eyebrow">{translate("libraries_eyebrow")}</p><h3>{title}</h3></div>
       {libraries.length === 0
-        ? <p className="poster-status">Keine Bibliotheken gefunden.</p>
+        ? <p className="poster-status">{translate("libraries_none")}</p>
         : <div className="season-list">{libraries.map((library) => <label className="season-toggle-row" key={library.id}>
           <span>{library.name}</span>
           <span className="toggle-switch">
@@ -1579,22 +1684,23 @@ function LibraryPickerModal({ title, libraries, selectedIds, onToggle, onClose }
           </span>
         </label>)}</div>}
       <div className="request-modal-actions">
-        <button type="button" className="request-button" onClick={onClose}>Fertig</button>
+        <button type="button" className="request-button" onClick={onClose}>{translate("done")}</button>
       </div>
     </div>
   </div>;
 }
 
-const chatTimeFormatter = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit" });
-function formatChatTime(value: string) {
+const chatTimeFormatters = localeFormatter({ hour: "2-digit", minute: "2-digit" });
+function formatChatTime(value: string, lang: Lang) {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : chatTimeFormatter.format(date);
+  return Number.isNaN(date.getTime()) ? "" : chatTimeFormatters[lang].format(date);
 }
 
 function ChatMessageList({ messages, mineWhenFromAdmin, mineName, mineAvatarSrc, theirsName, theirsAvatarSrc }: {
   messages: ChatMessage[]; mineWhenFromAdmin: boolean;
   mineName: string; mineAvatarSrc: string; theirsName: string; theirsAvatarSrc: string;
 }) {
+  const lang = useLang();
   const listRef = useRef<HTMLDivElement>(null);
   useEffect(() => { listRef.current?.scrollTo({ top: listRef.current.scrollHeight }); }, [messages]);
   return <div className="chat-messages" ref={listRef}>
@@ -1604,7 +1710,7 @@ function ChatMessageList({ messages, mineWhenFromAdmin, mineName, mineAvatarSrc,
         <span className="chat-bubble-avatar"><PersonAvatar name={isMine ? mineName : theirsName} src={isMine ? mineAvatarSrc : theirsAvatarSrc} /></span>
         <div className="chat-bubble-body">
           <p>{message.body}</p>
-          <small>{formatChatTime(message.createdAt)}</small>
+          <small>{formatChatTime(message.createdAt, lang)}</small>
         </div>
       </div>;
     })}
@@ -1612,6 +1718,7 @@ function ChatMessageList({ messages, mineWhenFromAdmin, mineName, mineAvatarSrc,
 }
 
 function ChatComposer({ placeholder, onSend }: { placeholder: string; onSend: (body: string) => Promise<boolean> }) {
+  const translate = useT();
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -1623,7 +1730,7 @@ function ChatComposer({ placeholder, onSend }: { placeholder: string; onSend: (b
   };
   return <form className="chat-composer" onSubmit={submit}>
     <input type="text" className="search-input" placeholder={placeholder} value={body} onChange={(event) => setBody(event.target.value)} aria-label={placeholder} maxLength={4000} />
-    <button type="submit" className="search-button" disabled={body.trim() === "" || sending}>Senden</button>
+    <button type="submit" className="search-button" disabled={body.trim() === "" || sending}>{translate("send")}</button>
   </form>;
 }
 
@@ -1632,6 +1739,7 @@ function Chats({ user }: { user: { id: string; name: string; isAdmin: boolean } 
 }
 
 function UserChat({ userName, userId }: { userName: string; userId: string }) {
+  const translate = useT();
   const [messages, state, refetch] = useApiResource<ChatMessage[]>("/api/messages", [], CHAT_POLL_MS);
 
   useEffect(() => { fetch("/api/messages/read", { method: "POST", credentials: "include" }).catch(() => null); }, []);
@@ -1647,17 +1755,18 @@ function UserChat({ userName, userId }: { userName: string; userId: string }) {
   };
 
   return <div className="content page-view chat-view">
-    <section className="chat-thread" aria-label="Chat mit dem Betreiber">
-      {state === "loading" && <p className="poster-status" role="status">Wird geladen …</p>}
-      {state === "error" && <p className="poster-status">Nicht verfügbar</p>}
-      {state === "ready" && messages.length === 0 && <p className="chat-empty">Schreib dem Admin eine Nachricht bei Fragen oder Problemen.</p>}
-      <ChatMessageList messages={messages} mineWhenFromAdmin={false} mineName={userName} mineAvatarSrc={`/api/me/avatar?u=${encodeURIComponent(userId)}`} theirsName="Admin" theirsAvatarSrc="/api/messages/admin-avatar" />
-      <ChatComposer placeholder="Nachricht schreiben …" onSend={send} />
+    <section className="chat-thread" aria-label={translate("chat_with_operator")}>
+      {state === "loading" && <p className="poster-status" role="status">{translate("loading")}</p>}
+      {state === "error" && <p className="poster-status">{translate("not_available")}</p>}
+      {state === "ready" && messages.length === 0 && <p className="chat-empty">{translate("chat_empty_user")}</p>}
+      <ChatMessageList messages={messages} mineWhenFromAdmin={false} mineName={userName} mineAvatarSrc={`/api/me/avatar?u=${encodeURIComponent(userId)}`} theirsName={translate("admin")} theirsAvatarSrc="/api/messages/admin-avatar" />
+      <ChatComposer placeholder={translate("compose_placeholder")} onSend={send} />
     </section>
   </div>;
 }
 
 function AdminChats({ adminName, adminUserId }: { adminName: string; adminUserId: string }) {
+  const translate = useT();
   const [threads, threadsState, refetchThreads] = useApiResource<ChatThread[]>("/api/admin/messages/threads", [], CHAT_POLL_MS);
   const [contacts] = useApiResource<Contact[]>("/api/admin/users", []);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -1676,21 +1785,21 @@ function AdminChats({ adminName, adminUserId }: { adminName: string; adminUserId
 
   return <div className="content page-view chat-view">
     <div className="chat-inbox-header">
-      <div><p className="eyebrow">NACHRICHTEN</p><h2>Posteingang</h2></div>
+      <div><p className="eyebrow">{translate("messages_eyebrow")}</p><h2>{translate("inbox")}</h2></div>
       <div className="chat-inbox-actions">
-        <button type="button" className="chat-action-button" onClick={() => setBroadcastOpen(true)}><Icon name="bell" /> Rundmail</button>
-        <button type="button" className="chat-action-button" onClick={() => setPickerOpen(true)}><Icon name="arrow" /> Admin schreiben</button>
+        <button type="button" className="chat-action-button" onClick={() => setBroadcastOpen(true)}><Icon name="bell" /> {translate("broadcast")}</button>
+        <button type="button" className="chat-action-button" onClick={() => setPickerOpen(true)}><Icon name="arrow" /> {translate("broadcast_new_chat")}</button>
       </div>
     </div>
-    <section className="chat-inbox" aria-label="Nachrichten-Posteingang">
-      {threadsState === "loading" && <p className="poster-status" role="status">Wird geladen …</p>}
-      {threadsState === "error" && <p className="poster-status">Nicht verfügbar</p>}
-      {threadsState === "ready" && threads.length === 0 && <p className="chat-empty">Noch keine Nachrichten von Nutzern.</p>}
+    <section className="chat-inbox" aria-label={translate("inbox_aria")}>
+      {threadsState === "loading" && <p className="poster-status" role="status">{translate("loading")}</p>}
+      {threadsState === "error" && <p className="poster-status">{translate("not_available")}</p>}
+      {threadsState === "ready" && threads.length === 0 && <p className="chat-empty">{translate("inbox_empty")}</p>}
       <ul className="chat-thread-list">
         {threads.map((thread) => <li key={thread.userId}>
           <button type="button" className="chat-thread-row" onClick={() => setSelectedUserId(thread.userId)}>
             <span className="chat-avatar"><PersonAvatar name={thread.displayName || "?"} src={`/api/admin/users/avatar?userId=${encodeURIComponent(thread.userId)}`} /></span>
-            <span className="chat-thread-name">{thread.displayName || "Unbekannt"}</span>
+            <span className="chat-thread-name">{thread.displayName || translate("unknown_user")}</span>
             <span className="chat-thread-preview">{thread.lastMessage}</span>
             {thread.unreadCount > 0 && <span className="chat-thread-badge">{thread.unreadCount}</span>}
           </button>
@@ -1704,6 +1813,7 @@ function AdminChats({ adminName, adminUserId }: { adminName: string; adminUserId
 }
 
 function BroadcastScreen({ onClose, onSent }: { onClose: () => void; onSent: () => void }) {
+  const translate = useT();
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(false);
@@ -1732,19 +1842,19 @@ function BroadcastScreen({ onClose, onSent }: { onClose: () => void; onSent: () 
   };
 
   return <div className="request-modal-backdrop" role="presentation" onClick={() => !sending && (sentCount !== null ? onSent() : onClose())}>
-    <div className="request-modal" role="dialog" aria-modal="true" aria-label="Rundmail senden" onClick={(event) => event.stopPropagation()}>
-      <div><p className="eyebrow">RUNDMAIL</p><h3>An alle Nutzer senden</h3></div>
+    <div className="request-modal" role="dialog" aria-modal="true" aria-label={translate("broadcast_aria")} onClick={(event) => event.stopPropagation()}>
+      <div><p className="eyebrow">{translate("broadcast_eyebrow")}</p><h3>{translate("broadcast_title")}</h3></div>
       {sentCount !== null
         ? <>
-          <p className="request-confirmation">An {sentCount} {sentCount === 1 ? "Nutzer" : "Nutzer"} gesendet ✓</p>
-          <div className="request-modal-actions"><button type="button" className="request-button" onClick={onSent}>Fertig</button></div>
+          <p className="request-confirmation">{sentCount === 1 ? translate("broadcast_sent_one") : translate("broadcast_sent_other", { count: sentCount })}</p>
+          <div className="request-modal-actions"><button type="button" className="request-button" onClick={onSent}>{translate("done")}</button></div>
         </>
         : <form onSubmit={send}>
-          <textarea className="broadcast-textarea" placeholder="Nachricht an alle Nutzer, z. B. eine Wartungsankündigung …" value={body} onChange={(event) => setBody(event.target.value)} maxLength={4000} rows={5} aria-label="Rundmail-Text" />
-          {error && <p className="request-error">Senden fehlgeschlagen. Bitte erneut versuchen.</p>}
+          <textarea className="broadcast-textarea" placeholder={translate("broadcast_placeholder")} value={body} onChange={(event) => setBody(event.target.value)} maxLength={4000} rows={5} aria-label={translate("broadcast_textarea_aria")} />
+          {error && <p className="request-error">{translate("broadcast_failed")}</p>}
           <div className="request-modal-actions">
-            <button type="button" className="request-button secondary" disabled={sending} onClick={onClose}>Abbrechen</button>
-            <button type="submit" className="request-button" disabled={body.trim() === "" || sending}>{sending ? "Wird gesendet …" : "An alle senden"}</button>
+            <button type="button" className="request-button secondary" disabled={sending} onClick={onClose}>{translate("cancel")}</button>
+            <button type="submit" className="request-button" disabled={body.trim() === "" || sending}>{translate(sending ? "sending" : "send_to_all")}</button>
           </div>
         </form>}
     </div>
@@ -1754,16 +1864,17 @@ function BroadcastScreen({ onClose, onSent }: { onClose: () => void; onSent: () 
 function ContactPickerScreen({ contacts, onSelect, onClose }: { contacts: Contact[]; onSelect: (contact: Contact) => void; onClose: () => void }) {
   useEscapeKey(onClose);
   useBodyScrollLock();
-  return <div className="media-detail-overlay media-grid-overlay" role="dialog" aria-modal="true" aria-label="Neuen Chat starten">
+  const translate = useT();
+  return <div className="media-detail-overlay media-grid-overlay" role="dialog" aria-modal="true" aria-label={translate("broadcast_new_chat")}>
     <div className="media-detail-scroll">
-      <button type="button" className="media-detail-close" onClick={onClose} aria-label="Schließen"><Icon name="close" /></button>
-      <h1 className="media-grid-title">Neuen Chat starten</h1>
+      <button type="button" className="media-detail-close" onClick={onClose} aria-label={translate("close")}><Icon name="close" /></button>
+      <h1 className="media-grid-title">{translate("broadcast_new_chat")}</h1>
       {contacts.length === 0
-        ? <p className="chat-empty">Alle Nutzer haben bereits einen Thread.</p>
+        ? <p className="chat-empty">{translate("all_users_have_thread")}</p>
         : <ul className="chat-thread-list">{contacts.map((contact) => <li key={contact.id}>
           <button type="button" className="chat-thread-row" onClick={() => onSelect(contact)}>
             <span className="chat-avatar"><PersonAvatar name={contact.name || "?"} src={`/api/admin/users/avatar?userId=${encodeURIComponent(contact.id)}`} /></span>
-            <span className="chat-thread-name">{contact.name || "Unbekannt"}</span>
+            <span className="chat-thread-name">{contact.name || translate("unknown_user")}</span>
           </button>
         </li>)}</ul>}
     </div>
@@ -1773,6 +1884,7 @@ function ContactPickerScreen({ contacts, onSelect, onClose }: { contacts: Contac
 function AdminChatThreadScreen({ thread, adminName, adminUserId, onClose }: { thread: ChatThread; adminName: string; adminUserId: string; onClose: () => void }) {
   useEscapeKey(onClose);
   useBodyScrollLock();
+  const translate = useT();
   const [messages, state, refetch] = useApiResource<ChatMessage[]>(`/api/admin/messages/thread?userId=${encodeURIComponent(thread.userId)}`, [], CHAT_POLL_MS);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -1801,46 +1913,51 @@ function AdminChatThreadScreen({ thread, adminName, adminUserId, onClose }: { th
     }
   };
 
-  return <div className="media-detail-overlay media-grid-overlay" role="dialog" aria-modal="true" aria-label={`Chat mit ${thread.displayName}`}>
+  return <div className="media-detail-overlay media-grid-overlay" role="dialog" aria-modal="true" aria-label={translate("chat_with", { name: thread.displayName })}>
     <div className="media-detail-scroll chat-overlay-scroll">
-      <button type="button" className="media-detail-close" onClick={onClose} aria-label="Schließen"><Icon name="close" /></button>
+      <button type="button" className="media-detail-close" onClick={onClose} aria-label={translate("close")}><Icon name="close" /></button>
       <div className="chat-thread-header">
-        <h1 className="media-grid-title">{thread.displayName || "Unbekannt"}</h1>
-        <button type="button" className="chat-delete-button" onClick={() => setConfirmDelete(true)} aria-label="Chat löschen"><Icon name="close" /></button>
+        <h1 className="media-grid-title">{thread.displayName || translate("unknown_user")}</h1>
+        <button type="button" className="chat-delete-button" onClick={() => setConfirmDelete(true)} aria-label={translate("delete_chat")}><Icon name="close" /></button>
       </div>
-      <section className="chat-thread" aria-label={`Chat mit ${thread.displayName || "Unbekannt"}`}>
-        {state === "loading" && <p className="poster-status" role="status">Wird geladen …</p>}
-        {state === "error" && <p className="poster-status">Nicht verfügbar</p>}
-        <ChatMessageList messages={messages} mineWhenFromAdmin={true} mineName={adminName} mineAvatarSrc={`/api/me/avatar?u=${encodeURIComponent(adminUserId)}`} theirsName={thread.displayName || "Unbekannt"} theirsAvatarSrc={`/api/admin/users/avatar?userId=${encodeURIComponent(thread.userId)}`} />
-        <ChatComposer placeholder="Antwort schreiben …" onSend={send} />
+      <section className="chat-thread" aria-label={translate("chat_with", { name: thread.displayName || translate("unknown_user") })}>
+        {state === "loading" && <p className="poster-status" role="status">{translate("loading")}</p>}
+        {state === "error" && <p className="poster-status">{translate("not_available")}</p>}
+        <ChatMessageList messages={messages} mineWhenFromAdmin={true} mineName={adminName} mineAvatarSrc={`/api/me/avatar?u=${encodeURIComponent(adminUserId)}`} theirsName={thread.displayName || translate("unknown_user")} theirsAvatarSrc={`/api/admin/users/avatar?userId=${encodeURIComponent(thread.userId)}`} />
+        <ChatComposer placeholder={translate("reply_placeholder")} onSend={send} />
       </section>
     </div>
     {confirmDelete && <div className="request-modal-backdrop" role="presentation" onClick={() => !deleting && setConfirmDelete(false)}>
-      <div className="request-modal" role="dialog" aria-modal="true" aria-label="Chat löschen" onClick={(event) => event.stopPropagation()}>
-        <div><p className="eyebrow">LÖSCHEN</p><h3>Chat mit {thread.displayName || "diesem Nutzer"} löschen?</h3></div>
-        <p className="request-error">Das entfernt den kompletten Verlauf unwiderruflich.</p>
+      <div className="request-modal" role="dialog" aria-modal="true" aria-label={translate("delete_chat")} onClick={(event) => event.stopPropagation()}>
+        <div><p className="eyebrow">{translate("delete_eyebrow")}</p><h3>{translate("delete_chat_confirm", { name: thread.displayName || translate("this_user") })}</h3></div>
+        <p className="request-error">{translate("delete_chat_warning")}</p>
         <div className="request-modal-actions">
-          <button type="button" className="request-button secondary" disabled={deleting} onClick={() => setConfirmDelete(false)}>Abbrechen</button>
-          <button type="button" className="request-button" disabled={deleting} onClick={deleteThread}>{deleting ? "Wird gelöscht …" : "Endgültig löschen"}</button>
+          <button type="button" className="request-button secondary" disabled={deleting} onClick={() => setConfirmDelete(false)}>{translate("cancel")}</button>
+          <button type="button" className="request-button" disabled={deleting} onClick={deleteThread}>{translate(deleting ? "deleting" : "delete_permanently")}</button>
         </div>
       </div>
     </div>}
   </div>;
 }
 
-function greeting() {
+function greeting(lang: Lang) {
   const hour = new Date().getHours();
-  return hour < 12 ? "Moin" : hour < 18 ? "Mahlzeit" : "Nabend";
+  return t(lang, hour < 12 ? "greeting_morning" : hour < 18 ? "greeting_afternoon" : "greeting_evening");
 }
 
 // A plain reload() can still be served from Safari's cache when the app is
 // added to the iPad home screen (no address bar / pull-to-refresh there to
 // force a fresh fetch). The cache-busting query string makes this an
 // unmatched URL, so the browser has to hit the network — and landing back on
-// "/" also resets the in-memory page state to "Heute" (its initial value).
+// "/" also resets the in-memory page state to "today" (its initial value).
 function goHomeAndRefresh() {
   window.location.href = `${window.location.pathname}?refresh=${Date.now()}`;
 }
-function loadingCopy(state: LoadState) { return state === "error" ? "Nicht verfügbar" : "Wird geladen …"; }
-function formatDuration(seconds: number) { const hours = Math.floor(seconds / 3600); const minutes = Math.floor((seconds % 3600) / 60); return hours > 0 ? `${hours}\u00a0Std. ${minutes}\u00a0Min.` : `${minutes}\u00a0Min.`; }
-function comparisonText(statistics: PersonalStats) { if (statistics.previousWatchSeconds === 0) return "Keine Vergleichsdaten"; const change = Math.round(((statistics.watchSeconds - statistics.previousWatchSeconds) / statistics.previousWatchSeconds) * 100); return `${change >= 0 ? "+" : "\u2212"}${new Intl.NumberFormat("de-DE").format(Math.abs(change))}\u00a0% gg\u00fc. vorher`; }
+function loadingCopy(state: LoadState, lang: Lang) { return t(lang, state === "error" ? "not_available" : "loading"); }
+function formatDuration(seconds: number, lang: Lang) { const hours = Math.floor(seconds / 3600); const minutes = Math.floor((seconds % 3600) / 60); return hours > 0 ? t(lang, "duration_hours_minutes", { hours, minutes }) : t(lang, "duration_minutes", { minutes }); }
+const numberFormatters: Record<Lang, Intl.NumberFormat> = { de: new Intl.NumberFormat(locales.de), en: new Intl.NumberFormat(locales.en) };
+function comparisonText(statistics: PersonalStats, lang: Lang) {
+  if (statistics.previousWatchSeconds === 0) return t(lang, "no_comparison_data");
+  const change = Math.round(((statistics.watchSeconds - statistics.previousWatchSeconds) / statistics.previousWatchSeconds) * 100);
+  return t(lang, "comparison_change", { change: `${change >= 0 ? "+" : "\u2212"}${numberFormatters[lang].format(Math.abs(change))}` });
+}
