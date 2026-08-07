@@ -8,6 +8,14 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.11.8] - 2026-08-07
+
+### Fixed
+
+- Seerr-Suche unter "Anfragen": mehrwortige Suchanfragen (z.B. "Star Wars")
+  lieferten keine Treffer, weil das Leerzeichen als "+" statt "%20" kodiert
+  wurde und Seerr das nicht als Leerzeichen zurückdekodiert hat.
+
 ## [0.11.7] - 2026-08-07
 
 ### Fixed

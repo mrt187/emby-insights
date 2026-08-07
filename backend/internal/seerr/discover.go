@@ -5,6 +5,7 @@ import (
 	"github.com/mrt187/EmbyInsights/internal/artwork"
 	"net/url"
 	"strconv"
+	"strings"
 )
 
 type DiscoverItem struct {
@@ -79,7 +80,11 @@ func (client *Client) Search(ctx context.Context, query string) ([]DiscoverItem,
 	if client == nil {
 		return nil, nil
 	}
-	entries, err := client.discoverResults(ctx, "/api/v1/search?query="+url.QueryEscape(query))
+	// QueryEscape encodes spaces as "+", which Seerr's query parser (Express/qs)
+	// does not decode back to a space — it reaches Seerr as a literal "+" and
+	// the TMDB search behind it finds nothing. %20 is unambiguous everywhere.
+	encodedQuery := strings.ReplaceAll(url.QueryEscape(query), "+", "%20")
+	entries, err := client.discoverResults(ctx, "/api/v1/search?query="+encodedQuery)
 	if err != nil {
 		return nil, err
 	}
