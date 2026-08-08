@@ -1,0 +1,24 @@
+{
+  "name": "Emby Insights",
+  "short_name": "Emby Insights",
+  "description": "Dein persönlicher Überblick über deine Mediathek.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#101111",
+  "theme_color": "#101111",
+  "icons": [
+    {
+      "src": "/emby-insights-logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/emby-insights-logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

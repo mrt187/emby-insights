@@ -23,6 +23,7 @@ import (
 	"github.com/mrt187/EmbyInsights/internal/config"
 	"github.com/mrt187/EmbyInsights/internal/emby"
 	"github.com/mrt187/EmbyInsights/internal/omdb"
+	"github.com/mrt187/EmbyInsights/internal/push"
 	"github.com/mrt187/EmbyInsights/internal/secretbox"
 	"github.com/mrt187/EmbyInsights/internal/seerr"
 	"github.com/mrt187/EmbyInsights/internal/session"
@@ -85,6 +86,9 @@ type App struct {
 	sessions            session.Store
 	cookieSecure        bool
 	messages            store.MessageStore
+	pushSubscriptions   store.PushSubscriptionStore
+	pushSeen            store.PushSeenStore
+	pushSender          *push.Sender
 	directory           emby.UserDirectoryReader
 	adminAvatars        emby.AdminAvatarReader
 	embyClient          *emby.Client
@@ -182,6 +186,9 @@ func New(cfg config.Config) (*App, error) {
 		sessions:            session.NewRedisStore(cache),
 		cookieSecure:        cfg.CookieSecure,
 		messages:            store.NewPostgresMessageStore(database),
+		pushSubscriptions:   store.NewPostgresPushSubscriptionStore(database),
+		pushSeen:            store.NewPostgresPushSeenStore(database),
+		pushSender:          push.NewSender(cfg.PushPublicKey, cfg.PushPrivateKey, cfg.PushSubject),
 		directory:           embyClient,
 		adminAvatars:        embyClient,
 		embyClient:          embyClient,
@@ -344,6 +351,9 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("POST /api/media/emby/favorite", app.setFavoriteHandler(true))
 	mux.HandleFunc("DELETE /api/media/emby/favorite", app.setFavoriteHandler(false))
 	mux.HandleFunc("POST /api/media/emby/played", app.setPlayedHandler(true))
+	mux.HandleFunc("GET /api/push/public-key", app.pushPublicKey)
+	mux.HandleFunc("POST /api/push/subscribe", app.pushSubscribe)
+	mux.HandleFunc("POST /api/push/unsubscribe", app.pushUnsubscribe)
 	mux.HandleFunc("GET /api/messages", app.getMessages)
 	mux.HandleFunc("POST /api/messages", app.sendMessage)
 	mux.HandleFunc("POST /api/messages/read", app.markOwnThreadRead)
@@ -1211,6 +1221,101 @@ func decodeAdminMessageBody(writer http.ResponseWriter, request *http.Request) (
 
 // getMessages returns the caller's own thread with the admin. The admin has
 // no thread of their own — they use the /api/admin/messages/* endpoints.
+// pushPublicKey hands the browser the VAPID public key it needs to build a
+// PushSubscription's applicationServerKey. It is deliberately unauthenticated
+// — the key is not a secret, and the login screen itself may want to offer
+// the opt-in prompt before a session exists.
+func (app *App) pushPublicKey(writer http.ResponseWriter, request *http.Request) {
+	respondJSON(writer, http.StatusOK, map[string]string{"publicKey": app.pushSender.PublicKey()})
+}
+
+func (app *App) pushSubscribe(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	var input struct {
+		Endpoint string `json:"endpoint"`
+		Keys     struct {
+			P256dh string `json:"p256dh"`
+			Auth   string `json:"auth"`
+		} `json:"keys"`
+	}
+	request.Body = http.MaxBytesReader(writer, request.Body, 1<<16)
+	if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	if input.Endpoint == "" || input.Keys.P256dh == "" || input.Keys.Auth == "" {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "endpoint and keys are required"})
+		return
+	}
+	if err := app.pushSubscriptions.Save(request.Context(), identity.UserID, input.Endpoint, input.Keys.P256dh, input.Keys.Auth); err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "saving the subscription failed"})
+		return
+	}
+	writer.WriteHeader(http.StatusNoContent)
+}
+
+func (app *App) pushUnsubscribe(writer http.ResponseWriter, request *http.Request) {
+	if _, ok := app.identityFromRequest(writer, request); !ok {
+		return
+	}
+	var input struct {
+		Endpoint string `json:"endpoint"`
+	}
+	request.Body = http.MaxBytesReader(writer, request.Body, 1<<16)
+	if err := json.NewDecoder(request.Body).Decode(&input); err != nil || input.Endpoint == "" {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "endpoint is required"})
+		return
+	}
+	if err := app.pushSubscriptions.Delete(request.Context(), input.Endpoint); err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "removing the subscription failed"})
+		return
+	}
+	writer.WriteHeader(http.StatusNoContent)
+}
+
+// notifyPush fires a Web Push notification to every subscription a user has
+// registered, fire-and-forget: it never blocks or fails the caller's
+// request, and an expired subscription is quietly cleaned up rather than
+// logged as an error on every send.
+func (app *App) notifyPush(embyUserID, title, body string) {
+	if app.pushSubscriptions == nil || app.pushSender == nil {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		subscriptions, err := app.pushSubscriptions.ForUser(ctx, embyUserID)
+		if err != nil {
+			log.Printf("push: loading subscriptions for %s failed: %v", embyUserID, err)
+			return
+		}
+		payload, err := json.Marshal(map[string]string{"title": title, "body": body})
+		if err != nil {
+			log.Printf("push: encoding payload failed: %v", err)
+			return
+		}
+		for _, subscription := range subscriptions {
+			err := app.pushSender.Send(ctx, push.Subscription{
+				Endpoint: subscription.Endpoint,
+				P256dh:   subscription.P256dh,
+				Auth:     subscription.Auth,
+			}, payload)
+			if errors.Is(err, push.ErrSubscriptionExpired) {
+				if delErr := app.pushSubscriptions.Delete(ctx, subscription.Endpoint); delErr != nil {
+					log.Printf("push: removing expired subscription failed: %v", delErr)
+				}
+				continue
+			}
+			if err != nil {
+				log.Printf("push: sending to %s failed: %v", embyUserID, err)
+			}
+		}
+	}()
+}
+
 func (app *App) getMessages(writer http.ResponseWriter, request *http.Request) {
 	identity, ok := app.identityFromRequest(writer, request)
 	if !ok {
@@ -1244,6 +1349,11 @@ func (app *App) sendMessage(writer http.ResponseWriter, request *http.Request) {
 	if err := app.messages.Send(request.Context(), identity.UserID, identity.DisplayName, body, false); err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "sending the message failed"})
 		return
+	}
+	// The admin is the only recipient of a user's own message — push their
+	// unread-admin-inbox nudge rather than the user's own thread.
+	if ownerID := app.currentAdminOwner(request.Context()); ownerID != "" {
+		app.notifyPush(ownerID, "New message", identity.DisplayName+": "+body)
 	}
 	writer.WriteHeader(http.StatusNoContent)
 }
@@ -1368,6 +1478,7 @@ func (app *App) adminSendMessage(writer http.ResponseWriter, request *http.Reque
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "sending the message failed"})
 		return
 	}
+	app.notifyPush(userID, "New message", body)
 	writer.WriteHeader(http.StatusNoContent)
 }
 
@@ -1457,6 +1568,7 @@ func (app *App) adminBroadcastMessage(writer http.ResponseWriter, request *http.
 			respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "sending the broadcast failed partway through"})
 			return
 		}
+		app.notifyPush(user.ID, "New message", body)
 		sent++
 	}
 	respondJSON(writer, http.StatusOK, map[string]int{"count": sent})

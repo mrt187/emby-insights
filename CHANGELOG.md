@@ -8,6 +8,18 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.13.0] - 2026-08-08
+
+### Added
+
+- Web push notifications (browser push via VAPID/Service Worker), independent
+  of ntfy or any native app. Users can opt in from their profile page. Two
+  triggers are wired up: new admin messages/broadcasts, and a background
+  poller (default 20 min interval) that reuses the existing "New For You"
+  logic to notify about new episodes and newly available requests. Requires
+  three new required env vars: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`,
+  `VAPID_SUBJECT` — see `.env.example` for how to generate them.
+
 ## [0.12.1] - 2026-08-08
 
 ### Fixed

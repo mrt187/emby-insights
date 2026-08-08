@@ -30,6 +30,9 @@ func TestLoadUsesConfiguredValues(t *testing.T) {
 	t.Setenv("EMBY_BASE_URL", "http://emby:8096/emby")
 	t.Setenv("EMBY_ADMIN_API_KEY", "test-admin-key")
 	t.Setenv("APP_ENCRYPTION_KEY", "test-encryption-key")
+	t.Setenv("VAPID_PUBLIC_KEY", "test-public-key")
+	t.Setenv("VAPID_PRIVATE_KEY", "test-private-key")
+	t.Setenv("VAPID_SUBJECT", "mailto:test@example.com")
 
 	cfg, err := Load()
 	if err != nil {
@@ -49,6 +52,9 @@ func TestLoadDefaultsCookieSecureToTrue(t *testing.T) {
 	t.Setenv("EMBY_BASE_URL", "http://emby:8096/emby")
 	t.Setenv("EMBY_ADMIN_API_KEY", "test-admin-key")
 	t.Setenv("APP_ENCRYPTION_KEY", "test-encryption-key")
+	t.Setenv("VAPID_PUBLIC_KEY", "test-public-key")
+	t.Setenv("VAPID_PRIVATE_KEY", "test-private-key")
+	t.Setenv("VAPID_SUBJECT", "mailto:test@example.com")
 	t.Setenv("COOKIE_SECURE", "")
 
 	cfg, err := Load()

@@ -4,6 +4,7 @@ import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "rea
 import { LoginScreen } from "./login-screen";
 import { calendarSelection, type MediaSelection } from "./media-selection";
 import { isLang, LanguageContext, type Lang, locales, t, type TranslationKey, useLang, useT } from "./translations";
+import { PushNotificationSettings } from "./push-notifications";
 
 type Page = "today" | "stats" | "requests" | "chats" | "profile" | "admin";
 type Features = { requests: boolean; movieDates: boolean; seriesDates: boolean; upcoming: boolean; statistics: boolean };
@@ -1349,6 +1350,7 @@ function Profile({ user, userProfile, totalRequests, onSelectMedia }: { user: Cu
     </section>
     <PosterRow title={translate("my_watchlist")} eyebrow={translate("my_lists_eyebrow")} items={withId(watchlist)} state={watchlistState} emptyLabel={translate("watchlist_empty")} detail={() => translate("watchlist")} onSelect={(item) => onSelectMedia(toSelection(item))} />
     <PosterRow title={translate("my_ratings")} items={withId(ratings)} state={ratingsState} emptyLabel={translate("ratings_empty")} detail={(item) => "★".repeat(item.rating ?? 0)} onSelect={(item) => onSelectMedia(toSelection(item))} />
+    <PushNotificationSettings />
     <button className="logout-button" onClick={logout} disabled={signingOut}>{translate(signingOut ? "signing_out" : "sign_out")}</button>
   </div>;
 }

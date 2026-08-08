@@ -21,6 +21,14 @@ type Config struct {
 	CookieSecure     bool
 	ShutdownTimeout  time.Duration
 
+	// Web Push (VAPID). PushPublicKey is not a secret — it goes straight to
+	// the browser via GET /api/push/public-key — but the private key must
+	// never leave the server.
+	PushPublicKey    string
+	PushPrivateKey   string
+	PushSubject      string
+	PushPollInterval time.Duration
+
 	// TrustedProxies lists the IPs/CIDRs whose X-Forwarded-For header may be
 	// believed when identifying the client for login throttling. Empty means
 	// trust nobody and always use the peer address — correct for a directly
@@ -54,6 +62,26 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	pushPublicKey, err := required("VAPID_PUBLIC_KEY")
+	if err != nil {
+		return Config{}, err
+	}
+
+	pushPrivateKey, err := required("VAPID_PRIVATE_KEY")
+	if err != nil {
+		return Config{}, err
+	}
+
+	pushSubject, err := required("VAPID_SUBJECT")
+	if err != nil {
+		return Config{}, err
+	}
+
+	pushPollInterval, err := durationOr("PUSH_POLL_INTERVAL", 20*time.Minute)
+	if err != nil {
+		return Config{}, err
+	}
+
 	return Config{
 		ListenAddress:    valueOr("LISTEN_ADDRESS", ":8080"),
 		DatabaseURL:      databaseURL,
@@ -64,6 +92,10 @@ func Load() (Config, error) {
 		CookieSecure:     valueOr("COOKIE_SECURE", "true") != "false",
 		ShutdownTimeout:  10 * time.Second,
 		TrustedProxies:   splitList(os.Getenv("TRUSTED_PROXIES")),
+		PushPublicKey:    pushPublicKey,
+		PushPrivateKey:   pushPrivateKey,
+		PushSubject:      pushSubject,
+		PushPollInterval: pushPollInterval,
 	}, nil
 }
 
@@ -90,4 +122,16 @@ func valueOr(name, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func durationOr(name string, fallback time.Duration) (time.Duration, error) {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		return fallback, nil
+	}
+	parsed, err := time.ParseDuration(value)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be a valid duration (e.g. 20m): %w", name, err)
+	}
+	return parsed, nil
 }

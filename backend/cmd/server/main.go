@@ -32,6 +32,7 @@ func main() {
 	defer app.Close()
 
 	go app.BackfillPosterImages(context.Background())
+	go app.RunPushPoller(context.Background(), cfg.PushPollInterval)
 
 	httpServer := &http.Server{
 		Addr:              cfg.ListenAddress,
