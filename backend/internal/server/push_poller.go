@@ -46,6 +46,39 @@ func (app *App) pollNewContentForPush(ctx context.Context) {
 	}
 }
 
+// seedPushSeen marks a user's current New For You / available-request items
+// as already seen, without notifying — called once when a user's first
+// subscription is created, so the next poller tick doesn't treat their
+// entire existing backlog as "new" and fire off a burst of pushes for
+// content that predates the subscription.
+func (app *App) seedPushSeen(ctx context.Context, userID string) {
+	if app.pushSeen == nil {
+		return
+	}
+	if app.newForYou != nil {
+		if items, err := app.newForYou.NewForYou(ctx, userID, app.live.newForYouLibraries()); err == nil && len(items) > 0 {
+			keys := make([]string, len(items))
+			for index, item := range items {
+				keys[index] = "newforyou:" + item.ID
+			}
+			if err := app.pushSeen.MarkSeen(ctx, userID, keys); err != nil {
+				log.Printf("push: seeding new-for-you seen state for %s failed: %v", userID, err)
+			}
+		}
+	}
+	if app.availableRequests != nil {
+		if requests, err := app.availableRequests.AvailableRequests(ctx, userID, time.Now().Add(-availableRequestWindow)); err == nil && len(requests) > 0 {
+			keys := make([]string, len(requests))
+			for index, request := range requests {
+				keys[index] = "request:" + request.ID
+			}
+			if err := app.pushSeen.MarkSeen(ctx, userID, keys); err != nil {
+				log.Printf("push: seeding available-requests seen state for %s failed: %v", userID, err)
+			}
+		}
+	}
+}
+
 func (app *App) pollNewForYouForUser(ctx context.Context, userID string) {
 	if app.newForYou == nil {
 		return

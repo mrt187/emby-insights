@@ -8,6 +8,16 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.14.2] - 2026-08-08
+
+### Fixed
+
+- The series progress list could crash without Sonarr/Radarr set up.
+- One user could no longer receive push notifications by unsubscribing
+  someone else's device.
+- New subscribers could get a burst of catch-up push notifications on the
+  first check after subscribing.
+
 ## [0.14.1] - 2026-08-08
 
 ### Fixed

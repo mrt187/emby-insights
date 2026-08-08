@@ -878,6 +878,16 @@ func (app *App) cachedComingSoonItems(ctx context.Context, kind string, read fun
 	return cachedJSON(ctx, app, "comingsoon:"+kind, comingSoonCacheTTL, read)
 }
 
+// cachedComingSoonItemsIfConfigured is cachedComingSoonItems for callers
+// that treat "Sonarr/Radarr not set up" as "no data" rather than an error —
+// app.comingSoon is nil whenever none of those integrations are configured.
+func (app *App) cachedComingSoonItemsIfConfigured(ctx context.Context) ([]comingsoon.Item, error) {
+	if app.comingSoon == nil {
+		return nil, nil
+	}
+	return app.cachedComingSoonItems(ctx, "upcoming", app.comingSoon.Upcoming)
+}
+
 func (app *App) myRequests(writer http.ResponseWriter, request *http.Request) {
 	identity, ok := app.identityFromRequest(writer, request)
 	if !ok {
@@ -1250,15 +1260,24 @@ func (app *App) pushSubscribe(writer http.ResponseWriter, request *http.Request)
 		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "endpoint and keys are required"})
 		return
 	}
+	existing, err := app.pushSubscriptions.ForUser(request.Context(), identity.UserID)
+	if err != nil {
+		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "saving the subscription failed"})
+		return
+	}
 	if err := app.pushSubscriptions.Save(request.Context(), identity.UserID, input.Endpoint, input.Keys.P256dh, input.Keys.Auth); err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "saving the subscription failed"})
 		return
+	}
+	if len(existing) == 0 {
+		app.seedPushSeen(request.Context(), identity.UserID)
 	}
 	writer.WriteHeader(http.StatusNoContent)
 }
 
 func (app *App) pushUnsubscribe(writer http.ResponseWriter, request *http.Request) {
-	if _, ok := app.identityFromRequest(writer, request); !ok {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
 		return
 	}
 	var input struct {
@@ -1269,7 +1288,7 @@ func (app *App) pushUnsubscribe(writer http.ResponseWriter, request *http.Reques
 		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "endpoint is required"})
 		return
 	}
-	if err := app.pushSubscriptions.Delete(request.Context(), input.Endpoint); err != nil {
+	if err := app.pushSubscriptions.Delete(request.Context(), identity.UserID, input.Endpoint); err != nil {
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "removing the subscription failed"})
 		return
 	}
@@ -1304,7 +1323,7 @@ func (app *App) notifyPush(embyUserID, title, body string) {
 				Auth:     subscription.Auth,
 			}, payload)
 			if errors.Is(err, push.ErrSubscriptionExpired) {
-				if delErr := app.pushSubscriptions.Delete(ctx, subscription.Endpoint); delErr != nil {
+				if delErr := app.pushSubscriptions.Delete(ctx, embyUserID, subscription.Endpoint); delErr != nil {
 					log.Printf("push: removing expired subscription failed: %v", delErr)
 				}
 				continue
@@ -2017,7 +2036,7 @@ func (app *App) seriesInProgressHandler(writer http.ResponseWriter, request *htt
 	// date when Sonarr is configured, the next episode falls within that
 	// calendar's window, and Emby reported a TVDB id for the series. Absent
 	// any of those, NextAirDate simply stays empty.
-	if upcoming, err := app.cachedComingSoonItems(request.Context(), "upcoming", app.comingSoon.Upcoming); err == nil {
+	if upcoming, err := app.cachedComingSoonItemsIfConfigured(request.Context()); err == nil {
 		airDates := make(map[string]string, len(upcoming))
 		for _, entry := range upcoming {
 			if entry.Source == comingsoon.SourceSonarr && entry.DetailID != "" {

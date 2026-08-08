@@ -44,14 +44,10 @@ func NewSender(publicKey, privateKey, subject string) *Sender {
 	}
 }
 
-// normalizeSubject strips a leading "mailto:" from subject: webpush-go's
-// getVAPIDAuthorizationHeader prepends "mailto:" itself to any subscriber
-// that doesn't start with "https:", so a caller-supplied "mailto:x@y" would
+// normalizeSubject strips a leading "mailto:": webpush-go prepends it itself
+// to any non-"https:" subscriber, so a caller-supplied "mailto:x@y" would
 // otherwise become the doubly-prefixed, invalid JWT sub claim
-// "mailto:mailto:x@y". Google's and Mozilla's push services silently accept
-// that malformed value; Apple's (web.push.apple.com) validates it strictly
-// and rejects the request with 403 Forbidden — the failure only ever shows
-// up for iOS subscribers.
+// "mailto:mailto:x@y" — which Apple's push service rejects with 403.
 func normalizeSubject(subject string) string {
 	if strings.HasPrefix(subject, "https:") {
 		return subject

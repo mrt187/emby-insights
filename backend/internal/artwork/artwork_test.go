@@ -39,7 +39,7 @@ func TestProxyURLDropsEverythingElse(t *testing.T) {
 		"https://evil.example/image.tmdb.org/x.jpg",
 		"https://image.tmdb.org@evil.example/x.jpg",
 		"https://127.0.0.1/x.jpg",
-		"https://10.18.2.2:8096/x.jpg",
+		"https://10.0.0.1:8096/x.jpg",
 		"https://169.254.169.254/latest/meta-data/",
 		"https://[::ffff:127.0.0.1]/x.jpg",
 		"file:///etc/passwd",

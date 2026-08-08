@@ -1,6 +1,5 @@
-// Minimal service worker for Web Push notifications. It does not do any
-// asset caching/offline support — that's a separate concern from push
-// delivery, and adding it later shouldn't require touching this file.
+// Minimal service worker for Web Push notifications only — no asset
+// caching/offline support.
 
 self.addEventListener("install", () => {
   self.skipWaiting();

@@ -17,9 +17,10 @@ type PushSubscriptionStore interface {
 	// Save upserts by endpoint: resubscribing the same browser refreshes its
 	// keys/last-used timestamp instead of creating a duplicate row.
 	Save(ctx context.Context, embyUserID, endpoint, p256dh, auth string) error
-	// Delete removes a subscription by endpoint, regardless of which user it
-	// belongs to (the frontend only has the endpoint it registered).
-	Delete(ctx context.Context, endpoint string) error
+	// Delete removes one user's subscription by endpoint. Scoped to
+	// embyUserID so one user can't unsubscribe another user's device by
+	// guessing or observing their endpoint.
+	Delete(ctx context.Context, embyUserID, endpoint string) error
 	// ForUser returns every subscription (device/browser) registered for one
 	// user, for fan-out delivery.
 	ForUser(ctx context.Context, embyUserID string) ([]PushSubscription, error)
@@ -46,8 +47,8 @@ func (store *PostgresPushSubscriptionStore) Save(ctx context.Context, embyUserID
 	return err
 }
 
-func (store *PostgresPushSubscriptionStore) Delete(ctx context.Context, endpoint string) error {
-	_, err := store.pool.Exec(ctx, `DELETE FROM push_subscriptions WHERE endpoint = $1`, endpoint)
+func (store *PostgresPushSubscriptionStore) Delete(ctx context.Context, embyUserID, endpoint string) error {
+	_, err := store.pool.Exec(ctx, `DELETE FROM push_subscriptions WHERE endpoint = $1 AND emby_user_id = $2`, endpoint, embyUserID)
 	return err
 }
 

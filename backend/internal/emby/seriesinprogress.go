@@ -82,14 +82,10 @@ func (client *Client) SeriesInProgress(ctx context.Context, userID string, libra
 		items = items[:seriesInProgressLimit]
 	}
 
-	// NextUp is looked up per series, scoped by SeriesId — Emby's unscoped
-	// "next up across all series" form only returns series with real
-	// playback history, and comes back empty for series whose episodes were
-	// bulk-marked watched from this app. Scoped-per-series works reliably
-	// either way. Doing this after the sort/cap above bounds it to at most
-	// seriesInProgressLimit calls regardless of how many libraries/series
-	// were scanned. It's an enrichment, not a requirement — a failure for
-	// one series must not blank out its row, just its next-episode details.
+	// Looked up per series (see nextUpForSeries) after the sort/cap above, so
+	// it costs at most seriesInProgressLimit Emby calls regardless of how
+	// many series were scanned. An enrichment, not a requirement — a lookup
+	// failure for one series only leaves its next-episode fields empty.
 	for i := range items {
 		if next, ok, err := client.nextUpForSeries(ctx, userID, items[i].ID); err == nil && ok {
 			items[i].NextSeasonNumber = next.SeasonNumber
