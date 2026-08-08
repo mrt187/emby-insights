@@ -101,14 +101,17 @@ export function PushNotificationSettings() {
 
   if (status === "unsupported") return null;
 
-  return <section className="profile-facts push-settings">
-    <p className="eyebrow">{translate("push_eyebrow")}</p>
-    <h2>{translate("push_title")}</h2>
-    <p>{translate("push_description")}</p>
-    {status === "denied" && <p className="poster-status">{translate("push_permission_denied")}</p>}
-    {status === "error" && <p className="poster-status">{translate("push_error")}</p>}
-    {status === "subscribed"
-      ? <button className="logout-button" onClick={disable} disabled={busy}>{translate(busy ? "push_disabling" : "push_disable")}</button>
-      : <button className="logout-button" onClick={enable} disabled={busy || status === "checking"}>{translate(busy ? "push_enabling" : "push_enable")}</button>}
-  </section>;
+  const onToggle = () => { if (status === "subscribed") void disable(); else void enable(); };
+
+  return <div className="push-settings-row">
+    <dt>{translate("push_title")}</dt>
+    <dd>
+      <label className="toggle-switch">
+        <input type="checkbox" checked={status === "subscribed"} onChange={onToggle} disabled={busy || status === "checking" || status === "denied"} />
+        <span className="toggle-track"><span className="toggle-thumb" /></span>
+      </label>
+      {status === "denied" && <p className="poster-status">{translate("push_permission_denied")}</p>}
+      {status === "error" && <p className="poster-status">{translate("push_error")}</p>}
+    </dd>
+  </div>;
 }

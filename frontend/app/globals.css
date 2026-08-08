@@ -539,6 +539,8 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .media-detail-facts dl > div { display: flex; justify-content: space-between; gap: 16px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
 .media-detail-facts dt { flex-shrink: 0; color: var(--muted); font-size: 13px; font-weight: 600; }
 .media-detail-facts dd { min-width: 0; margin: 0; color: var(--text-primary); font-size: 13px; font-weight: 600; text-align: right; overflow-wrap: break-word; }
+.push-settings-row dd { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.push-settings-row .poster-status { padding: 0; text-align: right; font-weight: 500; }
 
 .cast-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 16px; }
 .cast-entry { display: grid; justify-items: center; text-align: center; gap: 6px; }

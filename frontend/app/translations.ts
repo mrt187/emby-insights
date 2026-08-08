@@ -218,15 +218,7 @@ const de = {
   sign_out: "Abmelden",
 
   // Push-Benachrichtigungen
-  push_eyebrow: "BENACHRICHTIGUNGEN",
   push_title: "Push-Benachrichtigungen",
-  push_description: "Erhalte eine Benachrichtigung bei neuen Folgen, verfügbaren Anfragen und neuen Nachrichten — auch wenn diese Seite geschlossen ist.",
-  push_enable: "Benachrichtigungen aktivieren",
-  push_disable: "Benachrichtigungen deaktivieren",
-  push_enabling: "Wird aktiviert …",
-  push_disabling: "Wird deaktiviert …",
-  push_enabled: "Benachrichtigungen sind aktiviert.",
-  push_unsupported: "Dein Browser unterstützt keine Push-Benachrichtigungen.",
   push_permission_denied: "Benachrichtigungen wurden blockiert. Bitte in den Browser-Einstellungen erlauben.",
   push_error: "Aktivieren fehlgeschlagen. Bitte erneut versuchen.",
 
@@ -545,15 +537,7 @@ const en: Record<TranslationKey, string> = {
   signing_out: "Signing out …",
   sign_out: "Sign out",
 
-  push_eyebrow: "NOTIFICATIONS",
   push_title: "Push notifications",
-  push_description: "Get notified about new episodes, available requests, and new messages — even when this page is closed.",
-  push_enable: "Enable notifications",
-  push_disable: "Disable notifications",
-  push_enabling: "Enabling …",
-  push_disabling: "Disabling …",
-  push_enabled: "Notifications are enabled.",
-  push_unsupported: "Your browser doesn't support push notifications.",
   push_permission_denied: "Notifications were blocked. Please allow them in your browser settings.",
   push_error: "Enabling failed. Please try again.",
 

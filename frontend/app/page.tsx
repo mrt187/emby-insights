@@ -86,7 +86,7 @@ function visibleNav(user: CurrentUser): { page: Page; labelKey: TranslationKey; 
 }
 const pageTitleKey: Record<Page, TranslationKey> = { today: "nav_today", stats: "nav_stats", requests: "nav_requests", chats: "nav_chats", profile: "nav_profile", admin: "nav_admin" };
 const periodLabelKey: Record<Period, TranslationKey> = { week: "period_week", month: "period_month", year: "period_year" };
-const APP_VERSION = "0.13.2";
+const APP_VERSION = "0.13.3";
 
 // One formatter per language and purpose, built once: Intl.DateTimeFormat is
 // expensive enough that constructing it inside a render loop is wasteful.
@@ -1346,12 +1346,12 @@ function Profile({ user, userProfile, totalRequests, onSelectMedia }: { user: Cu
         <div><dt>{translate("last_login")}</dt><dd>{userProfile ? formatFullDate(userProfile.lastLoginDate, lang) : "—"}</dd></div>
         {user.features.requests && <div><dt>{translate("total_requests")}</dt><dd>{totalRequests !== null ? totalRequests : "—"}</dd></div>}
         <div><dt>{translate("version")}</dt><dd>v{APP_VERSION}</dd></div>
+        <PushNotificationSettings />
       </dl>
     </section>
+    <button className="logout-button" onClick={logout} disabled={signingOut}>{translate(signingOut ? "signing_out" : "sign_out")}</button>
     <PosterRow title={translate("my_watchlist")} eyebrow={translate("my_lists_eyebrow")} items={withId(watchlist)} state={watchlistState} emptyLabel={translate("watchlist_empty")} detail={() => translate("watchlist")} onSelect={(item) => onSelectMedia(toSelection(item))} />
     <PosterRow title={translate("my_ratings")} items={withId(ratings)} state={ratingsState} emptyLabel={translate("ratings_empty")} detail={(item) => "★".repeat(item.rating ?? 0)} onSelect={(item) => onSelectMedia(toSelection(item))} />
-    <PushNotificationSettings />
-    <button className="logout-button" onClick={logout} disabled={signingOut}>{translate(signingOut ? "signing_out" : "sign_out")}</button>
   </div>;
 }
 

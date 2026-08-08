@@ -8,6 +8,15 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.13.3] - 2026-08-08
+
+### Changed
+
+- Push notifications on the profile page are now a toggle switch in the
+  facts list, right under "Version", instead of a separate card with its
+  own heading and button. The sign-out button now sits directly below it,
+  ahead of the watchlist/ratings lists.
+
 ## [0.13.2] - 2026-08-08
 
 ### Fixed
