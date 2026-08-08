@@ -8,6 +8,17 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.13.1] - 2026-08-08
+
+### Fixed
+
+- "Aktivieren fehlgeschlagen" when opting into push notifications: the new
+  `push_subscriptions`/`push_seen_items` tables had a foreign key on
+  `user_mappings`, a table no code has ever populated (the same bug
+  `user_settings`/`notifications` had, fixed early on by dropping the FK —
+  reintroduced here by copying that old table shape without noticing the
+  fix). Every subscribe attempt failed on the FK constraint.
+
 ## [0.13.0] - 2026-08-08
 
 ### Added
