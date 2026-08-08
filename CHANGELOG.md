@@ -8,6 +8,22 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.13.4] - 2026-08-08
+
+### Added
+
+- Toggling push notifications on/off now shows a toast with a success
+  message. If the browser blocks permission, the toast instead explains how
+  to allow it — with iOS/Android-specific steps where the browser can tell
+  them apart, falling back to a generic hint on desktop.
+
+### Fixed
+
+- The topbar refresh button reloaded straight to "Heute", discarding
+  whatever page you were on. It now reloads the same way (URL-based
+  cache-busting, needed for the iPad home-screen case) but keeps the current
+  page — only the brand/logo click still intentionally resets to "Heute".
+
 ## [0.13.3] - 2026-08-08
 
 ### Changed

@@ -221,6 +221,11 @@ const de = {
   push_title: "Push-Benachrichtigungen",
   push_permission_denied: "Benachrichtigungen wurden blockiert. Bitte in den Browser-Einstellungen erlauben.",
   push_error: "Aktivieren fehlgeschlagen. Bitte erneut versuchen.",
+  push_toast_enabled: "Push-Benachrichtigungen aktiviert.",
+  push_toast_disabled: "Push-Benachrichtigungen deaktiviert.",
+  push_settings_help_ios: "iPhone/iPad: Einstellungen → runterscrollen zu \"Emby Insights\" → Mitteilungen → erlauben. Voraussetzung: die Seite wurde über \"Zum Home-Bildschirm\" installiert.",
+  push_settings_help_android: "Android/Chrome: oben rechts auf die drei Punkte tippen → Website-Einstellungen → Benachrichtigungen → Zulassen.",
+  push_settings_help_generic: "Erlaube Benachrichtigungen in den Website-Einstellungen deines Browsers für diese Seite.",
 
   // Admin / Verwaltung
   activity: "Aktivität",
@@ -540,6 +545,11 @@ const en: Record<TranslationKey, string> = {
   push_title: "Push notifications",
   push_permission_denied: "Notifications were blocked. Please allow them in your browser settings.",
   push_error: "Enabling failed. Please try again.",
+  push_toast_enabled: "Push notifications enabled.",
+  push_toast_disabled: "Push notifications disabled.",
+  push_settings_help_ios: "iPhone/iPad: Settings → scroll down to \"Emby Insights\" → Notifications → Allow. Requires the site to have been installed via \"Add to Home Screen\".",
+  push_settings_help_android: "Android/Chrome: tap the three dots top right → Site settings → Notifications → Allow.",
+  push_settings_help_generic: "Allow notifications for this site in your browser's site settings.",
 
   activity: "Activity",
   activity_eyebrow: "ACTIVITY",

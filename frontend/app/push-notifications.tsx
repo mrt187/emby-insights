@@ -17,6 +17,17 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 }
 
 type Status = "idle" | "checking" | "subscribed" | "unsupported" | "denied" | "error";
+type Toast = { text: string; detail?: string; autoHide: boolean };
+
+// Rough platform sniff, only used to pick which settings path to show when
+// permission is blocked — worst case (an unrecognized UA) it just falls back
+// to the generic browser-settings hint below.
+function settingsHelpKey(): "push_settings_help_ios" | "push_settings_help_android" | "push_settings_help_generic" {
+  const ua = navigator.userAgent;
+  if (/iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)) return "push_settings_help_ios";
+  if (/Android/.test(ua)) return "push_settings_help_android";
+  return "push_settings_help_generic";
+}
 
 // PushNotificationSettings is the opt-in/opt-out control shown on the
 // profile page. It talks directly to the browser's Push API and to the
@@ -26,6 +37,13 @@ export function PushNotificationSettings() {
   const translate = useT();
   const [status, setStatus] = useState<Status>("checking");
   const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState<Toast | null>(null);
+
+  useEffect(() => {
+    if (!toast?.autoHide) return;
+    const timer = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   useEffect(() => {
     let active = true;
@@ -48,9 +66,17 @@ export function PushNotificationSettings() {
   const enable = async () => {
     setBusy(true);
     try {
-      if (Notification.permission === "denied") { setStatus("denied"); return; }
+      if (Notification.permission === "denied") {
+        setStatus("denied");
+        setToast({ text: translate("push_permission_denied"), detail: translate(settingsHelpKey()), autoHide: false });
+        return;
+      }
       const permission = await Notification.requestPermission();
-      if (permission !== "granted") { setStatus("denied"); return; }
+      if (permission !== "granted") {
+        setStatus("denied");
+        setToast({ text: translate("push_permission_denied"), detail: translate(settingsHelpKey()), autoHide: false });
+        return;
+      }
 
       const keyResponse = await fetch("/api/push/public-key", { credentials: "include" });
       if (!keyResponse.ok) throw new Error("public key unavailable");
@@ -70,8 +96,10 @@ export function PushNotificationSettings() {
       });
       if (!subscribeResponse.ok) throw new Error("subscribe failed");
       setStatus("subscribed");
+      setToast({ text: translate("push_toast_enabled"), autoHide: true });
     } catch {
       setStatus("error");
+      setToast({ text: translate("push_error"), autoHide: true });
     } finally {
       setBusy(false);
     }
@@ -92,8 +120,10 @@ export function PushNotificationSettings() {
         await subscription.unsubscribe();
       }
       setStatus("idle");
+      setToast({ text: translate("push_toast_disabled"), autoHide: true });
     } catch {
       setStatus("error");
+      setToast({ text: translate("push_error"), autoHide: true });
     } finally {
       setBusy(false);
     }
@@ -103,15 +133,20 @@ export function PushNotificationSettings() {
 
   const onToggle = () => { if (status === "subscribed") void disable(); else void enable(); };
 
-  return <div className="push-settings-row">
-    <dt>{translate("push_title")}</dt>
-    <dd>
-      <label className="toggle-switch">
-        <input type="checkbox" checked={status === "subscribed"} onChange={onToggle} disabled={busy || status === "checking" || status === "denied"} />
-        <span className="toggle-track"><span className="toggle-thumb" /></span>
-      </label>
-      {status === "denied" && <p className="poster-status">{translate("push_permission_denied")}</p>}
-      {status === "error" && <p className="poster-status">{translate("push_error")}</p>}
-    </dd>
-  </div>;
+  return <>
+    <div className="push-settings-row">
+      <dt>{translate("push_title")}</dt>
+      <dd>
+        <label className="toggle-switch">
+          <input type="checkbox" checked={status === "subscribed"} onChange={onToggle} disabled={busy || status === "checking" || status === "denied"} />
+          <span className="toggle-track"><span className="toggle-thumb" /></span>
+        </label>
+      </dd>
+    </div>
+    {toast && <div className="push-toast" role="status">
+      <p>{toast.text}</p>
+      {toast.detail && <p className="push-toast-detail">{toast.detail}</p>}
+      <button type="button" className="push-toast-close" aria-label={translate("close")} onClick={() => setToast(null)}>&times;</button>
+    </div>}
+  </>;
 }

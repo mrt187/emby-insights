@@ -540,7 +540,20 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .media-detail-facts dt { flex-shrink: 0; color: var(--muted); font-size: 13px; font-weight: 600; }
 .media-detail-facts dd { min-width: 0; margin: 0; color: var(--text-primary); font-size: 13px; font-weight: 600; text-align: right; overflow-wrap: break-word; }
 .push-settings-row dd { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
-.push-settings-row .poster-status { padding: 0; text-align: right; font-weight: 500; }
+
+.push-toast {
+  position: fixed; z-index: 200; left: 50%; bottom: 24px; transform: translateX(-50%);
+  max-width: min(420px, calc(100vw - 32px)); padding: 14px 40px 14px 16px;
+  background: var(--ink-raised); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 35%);
+}
+.push-toast p { margin: 0; font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.push-toast-detail { margin-top: 6px !important; font-weight: 500 !important; color: var(--text-secondary) !important; line-height: 1.4; }
+.push-toast-close {
+  position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; padding: 0;
+  border: none; background: none; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer;
+}
+.push-toast-close:hover { color: var(--text-primary); }
 
 .cast-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 16px; }
 .cast-entry { display: grid; justify-items: center; text-align: center; gap: 6px; }

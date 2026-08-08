@@ -7,6 +7,19 @@ import { isLang, LanguageContext, type Lang, locales, t, type TranslationKey, us
 import { PushNotificationSettings } from "./push-notifications";
 
 type Page = "today" | "stats" | "requests" | "chats" | "profile" | "admin";
+const pages: Page[] = ["today", "stats", "requests", "chats", "profile", "admin"];
+function isPage(value: unknown): value is Page { return pages.includes(value as Page); }
+
+// The refresh button in the topbar reloads the document (see
+// goHomeAndRefresh's comment on why a plain reload isn't enough on iOS), but
+// `page` is in-memory React state — without this, reloading always landed
+// back on "today" instead of wherever the user was.
+const PAGE_STORAGE_KEY = "ei-current-page";
+function storedPage(): Page {
+  if (typeof window === "undefined") return "today";
+  const value = window.sessionStorage.getItem(PAGE_STORAGE_KEY);
+  return isPage(value) ? value : "today";
+}
 type Features = { requests: boolean; movieDates: boolean; seriesDates: boolean; upcoming: boolean; statistics: boolean };
 type CurrentUser = { id: string; name: string; isAdmin: boolean; features: Features; language?: Lang };
 type Period = "week" | "month" | "year";
@@ -86,7 +99,7 @@ function visibleNav(user: CurrentUser): { page: Page; labelKey: TranslationKey; 
 }
 const pageTitleKey: Record<Page, TranslationKey> = { today: "nav_today", stats: "nav_stats", requests: "nav_requests", chats: "nav_chats", profile: "nav_profile", admin: "nav_admin" };
 const periodLabelKey: Record<Period, TranslationKey> = { week: "period_week", month: "period_month", year: "period_year" };
-const APP_VERSION = "0.13.3";
+const APP_VERSION = "0.13.4";
 
 // One formatter per language and purpose, built once: Intl.DateTimeFormat is
 // expensive enough that constructing it inside a render loop is wasteful.
@@ -200,7 +213,7 @@ function useBodyScrollLock() {
 }
 
 export default function Home() {
-  const [page, setPage] = useState<Page>("today");
+  const [page, setPage] = useState<Page>(storedPage);
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [publicLang, setPublicLang] = useState<Lang>("en");
@@ -278,7 +291,7 @@ export default function Home() {
   if (checkingSession) return <main className="login-shell"><p className="loading-copy" role="status">{t(lang, "app_loading")}</p></main>;
   if (!user) return <LoginScreen lang={lang} onAuthenticated={setUser} />;
 
-  const selectPage = (next: Page) => { setPage(next); setNoticeOpen(false); };
+  const selectPage = (next: Page) => { setPage(next); setNoticeOpen(false); window.sessionStorage.setItem(PAGE_STORAGE_KEY, next); };
   const openNotices = () => setNoticeOpen((open) => !open);
   const nav = visibleNav(user);
 
@@ -298,7 +311,7 @@ export default function Home() {
       <header className="topbar">
         <div><p className="eyebrow">{t(lang, "topbar_eyebrow")}</p><h1>{page === "today" ? `${greeting(lang)}, ${user.name}` : t(lang, pageTitleKey[page])}</h1></div>
         <div className="header-actions">
-          <button type="button" className="refresh-button" aria-label={t(lang, "refresh_dashboard")} onClick={() => window.location.reload()}><Icon name="refresh" /></button>
+          <button type="button" className="refresh-button" aria-label={t(lang, "refresh_dashboard")} onClick={() => { window.location.href = `${window.location.pathname}?refresh=${Date.now()}`; }}><Icon name="refresh" /></button>
           <button ref={noticeButtonRef} className="notice-button" aria-label={t(lang, "notifications")} aria-expanded={noticeOpen} aria-controls="notifications" onClick={openNotices}><Icon name="bell" />{unread > 0 && <b><span className="sr-only">{t(lang, "unread_notifications", { count: unread })}</span></b>}</button>
           <button className="avatar" aria-label={t(lang, "open_profile")} onClick={() => selectPage("profile")}><UserAvatar name={user.name} userId={user.id} /></button>
           {noticeOpen && <div ref={noticeRef} className="notifications" id="notifications" role="dialog" aria-label={t(lang, "notifications")}>
@@ -1950,9 +1963,12 @@ function greeting(lang: Lang) {
 // A plain reload() can still be served from Safari's cache when the app is
 // added to the iPad home screen (no address bar / pull-to-refresh there to
 // force a fresh fetch). The cache-busting query string makes this an
-// unmatched URL, so the browser has to hit the network — and landing back on
-// "/" also resets the in-memory page state to "today" (its initial value).
+// unmatched URL, so the browser has to hit the network. Clearing the stored
+// page first means landing back on "/" also resets to "today" — the refresh
+// button (which reloads the same way) leaves it in place instead, since it
+// means "refresh this view", not "go home".
 function goHomeAndRefresh() {
+  window.sessionStorage.removeItem(PAGE_STORAGE_KEY);
   window.location.href = `${window.location.pathname}?refresh=${Date.now()}`;
 }
 function loadingCopy(state: LoadState, lang: Lang) { return t(lang, state === "error" ? "not_available" : "loading"); }
