@@ -2012,6 +2012,26 @@ func (app *App) seriesInProgressHandler(writer http.ResponseWriter, request *htt
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "series in progress are unavailable"})
 		return
 	}
+	// Opportunistic air-date enrichment: reuses the already-cached "Demnächst"
+	// calendar instead of a dedicated Sonarr call, so it only ever surfaces a
+	// date when Sonarr is configured, the next episode falls within that
+	// calendar's window, and Emby reported a TVDB id for the series. Absent
+	// any of those, NextAirDate simply stays empty.
+	if upcoming, err := app.cachedComingSoonItems(request.Context(), "upcoming", app.comingSoon.Upcoming); err == nil {
+		airDates := make(map[string]string, len(upcoming))
+		for _, entry := range upcoming {
+			if entry.Source == comingsoon.SourceSonarr && entry.DetailID != "" {
+				airDates[entry.DetailID] = entry.AvailabilityDate
+			}
+		}
+		for i := range items {
+			if items[i].TvdbID != "" {
+				if airDate, ok := airDates[items[i].TvdbID]; ok {
+					items[i].NextAirDate = airDate
+				}
+			}
+		}
+	}
 	// A failure to load dismissals must not hide the whole row — it just
 	// means a previously-dismissed series briefly reappears.
 	if hidden, err := app.tracking.HiddenInProgressIDs(request.Context(), identity.UserID); err == nil && len(hidden) > 0 {

@@ -37,7 +37,7 @@ type NewForYouItem = { id: string; title: string; posterUrl: string; dateCreated
 type TopRatedItem = { id: string; mediaSource: string; mediaId: string; mediaType: string; title: string; posterUrl: string; averageRating: number };
 type ContinueWatchingItem = { id: string; title: string; posterUrl: string; progressPercent: number };
 type WatchedItem = { id: string; title: string; posterUrl: string; genres: string[]; lastPlayedDate: string; backdropUrl?: string; dateAdded?: string };
-type SeriesProgress = { id: string; title: string; posterUrl: string; watchedEpisodes: number; totalEpisodes: number };
+type SeriesProgress = { id: string; title: string; posterUrl: string; watchedEpisodes: number; totalEpisodes: number; nextSeasonNumber?: number; nextEpisodeNumber?: number; nextEpisodeTitle?: string; nextAirDate?: string };
 type DiscoverItem = { id: string; title: string; posterUrl: string; mediaType: string };
 
 type MediaPerson = { name: string; role: string; imageUrl: string };
@@ -99,7 +99,7 @@ function visibleNav(user: CurrentUser): { page: Page; labelKey: TranslationKey; 
 }
 const pageTitleKey: Record<Page, TranslationKey> = { today: "nav_today", stats: "nav_stats", requests: "nav_requests", chats: "nav_chats", profile: "nav_profile", admin: "nav_admin" };
 const periodLabelKey: Record<Period, TranslationKey> = { week: "period_week", month: "period_month", year: "period_year" };
-const APP_VERSION = "0.13.4";
+const APP_VERSION = "0.14.0";
 
 // One formatter per language and purpose, built once: Intl.DateTimeFormat is
 // expensive enough that constructing it inside a render loop is wasteful.
@@ -110,6 +110,16 @@ const dateFormatters = localeFormatter({ day: "2-digit", month: "short" });
 function formatPremiereDate(value: string, lang: Lang) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "" : dateFormatters[lang].format(date);
+}
+function seriesProgressDetail(item: SeriesProgress, lang: Lang) {
+  const remaining = item.totalEpisodes - item.watchedEpisodes;
+  const parts: string[] = [];
+  if (item.nextSeasonNumber && item.nextEpisodeNumber) {
+    parts.push(`S${item.nextSeasonNumber.toString().padStart(2, "0")}E${item.nextEpisodeNumber.toString().padStart(2, "0")}`);
+  }
+  parts.push(t(lang, "episodes_remaining", { count: remaining }));
+  if (item.nextAirDate) parts.push(formatPremiereDate(item.nextAirDate, lang));
+  return parts.join(" · ");
 }
 function availabilityWording(value: string, lang: Lang) {
   const date = new Date(value);
@@ -409,7 +419,7 @@ function Today({ upcoming, upcomingState, cinema, cinemaState, requests, request
     <PosterRow title={translate("row_new_for_you")} eyebrow={translate("row_new_for_you_eyebrow")} items={newForYou} state={newForYouState} emptyLabel={translate("row_new_for_you_empty")} itemTitle={newForYouTitle} detail={newForYouDetail} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
     <PosterRow title={translate("row_continue")} eyebrow={translate("row_continue_eyebrow")} items={continueWatching} state={continueWatchingState} emptyLabel={translate("row_continue_empty")} detail={(item) => translate("percent_watched", { percent: item.progressPercent })} progress={(item) => item.progressPercent} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
     {features.upcoming && <PosterRow title={translate("row_upcoming")} eyebrow={translate("row_upcoming_eyebrow")} items={visibleUpcoming} state={upcomingState} emptyLabel={translate("row_upcoming_empty")} itemTitle={(item) => upcomingTitle(item, lang)} detail={(item) => availabilityWording(item.availabilityDate, lang)} onSelect={(item) => onSelectMedia(calendarSelection(item, features.requests))} />}
-    <PosterRow title={translate("row_series_progress")} eyebrow={translate("row_series_progress_eyebrow")} items={seriesInProgress} state={seriesInProgressState} emptyLabel={translate("row_series_progress_empty")} detail={(item) => translate("episodes_of", { watched: item.watchedEpisodes, total: item.totalEpisodes })} progress={(item) => Math.round((item.watchedEpisodes / item.totalEpisodes) * 100)} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
+    <PosterRow title={translate("row_series_progress")} eyebrow={translate("row_series_progress_eyebrow")} items={seriesInProgress} state={seriesInProgressState} emptyLabel={translate("row_series_progress_empty")} detail={(item) => seriesProgressDetail(item, lang)} progress={(item) => Math.round((item.watchedEpisodes / item.totalEpisodes) * 100)} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
     {features.requests && <PosterRow title={translate("row_my_requests")} eyebrow={translate("row_my_requests_eyebrow")} items={requests} state={requestState} emptyLabel={translate("row_my_requests_empty")} detail={(item) => item.status} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />}
     <PosterRow title={translate("row_top_rated")} eyebrow={translate("row_top_rated_eyebrow")} items={topRated} state={topRatedState} emptyLabel={translate("row_top_rated_empty")} detail={(item) => `★ ${item.averageRating.toFixed(1)}`} onSelect={(item) => onSelectMedia(item.mediaSource === "seerr" ? { source: "seerr", id: item.mediaId, mediaType: item.mediaType } : { source: "emby", id: item.mediaId })} />
     {features.movieDates && <PosterRow title={translate("row_cinema")} eyebrow={translate("row_cinema_eyebrow")} items={cinema} state={cinemaState} emptyLabel={translate("row_cinema_empty")} detail={(item) => cinemaWording(item, lang)} onSelect={(item) => onSelectMedia(calendarSelection(item, features.requests))} />}

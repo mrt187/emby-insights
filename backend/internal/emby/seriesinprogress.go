@@ -16,11 +16,19 @@ const seriesInProgressLimit = 24
 // episodes watched, some not, distinct from WatchedSeries (fully played)
 // and ContinueWatching (a specific in-progress episode's playback position).
 type SeriesProgress struct {
-	ID              string `json:"id"`
-	Title           string `json:"title"`
-	PosterURL       string `json:"posterUrl"`
-	WatchedEpisodes int    `json:"watchedEpisodes"`
-	TotalEpisodes   int    `json:"totalEpisodes"`
+	ID                string `json:"id"`
+	Title             string `json:"title"`
+	PosterURL         string `json:"posterUrl"`
+	WatchedEpisodes   int    `json:"watchedEpisodes"`
+	TotalEpisodes     int    `json:"totalEpisodes"`
+	NextSeasonNumber  int    `json:"nextSeasonNumber,omitempty"`
+	NextEpisodeNumber int    `json:"nextEpisodeNumber,omitempty"`
+	NextEpisodeTitle  string `json:"nextEpisodeTitle,omitempty"`
+	NextAirDate       string `json:"nextAirDate,omitempty"`
+	// TvdbID is never serialized — it exists only so seriesInProgressHandler
+	// can opportunistically match a series against the Sonarr calendar it
+	// already fetches for "Demnächst", without a second Sonarr round-trip.
+	TvdbID string `json:"-"`
 }
 
 type SeriesInProgressReader interface {
@@ -47,6 +55,11 @@ func (client *Client) SeriesInProgress(ctx context.Context, userID string, libra
 		candidates = append(candidates, found...)
 	}
 
+	// NextUp is an enrichment, not a requirement — a transient failure here
+	// must not blank out the whole row, it just means the next-episode
+	// details are missing for this response.
+	nextUp, _ := client.nextUpBySeries(ctx, userID)
+
 	items := make([]SeriesProgress, 0, len(candidates))
 	for _, item := range candidates {
 		watched := item.RecursiveItemCount - item.UserData.UnplayedItemCount
@@ -57,13 +70,20 @@ func (client *Client) SeriesInProgress(ctx context.Context, userID string, libra
 		if item.ImageTags.Primary != "" {
 			posterURL = ImageURL(item.Id, "Primary", item.ImageTags.Primary, 400)
 		}
-		items = append(items, SeriesProgress{
+		progress := SeriesProgress{
 			ID:              item.Id,
 			Title:           item.Name,
 			PosterURL:       posterURL,
 			WatchedEpisodes: watched,
 			TotalEpisodes:   item.RecursiveItemCount,
-		})
+			TvdbID:          item.ProviderIds.Tvdb,
+		}
+		if next, ok := nextUp[item.Id]; ok {
+			progress.NextSeasonNumber = next.SeasonNumber
+			progress.NextEpisodeNumber = next.EpisodeNumber
+			progress.NextEpisodeTitle = next.EpisodeTitle
+		}
+		items = append(items, progress)
 	}
 
 	sort.Slice(items, func(i, j int) bool {
@@ -85,6 +105,9 @@ type embySeriesCandidate struct {
 	UserData struct {
 		UnplayedItemCount int `json:"UnplayedItemCount"`
 	} `json:"UserData"`
+	ProviderIds struct {
+		Tvdb string `json:"Tvdb"`
+	} `json:"ProviderIds"`
 }
 
 func (client *Client) seriesInLibrary(ctx context.Context, userID, libraryID string) ([]embySeriesCandidate, error) {
@@ -92,7 +115,7 @@ func (client *Client) seriesInLibrary(ctx context.Context, userID, libraryID str
 		"ParentId":         {libraryID},
 		"IncludeItemTypes": {"Series"},
 		"Recursive":        {"true"},
-		"Fields":           {"RecursiveItemCount"},
+		"Fields":           {"RecursiveItemCount,ProviderIds"},
 		"Limit":            {strconv.Itoa(seriesInProgressLimit * 4)},
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, client.baseURL+"/Users/"+userID+"/Items?"+query.Encode(), nil)

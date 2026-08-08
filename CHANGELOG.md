@@ -8,6 +8,17 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.14.0] - 2026-08-08
+
+### Changed
+
+- "Noch nicht fertig" is now "Als Nächstes"/"Up Next": alongside the
+  watched/total episode count it shows the specific next episode ("S02E05"),
+  reusing Emby's own NextUp resolution instead of a plain aggregate. When
+  Sonarr is configured and the next episode falls within the existing
+  "Demnächst" calendar window, its air date is shown too — no date shown
+  otherwise, since Sonarr/TVDB matching isn't always available.
+
 ## [0.13.4] - 2026-08-08
 
 ### Added
