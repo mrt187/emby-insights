@@ -8,6 +8,20 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.13.2] - 2026-08-08
+
+### Fixed
+
+- Push notifications silently failed to deliver to iOS/Safari subscribers
+  (403 Forbidden from `web.push.apple.com`), while working fine on
+  Chrome/FCM. `VAPID_SUBJECT=mailto:...` was passed straight into
+  `webpush-go`, which itself prepends `mailto:` to any non-`https:`
+  subscriber — doubling the prefix into an invalid VAPID JWT `sub` claim.
+  Google's and Mozilla's push services silently ignored the malformed
+  value; Apple's validates it strictly. The subject is now normalized
+  before use, so it works whether or not `VAPID_SUBJECT` itself includes
+  the `mailto:` prefix.
+
 ## [0.13.1] - 2026-08-08
 
 ### Fixed
