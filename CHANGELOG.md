@@ -12,86 +12,50 @@ The project follows [Semantic Versioning](https://semver.org/):
 
 ### Fixed
 
-- "Als Nächstes" never showed a season/episode number: Emby's unscoped
-  `/Shows/NextUp` (across all series at once) only returns series with real
-  playback history, and comes back empty for series whose episodes were
-  bulk-marked watched from this app instead of actually played — the norm
-  here. Next-up is now looked up per series (`SeriesId`-scoped), which
-  resolves reliably either way, at the cost of one extra Emby call per
-  series shown (bounded to the same ≤24-item cap as the row itself).
+- The next episode wasn't showing for some series in the progress list.
 
 ## [0.14.0] - 2026-08-08
 
-### Changed
+### Added
 
-- "Noch nicht fertig" is now "Als Nächstes"/"Up Next": alongside the
-  watched/total episode count it shows the specific next episode ("S02E05"),
-  reusing Emby's own NextUp resolution instead of a plain aggregate. When
-  Sonarr is configured and the next episode falls within the existing
-  "Demnächst" calendar window, its air date is shown too — no date shown
-  otherwise, since Sonarr/TVDB matching isn't always available.
+- The series progress list now shows which episode is next, how many are
+  left, and the next air date when known.
 
 ## [0.13.4] - 2026-08-08
 
 ### Added
 
-- Toggling push notifications on/off now shows a toast with a success
-  message. If the browser blocks permission, the toast instead explains how
-  to allow it — with iOS/Android-specific steps where the browser can tell
-  them apart, falling back to a generic hint on desktop.
+- A confirmation message when turning push notifications on or off, with
+  setup help if your browser blocked them.
 
 ### Fixed
 
-- The topbar refresh button reloaded straight to "Heute", discarding
-  whatever page you were on. It now reloads the same way (URL-based
-  cache-busting, needed for the iPad home-screen case) but keeps the current
-  page — only the brand/logo click still intentionally resets to "Heute".
+- The refresh button no longer jumps back to the home page.
 
 ## [0.13.3] - 2026-08-08
 
 ### Changed
 
-- Push notifications on the profile page are now a toggle switch in the
-  facts list, right under "Version", instead of a separate card with its
-  own heading and button. The sign-out button now sits directly below it,
-  ahead of the watchlist/ratings lists.
+- Push notifications are now a simple toggle in your profile.
 
 ## [0.13.2] - 2026-08-08
 
 ### Fixed
 
-- Push notifications silently failed to deliver to iOS/Safari subscribers
-  (403 Forbidden from `web.push.apple.com`), while working fine on
-  Chrome/FCM. `VAPID_SUBJECT=mailto:...` was passed straight into
-  `webpush-go`, which itself prepends `mailto:` to any non-`https:`
-  subscriber — doubling the prefix into an invalid VAPID JWT `sub` claim.
-  Google's and Mozilla's push services silently ignored the malformed
-  value; Apple's validates it strictly. The subject is now normalized
-  before use, so it works whether or not `VAPID_SUBJECT` itself includes
-  the `mailto:` prefix.
+- Push notifications weren't arriving on iPhone.
 
 ## [0.13.1] - 2026-08-08
 
 ### Fixed
 
-- "Aktivieren fehlgeschlagen" when opting into push notifications: the new
-  `push_subscriptions`/`push_seen_items` tables had a foreign key on
-  `user_mappings`, a table no code has ever populated (the same bug
-  `user_settings`/`notifications` had, fixed early on by dropping the FK —
-  reintroduced here by copying that old table shape without noticing the
-  fix). Every subscribe attempt failed on the FK constraint.
+- Push notifications failed to activate.
 
 ## [0.13.0] - 2026-08-08
 
 ### Added
 
-- Web push notifications (browser push via VAPID/Service Worker), independent
-  of ntfy or any native app. Users can opt in from their profile page. Two
-  triggers are wired up: new admin messages/broadcasts, and a background
-  poller (default 20 min interval) that reuses the existing "New For You"
-  logic to notify about new episodes and newly available requests. Requires
-  three new required env vars: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`,
-  `VAPID_SUBJECT` — see `.env.example` for how to generate them.
+- Push notifications for new messages, new episodes, and available
+  requests — no separate app or service required.
 
 ## [0.12.1] - 2026-08-08
 
