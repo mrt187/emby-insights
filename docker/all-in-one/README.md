@@ -39,7 +39,7 @@ services:
 | `APP_ENCRYPTION_KEY` | Einmalig mit `openssl rand -base64 32` erzeugen und stabil halten. Verschlüsselt die gespeicherten API-Keys von Seerr, Radarr, Sonarr und TMDB; geht er verloren, sind diese unlesbar. |
 | `EMBY_BASE_URL` | Adresse des Emby-Servers, inklusive `/emby`. |
 | `EMBY_ADMIN_API_KEY` | In Emby unter Dashboard → Erweitert → Sicherheit → API-Schlüssel anlegen. |
-| `COOKIE_SECURE` | `false` nur für den ersten direkten HTTP-Test, danach `true`. |
+| `COOKIE_SECURE` | Bei Zugriff über HTTPS (z.B. hinter einem Reverse Proxy) auf `true` lassen. Nur auf `false` setzen, wenn per reinem HTTP ohne TLS zugegriffen wird — sonst verwirft der Browser das Session-Cookie stillschweigend und die Oberfläche wirkt ausgeloggt bzw. zeigt keine Daten. |
 | `TRUSTED_PROXIES` | Optional, kommagetrennte IPs oder CIDRs des vorgelagerten Reverse Proxy. Nur diese Quellen dürfen per `X-Forwarded-For` die echte Client-Adresse melden. Leer lassen, wenn der Container direkt erreicht wird. |
 
 Alles Weitere — welche Dienste aktiv sind, deren Adressen und Keys, die

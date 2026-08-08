@@ -75,7 +75,7 @@ See full changelog: https://github.com/mrt187/emby-insights/blob/main/CHANGELOG.
 
   <Config Name="APP_ENCRYPTION_KEY" Target="APP_ENCRYPTION_KEY" Default="" Description="Generate once with 'openssl rand -base64 32' and keep it stable. Encrypts stored API keys for Seerr/Radarr/Sonarr/TMDB; if lost, those become unreadable." Type="Variable" Display="always" Required="true" Mask="true"/>
 
-  <Config Name="COOKIE_SECURE" Target="COOKIE_SECURE" Default="true" Description="Set to false only for an initial plain-HTTP test without a reverse proxy/TLS in front, then set back to true." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="COOKIE_SECURE" Target="COOKIE_SECURE" Default="true" Description="Keep true if you access Emby Insights via HTTPS (e.g. behind a reverse proxy). Set to false ONLY if you access it over plain HTTP without TLS - otherwise the browser silently drops the session cookie and the UI looks logged out / shows no data." Type="Variable" Display="always" Required="false" Mask="false"/>
 
   <Config Name="TRUSTED_PROXIES" Target="TRUSTED_PROXIES" Default="" Description="Comma-separated IPs/CIDRs of an upstream reverse proxy allowed to set X-Forwarded-For. Leave empty if the container is reached directly." Type="Variable" Display="advanced" Required="false" Mask="false"/>
 
