@@ -8,6 +8,18 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.14.1] - 2026-08-08
+
+### Fixed
+
+- "Als Nächstes" never showed a season/episode number: Emby's unscoped
+  `/Shows/NextUp` (across all series at once) only returns series with real
+  playback history, and comes back empty for series whose episodes were
+  bulk-marked watched from this app instead of actually played — the norm
+  here. Next-up is now looked up per series (`SeriesId`-scoped), which
+  resolves reliably either way, at the cost of one extra Emby call per
+  series shown (bounded to the same ≤24-item cap as the row itself).
+
 ## [0.14.0] - 2026-08-08
 
 ### Changed

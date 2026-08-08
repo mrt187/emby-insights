@@ -55,11 +55,6 @@ func (client *Client) SeriesInProgress(ctx context.Context, userID string, libra
 		candidates = append(candidates, found...)
 	}
 
-	// NextUp is an enrichment, not a requirement — a transient failure here
-	// must not blank out the whole row, it just means the next-episode
-	// details are missing for this response.
-	nextUp, _ := client.nextUpBySeries(ctx, userID)
-
 	items := make([]SeriesProgress, 0, len(candidates))
 	for _, item := range candidates {
 		watched := item.RecursiveItemCount - item.UserData.UnplayedItemCount
@@ -70,20 +65,14 @@ func (client *Client) SeriesInProgress(ctx context.Context, userID string, libra
 		if item.ImageTags.Primary != "" {
 			posterURL = ImageURL(item.Id, "Primary", item.ImageTags.Primary, 400)
 		}
-		progress := SeriesProgress{
+		items = append(items, SeriesProgress{
 			ID:              item.Id,
 			Title:           item.Name,
 			PosterURL:       posterURL,
 			WatchedEpisodes: watched,
 			TotalEpisodes:   item.RecursiveItemCount,
 			TvdbID:          item.ProviderIds.Tvdb,
-		}
-		if next, ok := nextUp[item.Id]; ok {
-			progress.NextSeasonNumber = next.SeasonNumber
-			progress.NextEpisodeNumber = next.EpisodeNumber
-			progress.NextEpisodeTitle = next.EpisodeTitle
-		}
-		items = append(items, progress)
+		})
 	}
 
 	sort.Slice(items, func(i, j int) bool {
@@ -91,6 +80,22 @@ func (client *Client) SeriesInProgress(ctx context.Context, userID string, libra
 	})
 	if len(items) > seriesInProgressLimit {
 		items = items[:seriesInProgressLimit]
+	}
+
+	// NextUp is looked up per series, scoped by SeriesId — Emby's unscoped
+	// "next up across all series" form only returns series with real
+	// playback history, and comes back empty for series whose episodes were
+	// bulk-marked watched from this app. Scoped-per-series works reliably
+	// either way. Doing this after the sort/cap above bounds it to at most
+	// seriesInProgressLimit calls regardless of how many libraries/series
+	// were scanned. It's an enrichment, not a requirement — a failure for
+	// one series must not blank out its row, just its next-episode details.
+	for i := range items {
+		if next, ok, err := client.nextUpForSeries(ctx, userID, items[i].ID); err == nil && ok {
+			items[i].NextSeasonNumber = next.SeasonNumber
+			items[i].NextEpisodeNumber = next.EpisodeNumber
+			items[i].NextEpisodeTitle = next.EpisodeTitle
+		}
 	}
 	return items, nil
 }
