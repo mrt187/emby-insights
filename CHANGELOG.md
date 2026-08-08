@@ -10,62 +10,24 @@ The project follows [Semantic Versioning](https://semver.org/):
 
 ## [0.14.2] - 2026-08-08
 
-### Fixed
-
-- The series progress list could crash without Sonarr/Radarr set up.
-- One user could no longer receive push notifications by unsubscribing
-  someone else's device.
-- New subscribers could get a burst of catch-up push notifications on the
-  first check after subscribing.
-
-## [0.14.1] - 2026-08-08
-
-### Fixed
-
-- The next episode wasn't showing for some series in the progress list.
-
-## [0.14.0] - 2026-08-08
-
-### Added
-
-- The series progress list now shows which episode is next, how many are
-  left, and the next air date when known.
-
-## [0.13.4] - 2026-08-08
-
-### Added
-
-- A confirmation message when turning push notifications on or off, with
-  setup help if your browser blocked them.
-
-### Fixed
-
-- The refresh button no longer jumps back to the home page.
-
-## [0.13.3] - 2026-08-08
-
-### Changed
-
-- Push notifications are now a simple toggle in your profile.
-
-## [0.13.2] - 2026-08-08
-
-### Fixed
-
-- Push notifications weren't arriving on iPhone.
-
-## [0.13.1] - 2026-08-08
-
-### Fixed
-
-- Push notifications failed to activate.
-
-## [0.13.0] - 2026-08-08
-
 ### Added
 
 - Push notifications for new messages, new episodes, and available
-  requests — no separate app or service required.
+  requests — no separate app or service required. Turn them on with a
+  simple toggle in your profile; you'll get a confirmation message, or
+  setup help if your browser blocked them.
+- The series progress list now shows which episode is next, how many are
+  left, and the next air date when known.
+
+### Fixed
+
+- Push notifications failed to activate, and weren't arriving on iPhone.
+- The refresh button no longer jumps back to the home page.
+- The next episode wasn't showing for some series in the progress list.
+- The series progress list could crash without Sonarr/Radarr set up.
+- One user could no longer receive push notifications by unsubscribing
+  someone else's device, and new subscribers could get a burst of
+  catch-up notifications on their first check.
 
 ## [0.12.1] - 2026-08-08
 
