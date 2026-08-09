@@ -129,7 +129,7 @@ const de = {
   chart_favourite_genre: "Dein Favorit: {genre}",
   chart_genres_by_plays: "Nach Wiedergaben gezählt",
   chart_unfinished: "Angefangen, nie beendet",
-  transcode_share: "Umgewandelt",
+  transcode_share: "Transcodiert",
   transcode_share_detail: "{transcodes} von {plays} Wiedergaben",
   household_heading: "Im Haushalt",
   fact_household_plays: "Wiedergaben",
