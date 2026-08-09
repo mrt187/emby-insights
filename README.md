@@ -104,11 +104,28 @@ COOKIE_SECURE=true
 # container is reached directly.
 #TRUSTED_PROXIES=
 
-# Web Push (VAPID) keypair for browser push notifications. Generate once with
-# `npx web-push generate-vapid-keys` and keep it stable — rotating it
-# invalidates every existing browser subscription. The public key is not a
-# secret; the private key must stay server-side. VAPID_SUBJECT is your
-# contact address for push services.
+# Web Push (VAPID) keypair for browser push notifications.
+#
+# Your server does not deliver notifications itself — it hands them to the
+# browser's own push service (Apple for Safari/iOS, Google for Chrome,
+# Mozilla for Firefox), and that service wants to know who is sending.
+# This keypair is that proof of identity.
+#
+# Generate it exactly once. Run:
+#
+#     npx web-push generate-vapid-keys
+#
+# It prints two base64 strings — paste them into the two variables below.
+#
+# Then never change them. The public key is stored inside every existing
+# browser subscription, so a new keypair silently kills push for everyone
+# until each user switches notifications off and on again. If you ever
+# recreate this file, put the same two values back in.
+#
+# The public key is handed to every browser anyway (GET /api/push/public-key)
+# and is not a secret; the private key must stay on the server.
+# VAPID_SUBJECT is a contact address push service operators can reach you at,
+# as mailto: or https:.
 VAPID_PUBLIC_KEY=
 VAPID_PRIVATE_KEY=
 VAPID_SUBJECT=mailto:you@example.com
