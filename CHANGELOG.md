@@ -8,6 +8,19 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.15.5] - 2026-08-09
+
+### Added
+
+- Titles from your own library now show IMDb and Rotten Tomatoes ratings too,
+  not just the ones found through Discover.
+
+### Fixed
+
+- When the ratings cannot be fetched, the reason is now written to the
+  container log. They used to disappear without a trace, so an expired OMDb
+  key and a film that simply has no ratings looked identical.
+
 ## [0.15.4] - 2026-08-09
 
 ### Changed
