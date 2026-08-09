@@ -14,6 +14,19 @@ jobs:
         id: version
         run: echo "version=$(cat VERSION)" >> "$GITEA_OUTPUT"
 
+      # The frontend build stage only receives frontend/, so it cannot read
+      # VERSION and carries its own APP_VERSION constant. That constant is
+      # what the UI shows, so a forgotten bump ships a release labelled with
+      # the previous version — this fails the build instead.
+      - name: Version label matches VERSION
+        run: |
+          version=$(cat VERSION)
+          grep -q "APP_VERSION = \"$version\"" frontend/app/page.tsx || {
+            echo "VERSION is $version, but frontend/app/page.tsx says:"
+            grep -n "APP_VERSION = " frontend/app/page.tsx
+            exit 1
+          }
+
       # REGISTRY_HOST is a repository variable so the registry this pushes to
       # is not baked into a public repo. Set it under Settings -> Actions ->
       # Variables; REGISTRY_TOKEN stays a secret.
