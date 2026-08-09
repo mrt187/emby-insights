@@ -28,6 +28,7 @@ import (
 	"github.com/mrt187/EmbyInsights/internal/seerr"
 	"github.com/mrt187/EmbyInsights/internal/session"
 	"github.com/mrt187/EmbyInsights/internal/store"
+	"github.com/mrt187/EmbyInsights/internal/tracearr"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -149,6 +150,7 @@ func New(cfg config.Config) (*App, error) {
 		seerr.NewClient(settings.Seerr.EnabledBaseURL(), settings.Seerr.EnabledAPIKey()),
 		comingsoon.NewClient(settings.Radarr.EnabledBaseURL(), settings.Radarr.EnabledAPIKey(), settings.Sonarr.EnabledBaseURL(), settings.Sonarr.EnabledAPIKey(), settings.TMDB.EnabledAPIKey(), settings.ComingSoonRegion, settings.ComingSoonDaysAhead),
 		omdb.NewClient(settings.OMDB.EnabledAPIKey()),
+		tracearr.NewClient(settings.Tracearr.EnabledBaseURL(), settings.Tracearr.EnabledAPIKey()),
 		settings.ComingSoonRegion,
 		settings.NewForYouLibraryIDs,
 		settings.WatchedLibraryIDs,
@@ -230,6 +232,7 @@ func (app *App) applySettings(ctx context.Context, settings appconfig.Settings) 
 		seerr.NewClient(persisted.Seerr.EnabledBaseURL(), persisted.Seerr.EnabledAPIKey()),
 		comingsoon.NewClient(persisted.Radarr.EnabledBaseURL(), persisted.Radarr.EnabledAPIKey(), persisted.Sonarr.EnabledBaseURL(), persisted.Sonarr.EnabledAPIKey(), persisted.TMDB.EnabledAPIKey(), persisted.ComingSoonRegion, persisted.ComingSoonDaysAhead),
 		omdb.NewClient(persisted.OMDB.EnabledAPIKey()),
+		tracearr.NewClient(persisted.Tracearr.EnabledBaseURL(), persisted.Tracearr.EnabledAPIKey()),
 		persisted.ComingSoonRegion,
 		persisted.NewForYouLibraryIDs,
 		persisted.WatchedLibraryIDs,
@@ -246,7 +249,7 @@ func (app *App) invalidateIntegrationCaches(ctx context.Context) {
 	if app.redis == nil {
 		return
 	}
-	for _, pattern := range []string{"requests:*", "discover:*", "comingsoon:*"} {
+	for _, pattern := range []string{"requests:*", "discover:*", "comingsoon:*", "tracearr:*"} {
 		keys, err := app.redis.Keys(ctx, pattern).Result()
 		if err != nil || len(keys) == 0 {
 			continue
@@ -309,6 +312,9 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/stats/weekdays", app.weekdayStats)
 	mux.HandleFunc("GET /api/stats/longest-session", app.longestSessionStats)
 	mux.HandleFunc("GET /api/stats/most-active-day", app.mostActiveDayStats)
+	mux.HandleFunc("GET /api/stats/genres", app.genreStats)
+	mux.HandleFunc("GET /api/stats/unfinished", app.unfinishedStats)
+	mux.HandleFunc("GET /api/stats/transcode-share", app.transcodeShareStats)
 	mux.HandleFunc("GET /api/upcoming", app.upcomingItems)
 	mux.HandleFunc("GET /api/in-cinemas", app.inCinemaItems)
 	mux.HandleFunc("GET /api/requests", app.myRequests)
@@ -1003,7 +1009,17 @@ func (app *App) embyMediaDetailHandler(writer http.ResponseWriter, request *http
 		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "media detail is unavailable"})
 		return
 	}
-	respondJSON(writer, http.StatusOK, detail)
+	embyType := "Movie"
+	if detail.IsSeries {
+		embyType = "Series"
+	}
+	respondJSON(writer, http.StatusOK, struct {
+		emby.MediaDetail
+		Household *household `json:"household,omitempty"`
+	}{
+		MediaDetail: detail,
+		Household:   app.tracearrHousehold(request.Context(), embyType, detail.ImdbID, detail.TmdbID, detail.TvdbID),
+	})
 }
 
 func (app *App) seerrMediaDetailHandler(writer http.ResponseWriter, request *http.Request) {
@@ -1030,7 +1046,13 @@ func (app *App) seerrMediaDetailHandler(writer http.ResponseWriter, request *htt
 			detail.RottenTomatoesRating = ratings.RottenTomatoesRating
 		}
 	}
-	respondJSON(writer, http.StatusOK, detail)
+	respondJSON(writer, http.StatusOK, struct {
+		seerr.MediaDetail
+		Household *household `json:"household,omitempty"`
+	}{
+		MediaDetail: detail,
+		Household:   app.tracearrHouseholdForTMDB(request.Context(), mediaType, tmdbID, detail.ImdbID),
+	})
 }
 
 func (app *App) createSeerrRequestHandler(writer http.ResponseWriter, request *http.Request) {
@@ -1742,6 +1764,7 @@ func (app *App) adminGetSettings(writer http.ResponseWriter, request *http.Reque
 		"sonarr":              viewOfService(settings.Sonarr),
 		"tmdb":                viewOfService(settings.TMDB),
 		"omdb":                viewOfService(settings.OMDB),
+		"tracearr":            viewOfService(settings.Tracearr),
 		"comingSoonRegion":    settings.ComingSoonRegion,
 		"comingSoonDaysAhead": settings.ComingSoonDaysAhead,
 		"language":            uiLanguage(settings.Language),
@@ -1787,6 +1810,11 @@ func (app *App) adminPutSettings(writer http.ResponseWriter, request *http.Reque
 			Enabled bool   `json:"enabled"`
 			APIKey  string `json:"apiKey"`
 		} `json:"omdb"`
+		Tracearr struct {
+			Enabled bool   `json:"enabled"`
+			BaseURL string `json:"baseUrl"`
+			APIKey  string `json:"apiKey"`
+		} `json:"tracearr"`
 		ComingSoonRegion    string `json:"comingSoonRegion"`
 		ComingSoonDaysAhead int    `json:"comingSoonDaysAhead"`
 		Language            string `json:"language"`
@@ -1809,6 +1837,7 @@ func (app *App) adminPutSettings(writer http.ResponseWriter, request *http.Reque
 	seerrURL := strings.TrimSpace(input.Seerr.BaseURL)
 	radarrURL := strings.TrimSpace(input.Radarr.BaseURL)
 	sonarrURL := strings.TrimSpace(input.Sonarr.BaseURL)
+	tracearrURL := strings.TrimSpace(input.Tracearr.BaseURL)
 
 	if err := validateServiceURL(seerrURL); err != nil {
 		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("Invalid Seerr URL: %v", err)})
@@ -1822,6 +1851,10 @@ func (app *App) adminPutSettings(writer http.ResponseWriter, request *http.Reque
 		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("Invalid Sonarr URL: %v", err)})
 		return
 	}
+	if err := validateServiceURL(tracearrURL); err != nil {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("Invalid Tracearr URL: %v", err)})
+		return
+	}
 
 	settings := appconfig.Settings{
 		NewForYouLibraryIDs: input.NewForYouLibraryIDs,
@@ -1831,6 +1864,7 @@ func (app *App) adminPutSettings(writer http.ResponseWriter, request *http.Reque
 		Sonarr:              appconfig.ServiceSetting{Enabled: input.Sonarr.Enabled, BaseURL: sonarrURL, APIKey: input.Sonarr.APIKey},
 		TMDB:                appconfig.ServiceSetting{Enabled: input.TMDB.Enabled, APIKey: input.TMDB.APIKey},
 		OMDB:                appconfig.ServiceSetting{Enabled: input.OMDB.Enabled, APIKey: input.OMDB.APIKey},
+		Tracearr:            appconfig.ServiceSetting{Enabled: input.Tracearr.Enabled, BaseURL: tracearrURL, APIKey: input.Tracearr.APIKey},
 		ComingSoonRegion:    region,
 		ComingSoonDaysAhead: daysAhead,
 		Language:            uiLanguage(input.Language),
@@ -1862,6 +1896,7 @@ func (app *App) adminDebugLive(writer http.ResponseWriter, request *http.Request
 		"seerrConfigured":      seerrClient != nil,
 		"comingSoonConfigured": comingSoonClient != nil,
 		"omdbConfigured":       app.live.omdbClient() != nil,
+		"tracearrConfigured":   app.live.tracearrClient() != nil,
 		"comingSoonRegion":     region,
 		"newForYouLibraryIds":  orEmpty(app.live.newForYouLibraries()),
 		"watchedLibraryIds":    orEmpty(app.live.watchedLibraries()),
@@ -2211,6 +2246,10 @@ func (app *App) identityProfile(ctx context.Context, identity emby.Identity) map
 			// proxy: it stays empty until a user manually rates/bookmarks
 			// something, which hid Statistik even with playback data present.
 			"statistics": true,
+			// Tracearr backs the genre breakdown, unfinished list, transcode
+			// share and household watchers — everything else on Statistik
+			// keeps working without it, so this gates only those.
+			"tracearr": settings.Tracearr.Enabled,
 		},
 	}
 }
@@ -2516,5 +2555,16 @@ func (app *App) comingSoonMediaDetailHandler(writer http.ResponseWriter, request
 	if item.Studio != "" {
 		detail.Studios = []string{item.Studio}
 	}
-	respondJSON(writer, http.StatusOK, detail)
+	// Only series get household data here. A calendar entry is by definition
+	// not out yet, so for a film there is nothing to have watched — but an
+	// upcoming episode belongs to a show whose earlier seasons very likely
+	// were watched, and that is worth showing.
+	var watched *household
+	if item.MediaType == "tv" {
+		watched = app.tracearrHousehold(request.Context(), "Series", "", item.TmdbID, "")
+	}
+	respondJSON(writer, http.StatusOK, struct {
+		seerr.MediaDetail
+		Household *household `json:"household,omitempty"`
+	}{MediaDetail: detail, Household: watched})
 }

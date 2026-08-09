@@ -50,6 +50,13 @@ type MediaDetail struct {
 	// episode is actually in progress.
 	CurrentSeasonNumber  int `json:"currentSeasonNumber,omitempty"`
 	CurrentEpisodeNumber int `json:"currentEpisodeNumber,omitempty"`
+	// ImdbID/TmdbID/TvdbID come from Emby's ProviderIds and stay server-side
+	// (like seerr.MediaDetail.ImdbID): the browser has no use for them, but
+	// they are what lets an Emby item be looked up in third-party services
+	// keyed by external id.
+	ImdbID string `json:"-"`
+	TmdbID string `json:"-"`
+	TvdbID string `json:"-"`
 }
 
 type MediaDetailReader interface {
@@ -61,7 +68,7 @@ type MediaDetailReader interface {
 // the personal watch progress via UserData.UnplayedItemCount.
 func (client *Client) EmbyMediaDetail(ctx context.Context, userID, itemID string) (MediaDetail, error) {
 	query := url.Values{
-		"Fields": {"Overview,Genres,People,CommunityRating,OfficialRating,RecursiveItemCount"},
+		"Fields": {"Overview,Genres,People,CommunityRating,OfficialRating,RecursiveItemCount,ProviderIds"},
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, client.baseURL+"/Users/"+userID+"/Items/"+itemID+"?"+query.Encode(), nil)
 	if err != nil {
@@ -96,7 +103,12 @@ func (client *Client) EmbyMediaDetail(ctx context.Context, userID, itemID string
 			Primary string `json:"Primary"`
 		} `json:"ImageTags"`
 		BackdropImageTags []string `json:"BackdropImageTags"`
-		People            []struct {
+		ProviderIds       struct {
+			Imdb string `json:"Imdb"`
+			Tmdb string `json:"Tmdb"`
+			Tvdb string `json:"Tvdb"`
+		} `json:"ProviderIds"`
+		People []struct {
 			Id              string `json:"Id"`
 			Name            string `json:"Name"`
 			Role            string `json:"Role"`
@@ -139,6 +151,9 @@ func (client *Client) EmbyMediaDetail(ctx context.Context, userID, itemID string
 		Year:            result.ProductionYear,
 		RuntimeMinutes:  int(result.RunTimeTicks / 10_000_000 / 60),
 		IsSeries:        result.Type == "Series",
+		ImdbID:          result.ProviderIds.Imdb,
+		TmdbID:          result.ProviderIds.Tmdb,
+		TvdbID:          result.ProviderIds.Tvdb,
 		Played:          result.UserData.Played,
 		IsFavorite:      result.UserData.IsFavorite,
 		Cast:            []Person{},

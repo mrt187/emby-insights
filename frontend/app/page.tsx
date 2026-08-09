@@ -20,7 +20,7 @@ function storedPage(): Page {
   const value = window.sessionStorage.getItem(PAGE_STORAGE_KEY);
   return isPage(value) ? value : "today";
 }
-type Features = { requests: boolean; movieDates: boolean; seriesDates: boolean; upcoming: boolean; statistics: boolean };
+type Features = { requests: boolean; movieDates: boolean; seriesDates: boolean; upcoming: boolean; statistics: boolean; tracearr: boolean };
 type CurrentUser = { id: string; name: string; isAdmin: boolean; features: Features; language?: Lang };
 type Period = "week" | "month" | "year";
 type PersonalStats = { watchSeconds: number; previousWatchSeconds: number; completedMovies: number; completedSeries: number; favouriteGenre: string; periodStartsAt: string; periodEndsAt: string };
@@ -30,6 +30,13 @@ type HourWatchTime = { hour: number; watchSeconds: number };
 type WeekdayWatchTime = { weekday: number; watchSeconds: number };
 type LongestSession = { itemName: string; watchSeconds: number; startedAt: string };
 type MostActiveDay = { date: string; watchSeconds: number };
+// Tracearr-backed extras. Every one of these endpoints answers with an empty
+// payload rather than an error when Tracearr is off, so nothing here needs a
+// separate "unavailable" state.
+type GenrePlays = { genre: string; plays: number };
+type UnfinishedPlay = { mediaId: string; title: string; showTitle?: string; percentComplete: number };
+type TranscodeShare = { plays: number; transcodes: number };
+type Household = { plays: number; uniqueUsers: number; watchers: { name: string; plays: number; completionPercent: number }[] };
 type UserProfile = { memberSince: string; lastActiveDate: string; lastLoginDate: string };
 type UpcomingItem = { id: string; tmdbId: string; source: "radarr" | "sonarr"; detailId: string; title: string; posterUrl: string; mediaType: string; availabilityDate: string; cinemaStartDate?: string; cinemaEndDate?: string; seasonNumber?: number; episodeNumber?: number; episodeTitle?: string };
 type RequestItem = { id: string; title: string; posterUrl: string; status: string; tmdbId: string; mediaType: string; availableSince?: string };
@@ -70,6 +77,7 @@ type MediaDetail = {
   mediaStatus?: number;
   status?: string; releaseDate?: string; studios?: string[];
   imdbRating?: string; rottenTomatoesRating?: string;
+  household?: Household;
 };
 type MediaTrackingEntry = { mediaSource: string; mediaId: string; mediaType: string; title: string; posterUrl: string; rating?: number; onWatchlist: boolean; hiddenInProgress?: boolean };
 function isRequestableSeason(season: MediaSeason | RequestableSeason): season is RequestableSeason { return !("id" in season); }
@@ -748,7 +756,7 @@ function BarChart({ title, subtitle, data, formatValue, loading }: { title: stri
   </section>;
 }
 
-function Stats({ user, onSelectMedia }: { user: { id: string; name: string }; onSelectMedia: (selection: MediaSelection) => void }) {
+function Stats({ user, onSelectMedia }: { user: { id: string; name: string; features: Features }; onSelectMedia: (selection: MediaSelection) => void }) {
   const lang = useLang();
   const translate = useT();
   const [period, setPeriod] = useState<Period>("week");
@@ -768,6 +776,20 @@ function Stats({ user, onSelectMedia }: { user: { id: string; name: string }; on
   const [weekdayStats, weekdayStatsState] = useApiResource<WeekdayWatchTime[]>(`/api/stats/weekdays?period=${period}`, []);
   const [longestSession, longestSessionState] = useApiResource<LongestSession | null>(`/api/stats/longest-session?period=${period}`, null);
   const [mostActiveDay, mostActiveDayState] = useApiResource<MostActiveDay | null>(`/api/stats/most-active-day?period=${period}`, null);
+  const tracearr = user.features.tracearr;
+  const [genrePlays, genrePlaysState] = useApiResource<GenrePlays[]>(tracearr ? "/api/stats/genres" : null, []);
+  const [unfinished, unfinishedState] = useApiResource<UnfinishedPlay[]>(tracearr ? `/api/stats/unfinished?period=${period}` : null, []);
+  const [transcode] = useApiResource<TranscodeShare | null>(tracearr ? `/api/stats/transcode-share?period=${period}` : null, null);
+
+  // Tracearr counts a genre per play; the fallback counts it per fully
+  // watched title. Both answer "most watched genres", but the play-weighted
+  // one is the truer answer, so it wins whenever it has anything to say.
+  const genreChart = genrePlays.length > 0
+    ? genrePlays.slice(0, 6).map((entry) => ({ label: entry.genre, value: entry.plays }))
+    : topGenres(watchedMovies, watchedSeries);
+  const genreSubtitle = genrePlays.length > 0
+    ? translate("chart_genres_by_plays")
+    : statistics?.favouriteGenre ? translate("chart_favourite_genre", { genre: statistics.favouriteGenre }) : undefined;
 
   return <div className="content page-view">
     <section className="period-tabs" aria-label={translate("select_period")}>{(["week", "month", "year"] as Period[]).map((item) => <button className={period === item ? "selected" : ""} onClick={() => setPeriod(item)} key={item} aria-pressed={period === item}>{translate(periodLabelKey[item])}</button>)}</section>
@@ -783,13 +805,25 @@ function Stats({ user, onSelectMedia }: { user: { id: string; name: string }; on
         onOpenSeries={statistics && statistics.completedSeries > 0 && completedSeriesState === "ready" ? () => setCompletedGridView("series") : undefined}
       />
       <RecordsCard longestSession={longestSession} longestSessionState={longestSessionState} mostActiveDay={mostActiveDay} mostActiveDayState={mostActiveDayState} />
+      {tracearr && transcode && transcode.plays > 0 && <MetricCard
+        icon="refresh" tone="mint"
+        value={`${Math.round((transcode.transcodes / transcode.plays) * 100)}%`}
+        label={translate("transcode_share")}
+        detail={translate("transcode_share_detail", { transcodes: transcode.transcodes, plays: transcode.plays })}
+      />}
     </section>
 
     <section className="chart-grid">
-      <BarChart title={translate("chart_top_genres")} subtitle={statistics?.favouriteGenre ? translate("chart_favourite_genre", { genre: statistics.favouriteGenre }) : undefined} data={topGenres(watchedMovies, watchedSeries)} loading={watchedMoviesState === "loading" || watchedSeriesState === "loading"} />
+      <BarChart title={translate("chart_top_genres")} subtitle={genreSubtitle} data={genreChart} loading={genrePlaysState === "loading" || watchedMoviesState === "loading" || watchedSeriesState === "loading"} />
       <BarChart title={translate("chart_by_weekday")} data={weekdayStatsState === "ready" ? weekdayChartData(weekdayStats, lang) : []} formatValue={(value) => formatDuration(value, lang)} loading={weekdayStatsState === "loading"} />
       <BarChart title={translate("chart_by_hour")} data={hourStatsState === "ready" ? daypartChartData(hourStats, lang) : []} formatValue={(value) => formatDuration(value, lang)} loading={hourStatsState === "loading"} />
       <BarChart title={translate("chart_by_device")} data={deviceStatsState === "ready" ? deviceStats.slice(0, 6).map((device) => ({ label: device.deviceName, value: device.watchSeconds })) : []} formatValue={(value) => formatDuration(value, lang)} loading={deviceStatsState === "loading"} />
+      {tracearr && unfinished.length > 0 && <BarChart
+        title={translate("chart_unfinished")}
+        data={unfinished.slice(0, 6).map((play) => ({ label: play.showTitle ? `${play.showTitle} — ${play.title}` : play.title, value: play.percentComplete }))}
+        formatValue={(value) => `${Math.round(value)}%`}
+        loading={unfinishedState === "loading"}
+      />}
     </section>
 
     <section aria-label={translate("watched_content")}>
@@ -1211,6 +1245,12 @@ function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreat
             {detail.studios && detail.studios.length > 0 && <div><dt>{translate("fact_studios")}</dt><dd>{detail.studios.join(", ")}</dd></div>}
           </dl>
         </section>}
+        {detail.household && detail.household.watchers.length > 0 && <section className="media-detail-facts" aria-label={translate("household_heading")}>
+          <dl>
+            <div><dt>{translate("fact_household_plays")}</dt><dd>{detail.household.plays}</dd></div>
+            <div><dt>{translate("fact_household_watchers")}</dt><dd>{detail.household.watchers.map((watcher) => `${watcher.name} (${Math.round(watcher.completionPercent)}%)`).join(", ")}</dd></div>
+          </dl>
+        </section>}
         <div className="tracking-bar">
           {selection.source === "emby" && <>
             <div className="star-rating" role="radiogroup" aria-label={translate("your_rating")}>
@@ -1382,7 +1422,7 @@ type EmbyLibrary = { id: string; name: string };
 type ServiceView = { enabled: boolean; baseUrl?: string; apiKeySet: boolean; apiKeyPreview?: string };
 type AdminSettingsView = {
   newForYouLibraryIds: string[]; watchedLibraryIds: string[];
-  seerr: ServiceView; radarr: ServiceView; sonarr: ServiceView; tmdb: ServiceView; omdb: ServiceView;
+  seerr: ServiceView; radarr: ServiceView; sonarr: ServiceView; tmdb: ServiceView; omdb: ServiceView; tracearr: ServiceView;
   comingSoonRegion: string; comingSoonDaysAhead: number;
   language: Lang;
 };
@@ -1491,6 +1531,7 @@ function AdminSettingsForm({ activity, activityState, settings, refetchSettings,
   const [sonarr, setSonarr] = useState<ServiceDraft>(() => ({ enabled: settings.sonarr.enabled, baseUrl: settings.sonarr.baseUrl ?? "", apiKey: "" }));
   const [tmdb, setTmdb] = useState<ServiceDraft>(() => ({ enabled: settings.tmdb.enabled, baseUrl: "", apiKey: "" }));
   const [omdb, setOmdb] = useState<ServiceDraft>(() => ({ enabled: settings.omdb.enabled, baseUrl: "", apiKey: "" }));
+  const [tracearrDraft, setTracearrDraft] = useState<ServiceDraft>(() => ({ enabled: settings.tracearr.enabled, baseUrl: settings.tracearr.baseUrl ?? "", apiKey: "" }));
   const [comingSoonRegion, setComingSoonRegion] = useState(() => settings.comingSoonRegion || "DE");
   const [comingSoonDaysAhead, setComingSoonDaysAhead] = useState(() => settings.comingSoonDaysAhead || 28);
   const [language, setLanguage] = useState<Lang>(() => isLang(settings.language) ? settings.language : "en");
@@ -1518,6 +1559,7 @@ function AdminSettingsForm({ activity, activityState, settings, refetchSettings,
           seerr, radarr, sonarr,
           tmdb: { enabled: tmdb.enabled, apiKey: tmdb.apiKey },
           omdb: { enabled: omdb.enabled, apiKey: omdb.apiKey },
+          tracearr: tracearrDraft,
           comingSoonRegion,
           comingSoonDaysAhead,
           language,
@@ -1598,6 +1640,11 @@ function AdminSettingsForm({ activity, activityState, settings, refetchSettings,
           title="OMDB" description={translate("service_omdb_description")}
           shows={translate("service_omdb_shows")}
           draft={omdb} onChange={setOmdb} existing={settings.omdb} showsBaseUrl={false}
+        />
+        <ServiceCard
+          title="Tracearr" description={translate("service_tracearr_description")}
+          shows={translate("service_tracearr_shows")}
+          draft={tracearrDraft} onChange={setTracearrDraft} existing={settings.tracearr} showsBaseUrl
         />
       </div>
     </section>

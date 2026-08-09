@@ -8,6 +8,16 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.15.0] - 2026-08-09
+
+### Added
+
+- Tracearr can now be connected as an optional extra source in Verwaltung.
+  It adds a full genre breakdown instead of just one favourite genre, a
+  list of titles you started but never finished, how much of your playback
+  had to be converted, and who else in the household watched a title. Leave
+  it off and everything stays exactly as before.
+
 ## [0.14.2] - 2026-08-08
 
 ### Added

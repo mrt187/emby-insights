@@ -37,6 +37,7 @@ type Settings struct {
 	Sonarr              ServiceSetting
 	TMDB                ServiceSetting
 	OMDB                ServiceSetting
+	Tracearr            ServiceSetting
 	ComingSoonRegion    string
 	ComingSoonDaysAhead int
 	// Language is the global UI language of the frontend ("de" or "en").
@@ -84,6 +85,7 @@ func (store *Store) Get(ctx context.Context) (Settings, error) {
 		seerrKeyCipher, radarrKeyCipher string
 		sonarrKeyCipher, tmdbKeyCipher  string
 		omdbKeyCipher                   string
+		tracearrKeyCipher               string
 	)
 	err := store.pool.QueryRow(ctx, `
 		SELECT emby_device_id, new_for_you_library_ids, watched_library_ids,
@@ -92,6 +94,7 @@ func (store *Store) Get(ctx context.Context) (Settings, error) {
 			sonarr_enabled, sonarr_base_url, sonarr_api_key_encrypted,
 			tmdb_enabled, tmdb_api_key_encrypted,
 			omdb_enabled, omdb_api_key_encrypted,
+			tracearr_enabled, tracearr_base_url, tracearr_api_key_encrypted,
 			comingsoon_region, comingsoon_days_ahead, language
 		FROM app_config WHERE id = 1
 	`).Scan(
@@ -101,6 +104,7 @@ func (store *Store) Get(ctx context.Context) (Settings, error) {
 		&settings.Sonarr.Enabled, &settings.Sonarr.BaseURL, &sonarrKeyCipher,
 		&settings.TMDB.Enabled, &tmdbKeyCipher,
 		&settings.OMDB.Enabled, &omdbKeyCipher,
+		&settings.Tracearr.Enabled, &settings.Tracearr.BaseURL, &tracearrKeyCipher,
 		&settings.ComingSoonRegion, &settings.ComingSoonDaysAhead, &settings.Language,
 	)
 	if err != nil {
@@ -116,6 +120,7 @@ func (store *Store) Get(ctx context.Context) (Settings, error) {
 		{sonarrKeyCipher, &settings.Sonarr.APIKey},
 		{tmdbKeyCipher, &settings.TMDB.APIKey},
 		{omdbKeyCipher, &settings.OMDB.APIKey},
+		{tracearrKeyCipher, &settings.Tracearr.APIKey},
 	} {
 		plaintext, err := store.box.Decrypt(pair.cipher)
 		if err != nil {
@@ -154,6 +159,9 @@ func (store *Store) Update(ctx context.Context, settings Settings) error {
 	if settings.OMDB.APIKey == "" {
 		settings.OMDB.APIKey = current.OMDB.APIKey
 	}
+	if settings.Tracearr.APIKey == "" {
+		settings.Tracearr.APIKey = current.Tracearr.APIKey
+	}
 
 	seerrKeyCipher, err := store.box.Encrypt(settings.Seerr.APIKey)
 	if err != nil {
@@ -175,6 +183,10 @@ func (store *Store) Update(ctx context.Context, settings Settings) error {
 	if err != nil {
 		return fmt.Errorf("encrypt OMDB key: %w", err)
 	}
+	tracearrKeyCipher, err := store.box.Encrypt(settings.Tracearr.APIKey)
+	if err != nil {
+		return fmt.Errorf("encrypt Tracearr key: %w", err)
+	}
 
 	_, err = store.pool.Exec(ctx, `
 		UPDATE app_config SET
@@ -184,8 +196,9 @@ func (store *Store) Update(ctx context.Context, settings Settings) error {
 			sonarr_enabled = $9, sonarr_base_url = $10, sonarr_api_key_encrypted = $11,
 			tmdb_enabled = $12, tmdb_api_key_encrypted = $13,
 			omdb_enabled = $14, omdb_api_key_encrypted = $15,
-			comingsoon_region = $16, comingsoon_days_ahead = $17,
-			language = $18,
+			tracearr_enabled = $16, tracearr_base_url = $17, tracearr_api_key_encrypted = $18,
+			comingsoon_region = $19, comingsoon_days_ahead = $20,
+			language = $21,
 			updated_at = now()
 		WHERE id = 1
 	`,
@@ -195,6 +208,7 @@ func (store *Store) Update(ctx context.Context, settings Settings) error {
 		settings.Sonarr.Enabled, settings.Sonarr.BaseURL, sonarrKeyCipher,
 		settings.TMDB.Enabled, tmdbKeyCipher,
 		settings.OMDB.Enabled, omdbKeyCipher,
+		settings.Tracearr.Enabled, settings.Tracearr.BaseURL, tracearrKeyCipher,
 		settings.ComingSoonRegion, settings.ComingSoonDaysAhead,
 		valueOr(settings.Language, "en"),
 	)

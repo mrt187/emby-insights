@@ -8,6 +8,7 @@ import (
 	"github.com/mrt187/EmbyInsights/internal/comingsoon"
 	"github.com/mrt187/EmbyInsights/internal/omdb"
 	"github.com/mrt187/EmbyInsights/internal/seerr"
+	"github.com/mrt187/EmbyInsights/internal/tracearr"
 )
 
 // liveConfig holds everything the setup wizard's Verwaltung UI can change at
@@ -21,17 +22,19 @@ type liveConfig struct {
 	seerr               *seerr.Client
 	comingSoon          *comingsoon.Client
 	omdb                *omdb.Client
+	tracearr            *tracearr.Client
 	region              string
 	newForYouLibraryIDs []string
 	watchedLibraryIDs   []string
 }
 
-func (live *liveConfig) set(seerrClient *seerr.Client, comingSoonClient *comingsoon.Client, omdbClient *omdb.Client, region string, newForYouLibraryIDs, watchedLibraryIDs []string) {
+func (live *liveConfig) set(seerrClient *seerr.Client, comingSoonClient *comingsoon.Client, omdbClient *omdb.Client, tracearrClient *tracearr.Client, region string, newForYouLibraryIDs, watchedLibraryIDs []string) {
 	live.mu.Lock()
 	defer live.mu.Unlock()
 	live.seerr = seerrClient
 	live.comingSoon = comingSoonClient
 	live.omdb = omdbClient
+	live.tracearr = tracearrClient
 	live.region = region
 	live.newForYouLibraryIDs = newForYouLibraryIDs
 	live.watchedLibraryIDs = watchedLibraryIDs
@@ -57,6 +60,15 @@ func (live *liveConfig) omdbClient() *omdb.Client {
 	live.mu.RLock()
 	defer live.mu.RUnlock()
 	return live.omdb
+}
+
+func (live *liveConfig) tracearrClient() *tracearr.Client {
+	if live == nil {
+		return nil
+	}
+	live.mu.RLock()
+	defer live.mu.RUnlock()
+	return live.tracearr
 }
 
 func (live *liveConfig) discoverRegion() string {

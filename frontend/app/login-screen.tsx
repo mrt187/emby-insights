@@ -3,7 +3,7 @@
 import { FormEvent, useState } from "react";
 import { type Lang, t } from "./translations";
 
-type Features = { requests: boolean; movieDates: boolean; seriesDates: boolean; upcoming: boolean; statistics: boolean };
+type Features = { requests: boolean; movieDates: boolean; seriesDates: boolean; upcoming: boolean; statistics: boolean; tracearr: boolean };
 type User = { id: string; name: string; isAdmin: boolean; features: Features; language?: Lang };
 
 // `lang` arrives as a prop rather than from LanguageContext: this screen
