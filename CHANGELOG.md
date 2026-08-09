@@ -8,6 +8,24 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.16.0] - 2026-08-10
+
+### Added
+
+- Two new rows on Heute: the movies and shows watched most in this household
+  over the last 30 days, numbered by rank, with a tick on the ones you have
+  already seen. They need Tracearr and stay hidden without it.
+- The media detail page was rebuilt: plot and cast now sit behind a button,
+  so the ratings and the buttons are visible right away. Household plays and
+  viewers moved into two tiles, and the heart is now a labelled button.
+
+### Fixed
+
+- The container could exit right after starting when no VAPID keys were set.
+  Push notifications are optional again: without keys the feature simply
+  stays hidden instead of stopping the app. The Unraid template now offers
+  the three keys as optional settings.
+
 ## [0.15.5] - 2026-08-09
 
 ### Added
