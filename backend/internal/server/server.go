@@ -1008,6 +1008,7 @@ func (app *App) embyMediaDetailHandler(writer http.ResponseWriter, request *http
 		upstreamUnavailable(writer, "media detail is unavailable", err)
 		return
 	}
+	detail.ImdbRating, detail.RottenTomatoesRating = app.omdbRatings(request.Context(), detail.ImdbID)
 	embyType := "Movie"
 	if detail.IsSeries {
 		embyType = "Series"
@@ -1019,6 +1020,27 @@ func (app *App) embyMediaDetailHandler(writer http.ResponseWriter, request *http
 		MediaDetail: detail,
 		Household:   app.tracearrHousehold(request.Context(), embyType, detail.ImdbID, detail.TmdbID, detail.TvdbID),
 	})
+}
+
+// omdbRatings looks up one title's IMDb and Rotten Tomatoes scores by IMDb
+// id, for both the Emby and the Seerr detail screens — the same film should
+// carry the same ratings whether it was opened from the library or found
+// through Discover.
+//
+// These are decoration, not core data: OMDb being off, rate-limited or down
+// must never turn an otherwise-fine detail response into an error, so this
+// returns empty strings. It does log the cause, because silently dropping it
+// left "the ratings are suddenly gone" with nothing to go on.
+func (app *App) omdbRatings(ctx context.Context, imdbID string) (imdbRating, rottenTomatoesRating string) {
+	omdbClient := app.live.omdbClient()
+	if omdbClient == nil || imdbID == "" {
+		return "", ""
+	}
+	ratings, err := omdbClient.Ratings(ctx, imdbID)
+	if err != nil {
+		log.Printf("OMDb ratings unavailable, showing the detail without them: %v", err)
+	}
+	return ratings.ImdbRating, ratings.RottenTomatoesRating
 }
 
 func (app *App) seerrMediaDetailHandler(writer http.ResponseWriter, request *http.Request) {
@@ -1036,15 +1058,7 @@ func (app *App) seerrMediaDetailHandler(writer http.ResponseWriter, request *htt
 		upstreamUnavailable(writer, "media detail is unavailable", err)
 		return
 	}
-	// OMDb ratings are decoration, not core data — a lookup failure (not
-	// configured, no IMDb id, OMDb down) must never turn an otherwise-fine
-	// media-detail response into a 502, so this ignores the error.
-	if omdbClient := app.live.omdbClient(); omdbClient != nil && detail.ImdbID != "" {
-		if ratings, err := omdbClient.Ratings(request.Context(), detail.ImdbID); err == nil {
-			detail.ImdbRating = ratings.ImdbRating
-			detail.RottenTomatoesRating = ratings.RottenTomatoesRating
-		}
-	}
+	detail.ImdbRating, detail.RottenTomatoesRating = app.omdbRatings(request.Context(), detail.ImdbID)
 	respondJSON(writer, http.StatusOK, struct {
 		seerr.MediaDetail
 		Household *household `json:"household,omitempty"`

@@ -63,3 +63,53 @@ func TestRatingsNilClientOrEmptyID(t *testing.T) {
 		t.Fatalf("empty imdbID: ratings = %#v, err = %v", ratings, err)
 	}
 }
+
+// The whole point of the error return: an exhausted quota and an expired key
+// both arrive as a 401 and used to look exactly like "this film has no
+// ratings" — no error, no log, ratings silently gone from the UI.
+func TestRatingsReportsQuotaAndKeyFailures(t *testing.T) {
+	for name, respond := range map[string]http.HandlerFunc{
+		"quota exhausted": func(writer http.ResponseWriter, _ *http.Request) {
+			writer.WriteHeader(http.StatusUnauthorized)
+			_, _ = writer.Write([]byte(`{"Response":"False","Error":"Request limit reached!"}`))
+		},
+		"invalid key": func(writer http.ResponseWriter, _ *http.Request) {
+			writer.WriteHeader(http.StatusUnauthorized)
+			_, _ = writer.Write([]byte(`{"Response":"False","Error":"Invalid API key!"}`))
+		},
+		"server error": func(writer http.ResponseWriter, _ *http.Request) {
+			writer.WriteHeader(http.StatusInternalServerError)
+		},
+		"unparseable body": func(writer http.ResponseWriter, _ *http.Request) {
+			_, _ = writer.Write([]byte(`not json`))
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			testServer := httptest.NewServer(respond)
+			defer testServer.Close()
+
+			client := &Client{apiKey: "test-key", baseURL: testServer.URL, httpClient: testServer.Client()}
+			ratings, err := client.Ratings(context.Background(), "tt0111161")
+			if err == nil {
+				t.Fatal("Ratings() returned no error, so the failure stays invisible")
+			}
+			if ratings != (Ratings{}) {
+				t.Fatalf("ratings = %#v, want zero value alongside the error", ratings)
+			}
+		})
+	}
+}
+
+// A refusal that is not a lookup miss must surface even with a 200, because
+// OMDb answers "Request limit reached!" that way too.
+func TestRatingsReportsRefusalWithA200(t *testing.T) {
+	testServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		_, _ = writer.Write([]byte(`{"Response":"False","Error":"Request limit reached!"}`))
+	}))
+	defer testServer.Close()
+
+	client := &Client{apiKey: "test-key", baseURL: testServer.URL, httpClient: testServer.Client()}
+	if _, err := client.Ratings(context.Background(), "tt0111161"); err == nil {
+		t.Fatal("a quota refusal behind a 200 must still be reported")
+	}
+}

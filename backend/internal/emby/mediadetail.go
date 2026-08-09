@@ -57,6 +57,12 @@ type MediaDetail struct {
 	ImdbID string `json:"-"`
 	TmdbID string `json:"-"`
 	TvdbID string `json:"-"`
+	// ImdbRating/RottenTomatoesRating are not Emby's own — the server fills
+	// them from OMDb via ImdbID, mirroring seerr.MediaDetail, so a title
+	// from the library shows the same ratings as the same title found
+	// through Discover. Omitted when OMDb is off or has nothing.
+	ImdbRating           string `json:"imdbRating,omitempty"`
+	RottenTomatoesRating string `json:"rottenTomatoesRating,omitempty"`
 }
 
 type MediaDetailReader interface {
