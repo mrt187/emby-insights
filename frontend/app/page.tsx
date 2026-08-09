@@ -108,7 +108,7 @@ function visibleNav(user: CurrentUser): { page: Page; labelKey: TranslationKey; 
 }
 const pageTitleKey: Record<Page, TranslationKey> = { today: "nav_today", stats: "nav_stats", requests: "nav_requests", chats: "nav_chats", profile: "nav_profile", admin: "nav_admin" };
 const periodLabelKey: Record<Period, TranslationKey> = { week: "period_week", month: "period_month", year: "period_year" };
-const APP_VERSION = "0.15.3";
+const APP_VERSION = "0.15.4";
 
 // One formatter per language and purpose, built once: Intl.DateTimeFormat is
 // expensive enough that constructing it inside a render loop is wasteful.
@@ -374,6 +374,43 @@ function Icon({ name }: { name: IconName }) {
   return <svg className="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
+// Rating marks are their own thing rather than Icon entries: Icon draws
+// monochrome line art in currentColor, and these have to carry their own
+// fill colours to be recognisable at a glance. Inline SVG also sidesteps
+// the CSP, which allows no external image host.
+
+// A rating below 60% is "rotten" at Rotten Tomatoes, and the mark flips from
+// a whole tomato to a splat. Anything unparseable is treated as fresh rather
+// than silently accusing a film of being bad.
+function isRotten(rating: string) {
+  const percent = Number.parseInt(rating, 10);
+  return Number.isFinite(percent) && percent < 60;
+}
+
+function TomatoMark({ rotten }: { rotten: boolean }) {
+  return <svg className="rating-mark" viewBox="0 0 24 24" aria-hidden="true">
+    {rotten
+      ? <>
+        <path
+          d="M12 1.8 L13.3 7.6 L17.8 3 L15.4 9 L21.3 7.7 L16.5 11.3 L21.8 13.4 L16.1 13.9 L19.9 18.8 L14.5 15.9 L14.8 21.4 L12 16.4 L9.2 21.4 L9.5 15.9 L4.1 18.9 L8.1 13.8 L1.3 13.5 L7.3 11.3 L2.5 7.7 L8.5 9 L6.7 3.7 L10.8 7.9Z"
+          fill="#4b7f3f" stroke="#4b7f3f" strokeWidth="1.1" strokeLinejoin="round"
+        />
+        <circle cx="10.4" cy="11.2" r="1.3" fill="#28471f" />
+        <circle cx="13.9" cy="13.4" r=".95" fill="#28471f" />
+      </>
+      : <>
+        <path d="M12 4.6c4.4 0 7.7 3.1 7.7 7.2s-3.3 7.6-7.7 7.6-7.7-3.5-7.7-7.6S7.6 4.6 12 4.6Z" fill="#fa320a" />
+        <path d="M12 5.6c-.9-1.4-2.4-2-4-1.9 1 .9 1.4 1.7 1.5 2.6 1-.5 1.8-.7 2.5-.7Zm0 0c.7 0 1.5.2 2.4.6.6-1.3 1.7-2.2 3.2-2.6-1.9-.3-3.6.2-4.7 1.4l-.4.3-.5.3Z" fill="#61a744" />
+      </>}
+  </svg>;
+}
+
+// IMDb's mark is its wordmark, so this is a yellow badge with the letters
+// rather than a drawing.
+function ImdbMark() {
+  return <span className="imdb-mark" aria-hidden="true">IMDb</span>;
+}
+
 function PersonAvatar({ name, src }: { name: string; src: string }) {
   const initial = name.trim().charAt(0).toUpperCase() || "?";
   return <span className="user-avatar"><span className="avatar-initial">{initial}</span><img src={src} alt="" width="44" height="44" onError={(event) => event.currentTarget.remove()} /></span>;
@@ -557,42 +594,6 @@ function MetricCard({ icon, tone, value, label, detail, positive, loading, onCli
   return onClick
     ? <button type="button" className={`metric-card metric-card-button tone-${tone}`} onClick={onClick}>{inner}</button>
     : <article className={`metric-card tone-${tone}`}>{inner}</article>;
-}
-
-// A MetricCard that can unfold. The bare percentage says the server had to
-// work, but not which client caused it — and that is the only part the
-// operator can act on. The breakdown stays collapsed because it answers a
-// follow-up question, and it is omitted entirely when Tracearr attributed
-// none of the transcodes to a device.
-function TranscodeCard({ share }: { share: TranscodeShare }) {
-  const translate = useT();
-  const [expanded, setExpanded] = useState(false);
-  const devices = share.devices ?? [];
-  const percent = Math.round((share.transcodes / share.plays) * 100);
-  const detail = translate("transcode_share_detail", { transcodes: share.transcodes, plays: share.plays });
-
-  const body = <>
-    <span className="metric-icon"><Icon name="refresh" /></span>
-    <strong>{percent}%</strong>
-    <p>{translate("transcode_share")}</p>
-    <small>{detail}</small>
-  </>;
-
-  if (devices.length === 0) return <article className="metric-card tone-mint">{body}</article>;
-
-  return <article className={expanded ? "metric-card tone-mint transcode-card expanded" : "metric-card tone-mint transcode-card"}>
-    <button type="button" className="transcode-card-head" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded} aria-controls="transcode-devices">
-      {body}
-      <span className="transcode-chevron"><Icon name="arrow" /></span>
-    </button>
-    {expanded && <ul className="transcode-devices" id="transcode-devices">
-      {devices.map((entry) => <li key={entry.device}>
-        <span className="transcode-device-name">{entry.device}</span>
-        <span className="transcode-device-count">{entry.transcodes}</span>
-        <span className="transcode-device-share">{Math.round((entry.transcodes / share.transcodes) * 100)}%</span>
-      </li>)}
-    </ul>}
-  </article>;
 }
 
 // Replaces two separate "Filme abgeschlossen"/"Serien abgeschlossen"
@@ -842,7 +843,6 @@ function Stats({ user, onSelectMedia }: { user: { id: string; name: string; feat
         onOpenSeries={statistics && statistics.completedSeries > 0 && completedSeriesState === "ready" ? () => setCompletedGridView("series") : undefined}
       />
       <RecordsCard longestSession={longestSession} longestSessionState={longestSessionState} mostActiveDay={mostActiveDay} mostActiveDayState={mostActiveDayState} />
-      {tracearr && transcode && transcode.plays > 0 && <TranscodeCard share={transcode} />}
     </section>
 
     <section className="chart-grid">
@@ -855,6 +855,18 @@ function Stats({ user, onSelectMedia }: { user: { id: string; name: string; feat
         data={unfinished.slice(0, 6).map((play) => ({ label: play.showTitle ? `${play.showTitle} — ${play.title}` : play.title, value: play.percentComplete }))}
         formatValue={(value) => `${Math.round(value)}%`}
         loading={unfinishedState === "loading"}
+      />}
+      {/* A chart rather than a metric card: the headline number is only half
+          the story, and here there is room to name every device outright
+          instead of hiding them behind a tap. */}
+      {tracearr && transcode && transcode.plays > 0 && <BarChart
+        title={translate("transcode_share")}
+        subtitle={translate("transcode_share_detail", {
+          percent: Math.round((transcode.transcodes / transcode.plays) * 100),
+          transcodes: transcode.transcodes,
+          plays: transcode.plays,
+        })}
+        data={(transcode.devices ?? []).map((entry) => ({ label: entry.device, value: entry.transcodes }))}
       />}
     </section>
 
@@ -1265,8 +1277,16 @@ function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreat
             </p>
             {(detail.communityRating > 0 || detail.imdbRating || detail.rottenTomatoesRating) && <div className="media-detail-ratings">
               {detail.communityRating > 0 && <span className="media-detail-rating">★ {detail.communityRating.toFixed(1)}</span>}
-              {detail.imdbRating && <span className="media-detail-rating">IMDb {detail.imdbRating}</span>}
-              {detail.rottenTomatoesRating && <span className="media-detail-rating">RT {detail.rottenTomatoesRating}</span>}
+              {/* The marks are decorative to a screen reader, so each rating
+                  keeps a spoken source name — otherwise the ratings collapse
+                  into a bare list of numbers. */}
+              {detail.imdbRating && <span className="media-detail-rating">
+                <ImdbMark /><span className="sr-only">IMDb</span> {detail.imdbRating}
+              </span>}
+              {detail.rottenTomatoesRating && <span className="media-detail-rating">
+                <TomatoMark rotten={isRotten(detail.rottenTomatoesRating)} />
+                <span className="sr-only">Rotten Tomatoes</span> {detail.rottenTomatoesRating}
+              </span>}
             </div>}
           </div>
         </div>
