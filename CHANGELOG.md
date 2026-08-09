@@ -8,6 +8,15 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.15.4] - 2026-08-09
+
+### Changed
+
+- Ratings now show the Rotten Tomatoes tomato — fresh or splat, depending on
+  the score — and the IMDb badge, instead of the letters "RT" and "IMDb".
+- The transcode tile moved down to the charts, where every device fits on
+  screen at once instead of hiding behind a tap.
+
 ## [0.15.3] - 2026-08-09
 
 ### Added
