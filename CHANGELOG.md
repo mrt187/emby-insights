@@ -8,6 +8,16 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.16.3] - 2026-08-10
+
+### Changed
+
+- "This is on Emby" now always sits in the same spot, just above the
+  ratings, whichever screen you opened the title from. It used to appear
+  down beside the request button on titles found through Discover.
+- On phones the detail page is tighter, and the buttons moved below the star
+  rating instead of squeezing into the narrow column next to the poster.
+
 ## [0.16.2] - 2026-08-10
 
 ### Changed
