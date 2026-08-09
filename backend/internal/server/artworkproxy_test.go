@@ -1,6 +1,8 @@
 package server
 
 import (
+	"bytes"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -65,17 +67,40 @@ func TestArtworkProxyRequiresAuthentication(t *testing.T) {
 	}
 }
 
+// roundTripFunc stands in for the network. Without it this file used to let
+// the proxy dial image.tmdb.org for real: the assertion still passed, but it
+// passed for the wrong reason (the socket failed, not the allow list), and
+// running the unit tests reached out to a third party.
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) { return fn(request) }
+
 // TestArtworkProxyAcceptsTheCDNHosts proves the allow list is not simply
-// refusing everything — the request gets past validation and only then fails
-// on the socket, because the test has no network.
+// refusing everything: an allowed host makes it all the way to the fetch,
+// with the URL intact.
 func TestArtworkProxyAcceptsTheCDNHosts(t *testing.T) {
 	app, cookie := artworkTestApp()
-	for _, target := range []string{
-		"https%3A%2F%2Fimage.tmdb.org%2Ft%2Fp%2Fw300%2Fa.jpg",
-		"https%3A%2F%2Fartworks.thetvdb.com%2Fbanners%2Fx%2F1.jpg",
+
+	var fetched []string
+	app.imageFetchClient = &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		fetched = append(fetched, request.URL.String())
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"image/png"}},
+			Body:       io.NopCloser(bytes.NewReader(pngBytes)),
+		}, nil
+	})}
+
+	for target, want := range map[string]string{
+		"https%3A%2F%2Fimage.tmdb.org%2Ft%2Fp%2Fw300%2Fa.jpg":      "https://image.tmdb.org/t/p/w300/a.jpg",
+		"https%3A%2F%2Fartworks.thetvdb.com%2Fbanners%2Fx%2F1.jpg": "https://artworks.thetvdb.com/banners/x/1.jpg",
 	} {
-		if code := getArtwork(app, cookie, target).Code; code == http.StatusBadRequest {
-			t.Errorf("target %q was rejected by validation, want it accepted", target)
+		fetched = nil
+		if code := getArtwork(app, cookie, target).Code; code != http.StatusOK {
+			t.Errorf("target %q answered %d, want 200", target, code)
+		}
+		if len(fetched) != 1 || fetched[0] != want {
+			t.Errorf("target %q fetched %v, want exactly [%s]", target, fetched, want)
 		}
 	}
 }
