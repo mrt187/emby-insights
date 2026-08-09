@@ -8,6 +8,22 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.16.1] - 2026-08-10
+
+### Fixed
+
+- Opening a title from the new most-watched rows showed the request view
+  instead of the library view, so the star rating and the favourite button
+  were missing. Those titles now open your own Emby entry.
+- The "Full history" button was in English even with German selected.
+
+### Changed
+
+- Availability now reads as a small glowing dot with "Available on Emby"
+  instead of a pill that looked like a button but did nothing.
+- The detail page starts lower on desktop, so the poster no longer touches
+  the top edge.
+
 ## [0.16.0] - 2026-08-10
 
 ### Added
