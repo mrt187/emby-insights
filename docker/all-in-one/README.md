@@ -1,61 +1,52 @@
-# All-in-one-Container
+# All-in-one container
 
-Backend, PostgreSQL und Redis in einem Container mit einem persistenten
-`/config`-Volume. Läuft auf jedem Linux-Host mit Docker.
+Backend, PostgreSQL and Redis in a single container with one persistent
+`/config` volume. Runs on any Linux host with Docker.
+
+The [main README](../../README.md) has the `docker-compose.yml` and `.env` to
+copy, plus what each optional service adds. This page covers the details you
+only need once something is unusual: what the variables mean, and how the
+container behaves at runtime.
 
 ## Start
 
 ```bash
-cp .env.example .env
-# .env ausfüllen, siehe Tabelle
+# Create docker-compose.yml and .env from the main README, then:
 docker compose up -d
 ```
-## docker-compose.yaml
-```
-name: emby-insights
 
-services:
-  emby-insights:
-    image: ${EMBY_INSIGHTS_IMAGE:?set EMBY_INSIGHTS_IMAGE in .env}
-    pull_policy: always
-    container_name: emby-insights
-    restart: unless-stopped
-    env_file:
-      - .env
-    ports:
-      - "${EMBY_INSIGHTS_PORT:-8081}:8080"
-    volumes:
-      - ./config:/config
-```
+## Variables
 
-## Variablen
-
-| Variable | Bedeutung |
+| Variable | Meaning |
 | --- | --- |
-| `EMBY_INSIGHTS_IMAGE` | Pflicht, ohne Default. Registry-Image oder eigener Build-Tag. |
-| `EMBY_INSIGHTS_PORT` | Port auf dem Host, Standard `8081`. |
-| `LISTEN_ADDRESS` | Nur ändern, wenn Port 8080 im Container belegt ist. |
-| `POSTGRES_PASSWORD` | Langer, eigener Wert. Nach dem ersten Start nicht mehr ändern, sonst ist die Datenbank unbrauchbar. |
-| `APP_ENCRYPTION_KEY` | Einmalig mit `openssl rand -base64 32` erzeugen und stabil halten. Verschlüsselt die gespeicherten API-Keys von Seerr, Radarr, Sonarr und TMDB; geht er verloren, sind diese unlesbar. |
-| `EMBY_BASE_URL` | Adresse des Emby-Servers, inklusive `/emby`. |
-| `EMBY_ADMIN_API_KEY` | In Emby unter Dashboard → Erweitert → Sicherheit → API-Schlüssel anlegen. |
-| `COOKIE_SECURE` | Bei Zugriff über HTTPS (z.B. hinter einem Reverse Proxy) auf `true` lassen. Nur auf `false` setzen, wenn per reinem HTTP ohne TLS zugegriffen wird — sonst verwirft der Browser das Session-Cookie stillschweigend und die Oberfläche wirkt ausgeloggt bzw. zeigt keine Daten. |
-| `TRUSTED_PROXIES` | Optional, kommagetrennte IPs oder CIDRs des vorgelagerten Reverse Proxy. Nur diese Quellen dürfen per `X-Forwarded-For` die echte Client-Adresse melden. Leer lassen, wenn der Container direkt erreicht wird. |
-| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Pflicht ab v0.13.0, für Web-Push-Benachrichtigungen. Einmalig erzeugen mit `npx web-push generate-vapid-keys` und stabil halten — ein Wechsel macht alle bestehenden Browser-Abos ungültig. |
-| `VAPID_SUBJECT` | Pflicht ab v0.13.0. Kontaktadresse für Push-Dienste im Format `mailto:deine@adresse.de`. |
+| `EMBY_INSIGHTS_IMAGE` | Required, no default. Registry image or your own build tag. |
+| `EMBY_INSIGHTS_PORT` | Host port, defaults to `8081`. |
+| `LISTEN_ADDRESS` | Only change this if port 8080 is already taken inside the container. |
+| `POSTGRES_PASSWORD` | Pick your own long value. Do not change it after the first start — the existing database would become unusable. |
+| `APP_ENCRYPTION_KEY` | Generate once with `openssl rand -base64 32` and keep it stable. Encrypts the stored API keys of Seerr, Radarr, Sonarr, TMDB, OMDb and Tracearr; losing it makes them unreadable. |
+| `EMBY_BASE_URL` | Address of the Emby server, including the `/emby` path. |
+| `EMBY_ADMIN_API_KEY` | Create it in Emby under Dashboard → Advanced → Security → API Keys. |
+| `COOKIE_SECURE` | Keep `true` when reaching Emby Insights over HTTPS (e.g. behind a reverse proxy). Set to `false` only for plain HTTP without TLS — otherwise the browser silently drops the session cookie and the UI looks logged out or shows no data. |
+| `TRUSTED_PROXIES` | Optional, comma-separated IPs or CIDRs of the reverse proxy in front. Only these sources may report the real client address via `X-Forwarded-For`. Leave unset when the container is reached directly. |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Required since v0.13.0 for web push. Generate once with `npx web-push generate-vapid-keys` and keep stable — rotating them invalidates every existing browser subscription. |
+| `VAPID_SUBJECT` | Required since v0.13.0. Your contact address for push services, as `mailto:you@example.com`. |
+| `PUSH_POLL_INTERVAL` | Optional. How often the background poller checks for new content to notify about. Any Go duration, e.g. `15m`, `30m`, `1h`. Defaults to `20m`. |
 
-Alles Weitere — welche Dienste aktiv sind, deren Adressen und Keys, die
-Bibliotheksauswahl — wird nach dem ersten Login in der Verwaltungsoberfläche
-konfiguriert. Der erste Emby-Account, der sich erfolgreich anmeldet, wird
-automatisch Administrator.
+Everything else — which services are enabled, their addresses and keys, and the
+library selection — is configured in the admin UI after the first login. The
+first Emby account to log in successfully becomes the administrator.
 
-## Betrieb
+## Operation
 
-Im Container lauscht die API auf Port `8080`:
+Inside the container the API listens on port `8080`:
 
-- `GET /healthz` — Prozess läuft
-- `GET /readyz` — PostgreSQL und Redis erreichbar
+- `GET /healthz` — the process is running
+- `GET /readyz` — PostgreSQL and Redis are reachable
 
-Emby-Passwörter werden nie gespeichert. Nach dem Login liegt nur der temporäre
-Emby-Access-Token in Redis. Die Emby-Device-ID wird beim ersten Start erzeugt
-und in PostgreSQL abgelegt.
+Emby passwords are never stored. After login only the temporary Emby access
+token lives in Redis. The Emby device ID is generated on first start and kept
+in PostgreSQL.
+
+Database migrations run automatically at startup, guarded by an advisory lock,
+so overlapping containers during an Unraid "Update Stack" never apply the same
+migration twice.
