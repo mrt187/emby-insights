@@ -8,6 +8,12 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.15.1] - 2026-08-09
+
+### Fixed
+
+- The app still showed v0.14.2 as its version after updating to v0.15.0.
+
 ## [0.15.0] - 2026-08-09
 
 ### Added

@@ -6,7 +6,7 @@ A personal, mobile-first media dashboard for Emby users. Emby Insights
 complements the player instead of replacing it: personal statistics, your own
 media requests, upcoming releases, and notifications all in one place.
 
-Current release: [v0.15.0](CHANGELOG.md#0150---2026-08-09)
+Current release: [v0.15.1](CHANGELOG.md#0151---2026-08-09)
 
 ## Features
 
@@ -79,61 +79,28 @@ EMBY_INSIGHTS_IMAGE=ghcr.io/mrt187/emby-insights:latest
 EMBY_INSIGHTS_PORT=8081
 LISTEN_ADDRESS=:8080
 
-# Pick your own long value. Do not change it after the first start —
-# the existing database would become unusable.
+# Own long value. Do not change it after the first start.
 POSTGRES_PASSWORD=change-me
-
-# Encrypts the service API keys stored in the database. Generate once with
-# `openssl rand -base64 32` and keep it stable — losing it makes every
-# saved key unreadable.
+# Generate with: openssl rand -base64 32
 APP_ENCRYPTION_KEY=
 
-# Include the /emby path. The API key is created in Emby under
-# Dashboard → Advanced → Security → API Keys.
 EMBY_BASE_URL=http://your-emby-host:8096/emby
 EMBY_ADMIN_API_KEY=replace-with-an-Emby-admin-api-key
 
-# Keep this true when you reach Emby Insights over HTTPS (e.g. behind a
-# reverse proxy). Set it to false only for plain HTTP without TLS —
-# otherwise the browser silently drops the session cookie and the UI looks
-# logged out or shows no data.
+# false only when accessed over plain HTTP without TLS.
 COOKIE_SECURE=true
-
-# Comma-separated IPs or CIDRs of your reverse proxy. Only these sources may
-# report the real client address via X-Forwarded-For. Leave unset when the
-# container is reached directly.
 #TRUSTED_PROXIES=
 
-# Web Push (VAPID) keypair for browser push notifications.
-#
-# Your server does not deliver notifications itself — it hands them to the
-# browser's own push service (Apple for Safari/iOS, Google for Chrome,
-# Mozilla for Firefox), and that service wants to know who is sending.
-# This keypair is that proof of identity.
-#
-# Generate it exactly once. Run:
-#
-#     npx web-push generate-vapid-keys
-#
-# It prints two base64 strings — paste them into the two variables below.
-#
-# Then never change them. The public key is stored inside every existing
-# browser subscription, so a new keypair silently kills push for everyone
-# until each user switches notifications off and on again. If you ever
-# recreate this file, put the same two values back in.
-#
-# The public key is handed to every browser anyway (GET /api/push/public-key)
-# and is not a secret; the private key must stay on the server.
-# VAPID_SUBJECT is a contact address push service operators can reach you at,
-# as mailto: or https:.
+# Generate once with: npx web-push generate-vapid-keys
 VAPID_PUBLIC_KEY=
 VAPID_PRIVATE_KEY=
 VAPID_SUBJECT=mailto:you@example.com
 
-# How often the background poller checks for new content to notify about.
-# Accepts any Go duration, e.g. 15m, 30m, 1h.
 #PUSH_POLL_INTERVAL=20m
 ```
+
+What each variable means, and why the keys must stay stable:
+[docker/all-in-one/README.md](docker/all-in-one/README.md).
 
 ### Health checks
 
