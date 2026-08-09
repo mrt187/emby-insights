@@ -8,6 +8,14 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.15.2] - 2026-08-09
+
+### Fixed
+
+- When a section like Statistics stays empty, the reason is now written to
+  the container log instead of being discarded. Missing plugin, wrong Emby
+  key and unreachable server used to look identical from the outside.
+
 ## [0.15.1] - 2026-08-09
 
 ### Fixed
