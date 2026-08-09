@@ -79,6 +79,7 @@ type MediaDetail = {
   seasons?: MediaSeason[] | RequestableSeason[];
   mediaStatus?: number;
   status?: string; releaseDate?: string; studios?: string[];
+  addedAt?: string;
   imdbRating?: string; rottenTomatoesRating?: string;
   household?: Household;
 };
@@ -110,7 +111,7 @@ function visibleNav(user: CurrentUser): { page: Page; labelKey: TranslationKey; 
 }
 const pageTitleKey: Record<Page, TranslationKey> = { today: "nav_today", stats: "nav_stats", requests: "nav_requests", chats: "nav_chats", profile: "nav_profile", admin: "nav_admin" };
 const periodLabelKey: Record<Period, TranslationKey> = { week: "period_week", month: "period_month", year: "period_year" };
-const APP_VERSION = "0.16.1";
+const APP_VERSION = "0.16.2";
 
 // One formatter per language and purpose, built once: Intl.DateTimeFormat is
 // expensive enough that constructing it inside a render loop is wasteful.
@@ -1247,6 +1248,7 @@ function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreat
   // already-requested one instead of staying stuck on "Angefragt ✓".
   const showRequestConfirmation = requestState === "done" || locallyRequestedMovie
     || (mediaType === "tv" && locallyRequestedSeasons.length > 0 && requestableSeasons.length === 0 && seerrRequestableSeasons.length > 0);
+  const addedOn = detail?.addedAt ? formatFullDate(detail.addedAt, lang) : "";
   const seerrAvailabilityLabel = detail?.mediaStatus === seerrStatusAvailable ? translate("status_available")
     : detail?.mediaStatus === seerrStatusPartiallyAvailable ? translate("status_partially_available")
     : detail?.mediaStatus === seerrStatusPending || detail?.mediaStatus === seerrStatusProcessing ? translate("status_already_requested")
@@ -1306,6 +1308,12 @@ function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreat
               {detail.runtimeMinutes > 0 && <span>{translate("minutes_long", { minutes: detail.runtimeMinutes })}</span>}
               {detail.genres?.length > 0 && <span>{detail.genres.join(", ")}</span>}
             </p>
+            {selection.source === "emby" && <p className="media-detail-source">
+              <i aria-hidden="true" />Emby
+              {/* formatFullDate yields "" for a date it cannot parse, which
+                  would leave a dangling "added on" with nothing after it. */}
+              {addedOn && <span>{translate("added_on", { date: addedOn })}</span>}
+            </p>}
             {(detail.communityRating > 0 || detail.imdbRating || detail.rottenTomatoesRating) && <div className="media-detail-ratings">
               {detail.communityRating > 0 && <span className="media-detail-rating">★ {detail.communityRating.toFixed(1)}</span>}
               {/* The marks are decorative to a screen reader, so each rating
@@ -1460,7 +1468,10 @@ function mediaStatus(detail: MediaDetail, lang: Lang) {
     if (isFullyWatched(detail)) return t(lang, "watched");
     return t(lang, "episodes_of", { watched: detail.watchedEpisodes ?? 0, total: detail.totalEpisodes });
   }
-  if (detail.played !== undefined) return t(lang, detail.played ? "watched" : "status_available");
+  // Only "watched" earns a badge. "Available" said nothing the source line
+  // under the title does not already say, and it said it in a loud green
+  // pill on every unplayed film in the library.
+  if (detail.played) return t(lang, "watched");
   return null;
 }
 

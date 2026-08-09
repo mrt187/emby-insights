@@ -57,6 +57,9 @@ type MediaDetail struct {
 	ImdbID string `json:"-"`
 	TmdbID string `json:"-"`
 	TvdbID string `json:"-"`
+	// AddedAt is when the item landed in the library, for the "Emby ·
+	// added …" source line on the detail screen.
+	AddedAt string `json:"addedAt,omitempty"`
 	// ImdbRating/RottenTomatoesRating are not Emby's own — the server fills
 	// them from OMDb via ImdbID, mirroring seerr.MediaDetail, so a title
 	// from the library shows the same ratings as the same title found
@@ -74,7 +77,7 @@ type MediaDetailReader interface {
 // the personal watch progress via UserData.UnplayedItemCount.
 func (client *Client) EmbyMediaDetail(ctx context.Context, userID, itemID string) (MediaDetail, error) {
 	query := url.Values{
-		"Fields": {"Overview,Genres,People,CommunityRating,OfficialRating,RecursiveItemCount,ProviderIds"},
+		"Fields": {"Overview,Genres,People,CommunityRating,OfficialRating,RecursiveItemCount,ProviderIds,DateCreated"},
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, client.baseURL+"/Users/"+userID+"/Items/"+itemID+"?"+query.Encode(), nil)
 	if err != nil {
@@ -99,6 +102,7 @@ func (client *Client) EmbyMediaDetail(ctx context.Context, userID, itemID string
 		Genres             []string `json:"Genres"`
 		CommunityRating    float64  `json:"CommunityRating"`
 		OfficialRating     string   `json:"OfficialRating"`
+		DateCreated        string   `json:"DateCreated"`
 		ProductionYear     int      `json:"ProductionYear"`
 		RunTimeTicks       int64    `json:"RunTimeTicks"`
 		RecursiveItemCount int      `json:"RecursiveItemCount"`
@@ -154,6 +158,7 @@ func (client *Client) EmbyMediaDetail(ctx context.Context, userID, itemID string
 		Genres:          result.Genres,
 		CommunityRating: result.CommunityRating,
 		OfficialRating:  result.OfficialRating,
+		AddedAt:         result.DateCreated,
 		Year:            result.ProductionYear,
 		RuntimeMinutes:  int(result.RunTimeTicks / 10_000_000 / 60),
 		IsSeries:        result.Type == "Series",

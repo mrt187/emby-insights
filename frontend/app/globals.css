@@ -548,6 +548,15 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 }
 .media-status-badge-progress { color: var(--text-primary); background: var(--ink-raised); border: 1px solid var(--line); }
 .media-detail-meta { display: flex; flex-wrap: wrap; gap: 10px; color: var(--text-secondary); font-size: 13px; overflow-wrap: break-word; }
+/* Deliberately quiet: being in the library is the normal case, so it reads
+   as a caption with a status dot rather than a badge competing with the
+   title. */
+.media-detail-source { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; font-size: 13px; font-weight: 700; color: var(--text-primary); }
+.media-detail-source i {
+  width: 8px; height: 8px; border-radius: 50%; background: #57d99a;
+  box-shadow: 0 0 0 3px rgb(87 217 154 / 16%), 0 0 9px rgb(87 217 154 / 80%);
+}
+.media-detail-source span { color: var(--muted); font-weight: 600; }
 .media-detail-meta span:not(:last-child)::after { content: "•"; margin-left: 10px; color: var(--muted); }
 .media-detail-ratings { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; }
 .media-detail-rating { display: inline-flex; align-items: center; gap: 5px; color: #f6cf6b; font-size: 15px; font-weight: 700; }
@@ -596,13 +605,13 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 
 .search-form { display: flex; gap: 10px; margin-bottom: 8px; }
 .search-input {
-  flex: 1; min-height: 44px; min-width: 0; padding: 0 16px; border: 1px solid var(--line); border-radius: 999px;
+  flex: 1; min-height: 44px; min-width: 0; padding: 0 16px; border: 1px solid var(--line); border-radius: 10px;
   background: var(--ink-raised); color: var(--text-primary); font-size: 16px;
 }
 .search-input::placeholder { color: var(--muted); }
 .search-input:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .search-button {
-  min-height: 44px; padding: 0 24px; border: 0; border-radius: 999px; font-size: 14px; font-weight: 800;
+  min-height: 44px; padding: 0 24px; border: 0; border-radius: 10px; font-size: 14px; font-weight: 800;
   color: #0e1a13; background: var(--mint-bright); cursor: pointer; transition: opacity 160ms var(--ease-out);
   white-space: nowrap;
 }
@@ -634,7 +643,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   box-shadow: 0 0 0 3px rgb(87 217 154 / 18%), 0 0 10px rgb(87 217 154 / 85%);
 }
 .request-button {
-  min-height: 44px; padding: 11px 24px; border: 0; border-radius: 999px; font-size: 14px; font-weight: 800;
+  min-height: 44px; padding: 11px 24px; border: 0; border-radius: 10px; font-size: 14px; font-weight: 800;
   color: #0e1a13; background: var(--mint-bright); cursor: pointer; transition: opacity 160ms var(--ease-out), background-color 160ms var(--ease-out);
 }
 .request-button:disabled { opacity: .5; cursor: not-allowed; }
