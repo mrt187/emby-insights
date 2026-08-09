@@ -111,7 +111,7 @@ function visibleNav(user: CurrentUser): { page: Page; labelKey: TranslationKey; 
 }
 const pageTitleKey: Record<Page, TranslationKey> = { today: "nav_today", stats: "nav_stats", requests: "nav_requests", chats: "nav_chats", profile: "nav_profile", admin: "nav_admin" };
 const periodLabelKey: Record<Period, TranslationKey> = { week: "period_week", month: "period_month", year: "period_year" };
-const APP_VERSION = "0.16.2";
+const APP_VERSION = "0.16.3";
 
 // One formatter per language and purpose, built once: Intl.DateTimeFormat is
 // expensive enough that constructing it inside a render loop is wasteful.
@@ -1244,14 +1244,19 @@ function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreat
   // keep showing the confirmation across a remount/refetch — but only
   // while Seerr's own data hasn't caught up yet (seerrRequestableSeasons
   // still non-empty / mediaStatus still 0). Once it has, this steps aside
-  // for seerrAvailabilityLabel below so the title looks like any other
+  // for the status labels below so the title looks like any other
   // already-requested one instead of staying stuck on "Angefragt ✓".
   const showRequestConfirmation = requestState === "done" || locallyRequestedMovie
     || (mediaType === "tv" && locallyRequestedSeasons.length > 0 && requestableSeasons.length === 0 && seerrRequestableSeasons.length > 0);
   const addedOn = detail?.addedAt ? formatFullDate(detail.addedAt, lang) : "";
-  const seerrAvailabilityLabel = detail?.mediaStatus === seerrStatusAvailable ? translate("status_available")
+  // Split deliberately: the green dot means "this is on the server", and a
+  // pending request is precisely not that. Lumping them together would put
+  // an available-looking marker on a title nobody can watch yet.
+  const seerrOnServerLabel = detail?.mediaStatus === seerrStatusAvailable ? translate("status_available")
     : detail?.mediaStatus === seerrStatusPartiallyAvailable ? translate("status_partially_available")
-    : detail?.mediaStatus === seerrStatusPending || detail?.mediaStatus === seerrStatusProcessing ? translate("status_already_requested")
+    : null;
+  const seerrPendingLabel = detail?.mediaStatus === seerrStatusPending || detail?.mediaStatus === seerrStatusProcessing
+    ? translate("status_already_requested")
     : null;
 
   const toggleSeason = (seasonNumber: number) => {
@@ -1308,8 +1313,12 @@ function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreat
               {detail.runtimeMinutes > 0 && <span>{translate("minutes_long", { minutes: detail.runtimeMinutes })}</span>}
               {detail.genres?.length > 0 && <span>{detail.genres.join(", ")}</span>}
             </p>
-            {selection.source === "emby" && <p className="media-detail-source">
-              <i aria-hidden="true" />Emby
+            {/* One slot for "this is on the server", directly above the
+                ratings, whichever screen you came in through. The Seerr view
+                used to say it in a badge far below, next to the request
+                button, so the same fact appeared in two different places. */}
+            {(selection.source === "emby" || seerrOnServerLabel) && <p className="media-detail-source">
+              <i aria-hidden="true" />{selection.source === "emby" ? "Emby" : seerrOnServerLabel}
               {/* formatFullDate yields "" for a date it cannot parse, which
                   would leave a dangling "added on" with nothing after it. */}
               {addedOn && <span>{translate("added_on", { date: addedOn })}</span>}
@@ -1327,20 +1336,20 @@ function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreat
                 <span className="sr-only">Rotten Tomatoes</span> {detail.rottenTomatoesRating}
               </span>}
             </div>}
-            <div className="media-detail-actions">
-              <button type="button" className="request-button" onClick={() => setDetailsOpen((open) => !open)} aria-expanded={detailsOpen} aria-controls="media-detail-more">
-                {translate(detailsOpen ? "hide_details" : "show_details")}
-              </button>
-              {selection.source === "emby" && <button
-                type="button"
-                className={favorite ? "request-button secondary favorite-button active" : "request-button secondary favorite-button"}
-                onClick={toggleFavorite}
-                disabled={favoriteBusy}
-                aria-pressed={favorite}
-                title={translate(favorite ? "favorite_remove" : "favorite_add")}
-              ><Icon name="heart" /> {translate("favorite_on_emby")}</button>}
-            </div>
           </div>
+        </div>
+        <div className="media-detail-actions">
+          <button type="button" className="request-button" onClick={() => setDetailsOpen((open) => !open)} aria-expanded={detailsOpen} aria-controls="media-detail-more">
+            {translate(detailsOpen ? "hide_details" : "show_details")}
+          </button>
+          {selection.source === "emby" && <button
+            type="button"
+            className={favorite ? "request-button secondary favorite-button active" : "request-button secondary favorite-button"}
+            onClick={toggleFavorite}
+            disabled={favoriteBusy}
+            aria-pressed={favorite}
+            title={translate(favorite ? "favorite_remove" : "favorite_add")}
+          ><Icon name="heart" /> {translate("favorite_on_emby")}</button>}
         </div>
         {detail.household && <div className="media-detail-tiles">
           <article className="media-detail-tile">
@@ -1392,8 +1401,8 @@ function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreat
             {translate("mark_as_watched")}
           </button>
         </div>}
-        {selection.source !== "emby" && (canRequest || seerrAvailabilityLabel || showRequestConfirmation || !seerrConfigured) && <div className="request-row">
-          {seerrAvailabilityLabel && !showRequestConfirmation && <span className="media-availability-badge"><i aria-hidden="true" />{seerrAvailabilityLabel}</span>}
+        {selection.source !== "emby" && (canRequest || seerrPendingLabel || showRequestConfirmation || !seerrConfigured) && <div className="request-row">
+          {seerrPendingLabel && !showRequestConfirmation && <span className="media-availability-badge">{seerrPendingLabel}</span>}
           {/* Ohne Seerr bleibt der Knopf sichtbar, sagt aber warum er nichts
               tut — sonst wirkt es, als fehle die Funktion. */}
           {!seerrConfigured

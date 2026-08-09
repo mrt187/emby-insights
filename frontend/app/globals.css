@@ -655,7 +655,13 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 
 /* Actions sit directly under the ratings in the hero, the way the reference
    layout puts them under the title — not down in the tracking bar. */
-.media-detail-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 14px; }
+/* A sibling of the hero rather than a child of the info column, so mobile
+   can reorder it below the star rating. The indent keeps it lined up with
+   the title on desktop, where it still reads as part of the hero. */
+.media-detail-actions {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  margin-top: -14px; padding-left: 252px;
+}
 .favorite-button { display: inline-flex; align-items: center; gap: 8px; }
 .favorite-button .icon { width: 16px; height: 16px; }
 .favorite-button.active { color: var(--mint-bright); border-color: rgb(140 224 173 / 45%); }
@@ -733,6 +739,27 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
      secondary sections always sit below an initial scroll, regardless of how
      short a title's overview happens to be. */
   .media-detail-above-fold { min-height: calc(100svh - 40px); align-content: start; }
+
+  /* Tighter than desktop: the same 28px rhythm on a phone leaves the hero
+     text floating in gaps wider than the lines themselves. */
+  .media-detail-above-fold { gap: 16px; }
+  .media-detail-hero h1 { font-size: 22px; }
+  .media-detail-meta { gap: 6px; margin: 6px 0 0; font-size: 12px; }
+  .media-detail-source { margin-top: 6px; font-size: 12px; }
+  .media-detail-ratings { gap: 4px 10px; margin-top: 6px; }
+  .media-detail-rating { font-size: 14px; }
+
+  /* Full width under the star rating instead of squeezed into the narrow
+     column beside the poster. Explicit order because the blocks between are
+     conditional, so document order alone cannot place it. */
+  .media-detail-actions { padding-left: 0; margin-top: 0; order: 4; }
+  .media-detail-actions .request-button { flex: 1 1 auto; justify-content: center; }
+  .media-detail-hero { order: 1; }
+  .media-detail-tiles { order: 2; }
+  .tracking-bar { order: 3; }
+  .request-row { order: 5; }
+  .media-detail-facts { order: 6; }
+  .media-detail-overview { order: 7; }
 }
 
 .media-grid-overlay { z-index: 90; }
