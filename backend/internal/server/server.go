@@ -625,7 +625,7 @@ func (app *App) login(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "Emby is unavailable"})
+		upstreamUnavailable(writer, "Emby is unavailable", err)
 		return
 	}
 	app.clearLoginFailures(username, clientIP)
@@ -661,7 +661,7 @@ func (app *App) meProfile(writer http.ResponseWriter, request *http.Request) {
 	}
 	userProfile, err := app.profile.UserProfile(request.Context(), identity.UserID)
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "user profile is unavailable"})
+		upstreamUnavailable(writer, "user profile is unavailable", err)
 		return
 	}
 	respondJSON(writer, http.StatusOK, userProfile)
@@ -680,7 +680,7 @@ func (app *App) stats(writer http.ResponseWriter, request *http.Request) {
 		return app.statistics.PersonalWatchTime(ctx, identity.UserID, period)
 	})
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "personal statistics are unavailable"})
+		upstreamUnavailable(writer, "personal statistics are unavailable", err)
 		return
 	}
 	respondJSON(writer, http.StatusOK, statistics)
@@ -699,7 +699,7 @@ func (app *App) watchTimeRankStats(writer http.ResponseWriter, request *http.Req
 		return app.watchTimeRank.WatchTimeRank(ctx, identity.UserID)
 	})
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "watch-time rank is unavailable"})
+		upstreamUnavailable(writer, "watch-time rank is unavailable", err)
 		return
 	}
 	respondJSON(writer, http.StatusOK, rank)
@@ -718,7 +718,7 @@ func (app *App) deviceStats(writer http.ResponseWriter, request *http.Request) {
 		return app.deviceStatistics.DeviceWatchTimes(ctx, identity.UserID, period)
 	})
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "device statistics are unavailable"})
+		upstreamUnavailable(writer, "device statistics are unavailable", err)
 		return
 	}
 	respondJSON(writer, http.StatusOK, orEmpty(devices))
@@ -737,7 +737,7 @@ func (app *App) hourStats(writer http.ResponseWriter, request *http.Request) {
 		return app.sessionStatistics.HourWatchTimes(ctx, identity.UserID, period)
 	})
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "hour statistics are unavailable"})
+		upstreamUnavailable(writer, "hour statistics are unavailable", err)
 		return
 	}
 	respondJSON(writer, http.StatusOK, orEmpty(hours))
@@ -756,7 +756,7 @@ func (app *App) weekdayStats(writer http.ResponseWriter, request *http.Request) 
 		return app.sessionStatistics.WeekdayWatchTimes(ctx, identity.UserID, period)
 	})
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "weekday statistics are unavailable"})
+		upstreamUnavailable(writer, "weekday statistics are unavailable", err)
 		return
 	}
 	respondJSON(writer, http.StatusOK, orEmpty(weekdays))
@@ -780,7 +780,7 @@ func (app *App) longestSessionStats(writer http.ResponseWriter, request *http.Re
 		return longestSessionResult{Session: session, Found: found}, err
 	})
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "longest-session statistics are unavailable"})
+		upstreamUnavailable(writer, "longest-session statistics are unavailable", err)
 		return
 	}
 	if !result.Found {
@@ -808,7 +808,7 @@ func (app *App) mostActiveDayStats(writer http.ResponseWriter, request *http.Req
 		return mostActiveDayResult{Day: day, Found: found}, err
 	})
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "most-active-day statistics are unavailable"})
+		upstreamUnavailable(writer, "most-active-day statistics are unavailable", err)
 		return
 	}
 	if !result.Found {
@@ -836,7 +836,7 @@ func (app *App) upcomingItems(writer http.ResponseWriter, request *http.Request)
 	}
 	items, err := app.cachedComingSoonItems(request.Context(), "upcoming", app.comingSoon.Upcoming)
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "upcoming releases are unavailable"})
+		upstreamUnavailable(writer, "upcoming releases are unavailable", err)
 		return
 	}
 	respondJSON(writer, http.StatusOK, orEmpty(items))
@@ -848,7 +848,7 @@ func (app *App) inCinemaItems(writer http.ResponseWriter, request *http.Request)
 	}
 	items, err := app.cachedComingSoonItems(request.Context(), "in-cinemas", app.comingSoon.InCinemas)
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "cinema releases are unavailable"})
+		upstreamUnavailable(writer, "cinema releases are unavailable", err)
 		return
 	}
 	respondJSON(writer, http.StatusOK, orEmpty(items))
@@ -903,8 +903,7 @@ func (app *App) myRequests(writer http.ResponseWriter, request *http.Request) {
 		return app.requests.Requests(ctx, identity.UserID)
 	})
 	if err != nil {
-		log.Printf("requests unavailable for user %s: %v", identity.UserID, err)
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "requests are unavailable"})
+		upstreamUnavailable(writer, "requests are unavailable", fmt.Errorf("user %s: %w", identity.UserID, err))
 		return
 	}
 	respondJSON(writer, http.StatusOK, orEmpty(items))
@@ -921,7 +920,7 @@ func (app *App) availableRequestItems(writer http.ResponseWriter, request *http.
 	}
 	items, err := app.availableRequests.AvailableRequests(request.Context(), identity.UserID, time.Now().Add(-availableRequestWindow))
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "available requests are unavailable"})
+		upstreamUnavailable(writer, "available requests are unavailable", err)
 		return
 	}
 	respondJSON(writer, http.StatusOK, orEmpty(items))
@@ -934,7 +933,7 @@ func (app *App) requestsTotal(writer http.ResponseWriter, request *http.Request)
 	}
 	stats, err := app.requestStats.RequestStats(request.Context(), identity.UserID)
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "request stats are unavailable"})
+		upstreamUnavailable(writer, "request stats are unavailable", err)
 		return
 	}
 	respondJSON(writer, http.StatusOK, stats)
@@ -951,7 +950,7 @@ func (app *App) discoverSearch(writer http.ResponseWriter, request *http.Request
 	}
 	items, err := app.discover.Search(request.Context(), query)
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "search is unavailable"})
+		upstreamUnavailable(writer, "search is unavailable", err)
 		return
 	}
 	respondJSON(writer, http.StatusOK, orEmpty(items))
@@ -968,7 +967,7 @@ func (app *App) discoverByProvider(writer http.ResponseWriter, request *http.Req
 	}
 	items, err := app.discover.DiscoverByProvider(request.Context(), providerID, app.live.discoverRegion())
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "discover list is unavailable"})
+		upstreamUnavailable(writer, "discover list is unavailable", err)
 		return
 	}
 	respondJSON(writer, http.StatusOK, orEmpty(items))
@@ -987,7 +986,7 @@ func (app *App) discoverHandler(cacheKey string, read func(context.Context, seer
 			return read(ctx, app.discover)
 		})
 		if err != nil {
-			respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "discover list is unavailable"})
+			upstreamUnavailable(writer, "discover list is unavailable", err)
 			return
 		}
 		respondJSON(writer, http.StatusOK, orEmpty(items))
@@ -1006,7 +1005,7 @@ func (app *App) embyMediaDetailHandler(writer http.ResponseWriter, request *http
 	}
 	detail, err := app.embyMediaDetail.EmbyMediaDetail(request.Context(), identity.UserID, itemID)
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "media detail is unavailable"})
+		upstreamUnavailable(writer, "media detail is unavailable", err)
 		return
 	}
 	embyType := "Movie"
@@ -1034,7 +1033,7 @@ func (app *App) seerrMediaDetailHandler(writer http.ResponseWriter, request *htt
 	}
 	detail, err := app.seerrMediaDetail.MediaDetail(request.Context(), mediaType, tmdbID)
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "media detail is unavailable"})
+		upstreamUnavailable(writer, "media detail is unavailable", err)
 		return
 	}
 	// OMDb ratings are decoration, not core data — a lookup failure (not
@@ -1081,7 +1080,7 @@ func (app *App) createSeerrRequestHandler(writer http.ResponseWriter, request *h
 	}
 
 	if err := app.seerrRequestCreator.CreateRequest(request.Context(), identity.UserID, input.MediaType, input.TmdbID, input.Seasons); err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "creating the Seerr request failed"})
+		upstreamUnavailable(writer, "creating the Seerr request failed", err)
 		return
 	}
 	if app.activity != nil {
@@ -1109,7 +1108,7 @@ func (app *App) getTracking(writer http.ResponseWriter, request *http.Request) {
 
 	entry, found, err := app.tracking.Get(request.Context(), identity.UserID, mediaSource, mediaID)
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "tracking is unavailable"})
+		upstreamUnavailable(writer, "tracking is unavailable", err)
 		return
 	}
 	if !found {
@@ -1150,7 +1149,7 @@ func (app *App) upsertTracking(writer http.ResponseWriter, request *http.Request
 	}
 
 	if err := app.tracking.Upsert(request.Context(), identity.UserID, entry); err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "saving tracking failed"})
+		upstreamUnavailable(writer, "saving tracking failed", err)
 		return
 	}
 	writer.WriteHeader(http.StatusNoContent)
@@ -1163,7 +1162,7 @@ func (app *App) trackingWatchlist(writer http.ResponseWriter, request *http.Requ
 	}
 	items, err := app.tracking.Watchlist(request.Context(), identity.UserID)
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "watchlist is unavailable"})
+		upstreamUnavailable(writer, "watchlist is unavailable", err)
 		return
 	}
 	respondJSON(writer, http.StatusOK, orEmpty(items))
@@ -1176,7 +1175,7 @@ func (app *App) trackingRatings(writer http.ResponseWriter, request *http.Reques
 	}
 	items, err := app.tracking.Ratings(request.Context(), identity.UserID)
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "ratings are unavailable"})
+		upstreamUnavailable(writer, "ratings are unavailable", err)
 		return
 	}
 	respondJSON(writer, http.StatusOK, orEmpty(items))
@@ -1284,11 +1283,11 @@ func (app *App) pushSubscribe(writer http.ResponseWriter, request *http.Request)
 	}
 	existing, err := app.pushSubscriptions.ForUser(request.Context(), identity.UserID)
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "saving the subscription failed"})
+		upstreamUnavailable(writer, "saving the subscription failed", err)
 		return
 	}
 	if err := app.pushSubscriptions.Save(request.Context(), identity.UserID, input.Endpoint, input.Keys.P256dh, input.Keys.Auth); err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "saving the subscription failed"})
+		upstreamUnavailable(writer, "saving the subscription failed", err)
 		return
 	}
 	if len(existing) == 0 {
@@ -1311,7 +1310,7 @@ func (app *App) pushUnsubscribe(writer http.ResponseWriter, request *http.Reques
 		return
 	}
 	if err := app.pushSubscriptions.Delete(request.Context(), identity.UserID, input.Endpoint); err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "removing the subscription failed"})
+		upstreamUnavailable(writer, "removing the subscription failed", err)
 		return
 	}
 	writer.WriteHeader(http.StatusNoContent)
@@ -1368,7 +1367,7 @@ func (app *App) getMessages(writer http.ResponseWriter, request *http.Request) {
 	}
 	messages, err := app.messages.Thread(request.Context(), identity.UserID)
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "messages are unavailable"})
+		upstreamUnavailable(writer, "messages are unavailable", err)
 		return
 	}
 	respondJSON(writer, http.StatusOK, orEmpty(messages))
@@ -1388,7 +1387,7 @@ func (app *App) sendMessage(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	if err := app.messages.Send(request.Context(), identity.UserID, identity.DisplayName, body, false); err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "sending the message failed"})
+		upstreamUnavailable(writer, "sending the message failed", err)
 		return
 	}
 	// The admin is the only recipient of a user's own message — push their
@@ -1405,7 +1404,7 @@ func (app *App) markOwnThreadRead(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 	if err := app.messages.MarkRead(request.Context(), identity.UserID, true); err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "updating messages failed"})
+		upstreamUnavailable(writer, "updating messages failed", err)
 		return
 	}
 	writer.WriteHeader(http.StatusNoContent)
@@ -1427,7 +1426,7 @@ func (app *App) unreadMessageCount(writer http.ResponseWriter, request *http.Req
 		count, err = app.messages.UnreadCountForUser(request.Context(), identity.UserID)
 	}
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "unread count is unavailable"})
+		upstreamUnavailable(writer, "unread count is unavailable", err)
 		return
 	}
 	respondJSON(writer, http.StatusOK, map[string]int{"count": count})
@@ -1452,7 +1451,7 @@ func (app *App) adminAvatarForUser(writer http.ResponseWriter, request *http.Req
 		return
 	}
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "profile image is unavailable"})
+		upstreamUnavailable(writer, "profile image is unavailable", err)
 		return
 	}
 	writer.Header().Set("Content-Type", image.ContentType)
@@ -1471,7 +1470,7 @@ func (app *App) adminMessageThreads(writer http.ResponseWriter, request *http.Re
 	}
 	threads, err := app.messages.Threads(request.Context())
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "threads are unavailable"})
+		upstreamUnavailable(writer, "threads are unavailable", err)
 		return
 	}
 	respondJSON(writer, http.StatusOK, orEmpty(threads))
@@ -1492,7 +1491,7 @@ func (app *App) adminMessageThread(writer http.ResponseWriter, request *http.Req
 	}
 	messages, err := app.messages.Thread(request.Context(), userID)
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "messages are unavailable"})
+		upstreamUnavailable(writer, "messages are unavailable", err)
 		return
 	}
 	respondJSON(writer, http.StatusOK, orEmpty(messages))
@@ -1516,7 +1515,7 @@ func (app *App) adminSendMessage(writer http.ResponseWriter, request *http.Reque
 		return
 	}
 	if err := app.messages.Send(request.Context(), userID, displayName, body, true); err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "sending the message failed"})
+		upstreamUnavailable(writer, "sending the message failed", err)
 		return
 	}
 	app.notifyPush(userID, "New message", body)
@@ -1536,7 +1535,7 @@ func (app *App) adminUserDirectory(writer http.ResponseWriter, request *http.Req
 	}
 	users, err := app.directory.Users(request.Context())
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "the user directory is unavailable"})
+		upstreamUnavailable(writer, "the user directory is unavailable", err)
 		return
 	}
 	ownerID := app.currentAdminOwner(request.Context())
@@ -1570,7 +1569,7 @@ func (app *App) adminUserAvatar(writer http.ResponseWriter, request *http.Reques
 		return
 	}
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "profile image is unavailable"})
+		upstreamUnavailable(writer, "profile image is unavailable", err)
 		return
 	}
 	writer.Header().Set("Content-Type", image.ContentType)
@@ -1596,7 +1595,7 @@ func (app *App) adminBroadcastMessage(writer http.ResponseWriter, request *http.
 	}
 	users, err := app.directory.Users(request.Context())
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "the user directory is unavailable"})
+		upstreamUnavailable(writer, "the user directory is unavailable", err)
 		return
 	}
 	ownerID := app.currentAdminOwner(request.Context())
@@ -1606,7 +1605,7 @@ func (app *App) adminBroadcastMessage(writer http.ResponseWriter, request *http.
 			continue
 		}
 		if err := app.messages.Send(request.Context(), user.ID, user.Name, body, true); err != nil {
-			respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "sending the broadcast failed partway through"})
+			upstreamUnavailable(writer, "sending the broadcast failed partway through", err)
 			return
 		}
 		app.notifyPush(user.ID, "New message", body)
@@ -1629,7 +1628,7 @@ func (app *App) adminMarkThreadRead(writer http.ResponseWriter, request *http.Re
 		return
 	}
 	if err := app.messages.MarkRead(request.Context(), userID, false); err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "updating messages failed"})
+		upstreamUnavailable(writer, "updating messages failed", err)
 		return
 	}
 	writer.WriteHeader(http.StatusNoContent)
@@ -1649,7 +1648,7 @@ func (app *App) adminDeleteThread(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 	if err := app.messages.DeleteThread(request.Context(), userID); err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "deleting the thread failed"})
+		upstreamUnavailable(writer, "deleting the thread failed", err)
 		return
 	}
 	writer.WriteHeader(http.StatusNoContent)
@@ -1668,7 +1667,7 @@ func (app *App) adminLibraries(writer http.ResponseWriter, request *http.Request
 	}
 	libraries, err := app.embyClient.Libraries(request.Context())
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "Emby libraries are unavailable"})
+		upstreamUnavailable(writer, "Emby libraries are unavailable", err)
 		return
 	}
 	respondJSON(writer, http.StatusOK, orEmpty(libraries))
@@ -1753,7 +1752,7 @@ func (app *App) adminGetSettings(writer http.ResponseWriter, request *http.Reque
 	}
 	settings, err := app.appconfig.Get(request.Context())
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "settings are unavailable"})
+		upstreamUnavailable(writer, "settings are unavailable", err)
 		return
 	}
 	respondJSON(writer, http.StatusOK, map[string]any{
@@ -1871,8 +1870,7 @@ func (app *App) adminPutSettings(writer http.ResponseWriter, request *http.Reque
 	}
 
 	if err := app.applySettings(request.Context(), settings); err != nil {
-		log.Printf("saving Verwaltung settings failed: %v", err)
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "saving settings failed"})
+		upstreamUnavailable(writer, "saving settings failed", err)
 		return
 	}
 	writer.WriteHeader(http.StatusNoContent)
@@ -1958,7 +1956,7 @@ func (app *App) setFavoriteHandler(favorite bool) http.HandlerFunc {
 			return
 		}
 		if err := app.favorites.SetFavorite(request.Context(), identity.UserID, itemID, favorite); err != nil {
-			respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "updating the Emby favorite failed"})
+			upstreamUnavailable(writer, "updating the Emby favorite failed", err)
 			return
 		}
 		writer.WriteHeader(http.StatusNoContent)
@@ -1985,7 +1983,7 @@ func (app *App) setPlayedHandler(played bool) http.HandlerFunc {
 			return
 		}
 		if err := app.playedItems.SetPlayed(request.Context(), identity.UserID, itemID, played); err != nil {
-			respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "updating the Emby played state failed"})
+			upstreamUnavailable(writer, "updating the Emby played state failed", err)
 			return
 		}
 		writer.WriteHeader(http.StatusNoContent)
@@ -1999,7 +1997,7 @@ func (app *App) newForYouItems(writer http.ResponseWriter, request *http.Request
 	}
 	items, err := app.newForYou.NewForYou(request.Context(), identity.UserID, app.live.newForYouLibraries())
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "new items are unavailable"})
+		upstreamUnavailable(writer, "new items are unavailable", err)
 		return
 	}
 	respondJSON(writer, http.StatusOK, orEmpty(items))
@@ -2012,7 +2010,7 @@ func (app *App) continueWatchingItems(writer http.ResponseWriter, request *http.
 	}
 	items, err := app.continueWatching.ContinueWatching(request.Context(), identity.UserID)
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "continue watching is unavailable"})
+		upstreamUnavailable(writer, "continue watching is unavailable", err)
 		return
 	}
 	respondJSON(writer, http.StatusOK, orEmpty(items))
@@ -2024,7 +2022,7 @@ func (app *App) topRatedHandler(writer http.ResponseWriter, request *http.Reques
 	}
 	items, err := app.tracking.TopRatings(request.Context(), topRatedLimit)
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "top rated titles are unavailable"})
+		upstreamUnavailable(writer, "top rated titles are unavailable", err)
 		return
 	}
 	respondJSON(writer, http.StatusOK, orEmpty(items))
@@ -2037,7 +2035,7 @@ func (app *App) watchedMovies(writer http.ResponseWriter, request *http.Request)
 	}
 	items, err := app.watched.WatchedMovies(request.Context(), identity.UserID, app.live.watchedLibraries())
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "watched movies are unavailable"})
+		upstreamUnavailable(writer, "watched movies are unavailable", err)
 		return
 	}
 	respondJSON(writer, http.StatusOK, orEmpty(items))
@@ -2050,7 +2048,7 @@ func (app *App) watchedSeries(writer http.ResponseWriter, request *http.Request)
 	}
 	items, err := app.watched.WatchedSeries(request.Context(), identity.UserID, app.live.watchedLibraries())
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "watched series are unavailable"})
+		upstreamUnavailable(writer, "watched series are unavailable", err)
 		return
 	}
 	respondJSON(writer, http.StatusOK, orEmpty(items))
@@ -2063,7 +2061,7 @@ func (app *App) seriesInProgressHandler(writer http.ResponseWriter, request *htt
 	}
 	items, err := app.seriesInProgress.SeriesInProgress(request.Context(), identity.UserID, app.live.watchedLibraries())
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "series in progress are unavailable"})
+		upstreamUnavailable(writer, "series in progress are unavailable", err)
 		return
 	}
 	// Opportunistic air-date enrichment: reuses the already-cached "Demnächst"
@@ -2112,7 +2110,7 @@ func (app *App) completedMovies(writer http.ResponseWriter, request *http.Reques
 	from, to := emby.PeriodBounds(period, time.Now())
 	items, err := app.completed.CompletedMovies(request.Context(), identity.UserID, app.live.watchedLibraries(), from, to)
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "completed movies are unavailable"})
+		upstreamUnavailable(writer, "completed movies are unavailable", err)
 		return
 	}
 	respondJSON(writer, http.StatusOK, orEmpty(items))
@@ -2130,7 +2128,7 @@ func (app *App) completedSeries(writer http.ResponseWriter, request *http.Reques
 	from, to := emby.PeriodBounds(period, time.Now())
 	items, err := app.completed.CompletedSeries(request.Context(), identity.UserID, app.live.watchedLibraries(), from, to)
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "completed series are unavailable"})
+		upstreamUnavailable(writer, "completed series are unavailable", err)
 		return
 	}
 	respondJSON(writer, http.StatusOK, orEmpty(items))
@@ -2264,6 +2262,17 @@ func respondJSON(writer http.ResponseWriter, status int, body any) {
 	_ = json.NewEncoder(writer).Encode(body)
 }
 
+// upstreamUnavailable logs why an upstream call failed before replying with
+// the generic message the browser sees. Keeping the response generic is
+// deliberate — the underlying error can name internal hosts and endpoints —
+// but discarding it entirely left a 502 indistinguishable from any other:
+// a missing connector plugin, a rejected admin key and an unreachable Emby
+// all looked the same in the container log, which is to say invisible.
+func upstreamUnavailable(writer http.ResponseWriter, message string, err error) {
+	log.Printf("%s: %v", message, err)
+	respondJSON(writer, http.StatusBadGateway, map[string]string{"error": message})
+}
+
 func (app *App) avatar(writer http.ResponseWriter, request *http.Request) {
 	identity, ok := app.identityFromRequest(writer, request)
 	if !ok {
@@ -2275,7 +2284,7 @@ func (app *App) avatar(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "profile image is unavailable"})
+		upstreamUnavailable(writer, "profile image is unavailable", err)
 		return
 	}
 	writer.Header().Set("Content-Type", image.ContentType)
@@ -2324,7 +2333,7 @@ func (app *App) itemImage(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "image is unavailable"})
+		upstreamUnavailable(writer, "image is unavailable", err)
 		return
 	}
 	writer.Header().Set("Content-Type", image.ContentType)
@@ -2350,7 +2359,7 @@ func (app *App) trackingPosterImage(writer http.ResponseWriter, request *http.Re
 	}
 	data, _, found, err := app.tracking.PosterImage(request.Context(), mediaSource, mediaID)
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "poster is unavailable"})
+		upstreamUnavailable(writer, "poster is unavailable", err)
 		return
 	}
 	if !found {
@@ -2491,7 +2500,7 @@ func (app *App) artworkImage(writer http.ResponseWriter, request *http.Request) 
 		return
 	}
 	if err != nil {
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "artwork is unavailable"})
+		upstreamUnavailable(writer, "artwork is unavailable", err)
 		return
 	}
 	writer.Header().Set("Content-Type", image.ContentType)
@@ -2526,8 +2535,7 @@ func (app *App) comingSoonMediaDetailHandler(writer http.ResponseWriter, request
 	}
 	item, found, err := app.comingSoon.Detail(request.Context(), source, id)
 	if err != nil {
-		log.Printf("coming-soon detail unavailable for %s/%s: %v", source, id, err)
-		respondJSON(writer, http.StatusBadGateway, map[string]string{"error": "media detail is unavailable"})
+		upstreamUnavailable(writer, "media detail is unavailable", fmt.Errorf("coming-soon %s/%s: %w", source, id, err))
 		return
 	}
 	if !found {
