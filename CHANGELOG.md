@@ -8,6 +8,18 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.15.3] - 2026-08-09
+
+### Added
+
+- The transcode tile on Statistik now opens up to show which devices caused
+  the transcodes, so you can tell which player is making the server work.
+
+### Changed
+
+- The German label for that tile now reads "Transcodiert" instead of
+  "Umgewandelt".
+
 ## [0.15.2] - 2026-08-09
 
 ### Fixed
