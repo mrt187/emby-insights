@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -58,6 +59,17 @@ type UnfinishedPlay struct {
 type TranscodeShare struct {
 	Plays      int `json:"plays"`
 	Transcodes int `json:"transcodes"`
+	// Devices breaks the Transcodes count down by the device that caused
+	// it, most transcodes first. It answers the question the bare
+	// percentage raises — which client is making the server work — and
+	// therefore counts only transcoded plays, not all of them.
+	Devices []DeviceTranscodes `json:"devices,omitempty"`
+}
+
+// DeviceTranscodes is one device's share of the transcoded plays.
+type DeviceTranscodes struct {
+	Device     string `json:"device"`
+	Transcodes int    `json:"transcodes"`
 }
 
 // Watcher is one other household member who watched the same title.
@@ -249,12 +261,33 @@ func (client *Client) TranscodeShare(ctx context.Context, identityID string, sin
 	}
 
 	var share TranscodeShare
+	perDevice := map[string]int{}
 	for _, record := range records {
 		share.Plays++
-		if record.IsTranscode {
-			share.Transcodes++
+		if !record.IsTranscode {
+			continue
+		}
+		share.Transcodes++
+		// Tracearr leaves device null for playback it could not attribute
+		// to a client. Those still count towards the total — dropping them
+		// would make the device list disagree with the percentage above it.
+		if device := strings.TrimSpace(record.Device); device != "" {
+			perDevice[device]++
 		}
 	}
+
+	share.Devices = make([]DeviceTranscodes, 0, len(perDevice))
+	for device, transcodes := range perDevice {
+		share.Devices = append(share.Devices, DeviceTranscodes{Device: device, Transcodes: transcodes})
+	}
+	// Map iteration is random, so an equal-count tie would otherwise make the
+	// list reshuffle on every poll. Name is the tie-breaker for a stable order.
+	sort.Slice(share.Devices, func(i, j int) bool {
+		if share.Devices[i].Transcodes != share.Devices[j].Transcodes {
+			return share.Devices[i].Transcodes > share.Devices[j].Transcodes
+		}
+		return share.Devices[i].Device < share.Devices[j].Device
+	})
 	return share, nil
 }
 
@@ -336,6 +369,7 @@ type historyRecord struct {
 	PercentComplete float64 `json:"percent_complete"`
 	StoppedAt       string  `json:"stopped_at"`
 	IsTranscode     bool    `json:"is_transcode"`
+	Device          string  `json:"device"`
 	ImdbID          string  `json:"imdb_id"`
 	TmdbID          int     `json:"tmdb_id"`
 	TvdbID          int     `json:"tvdb_id"`

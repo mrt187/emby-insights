@@ -35,7 +35,8 @@ type MostActiveDay = { date: string; watchSeconds: number };
 // separate "unavailable" state.
 type GenrePlays = { genre: string; plays: number };
 type UnfinishedPlay = { mediaId: string; title: string; showTitle?: string; percentComplete: number };
-type TranscodeShare = { plays: number; transcodes: number };
+type DeviceTranscodes = { device: string; transcodes: number };
+type TranscodeShare = { plays: number; transcodes: number; devices?: DeviceTranscodes[] };
 type Household = { plays: number; uniqueUsers: number; watchers: { name: string; plays: number; completionPercent: number }[] };
 type UserProfile = { memberSince: string; lastActiveDate: string; lastLoginDate: string };
 type UpcomingItem = { id: string; tmdbId: string; source: "radarr" | "sonarr"; detailId: string; title: string; posterUrl: string; mediaType: string; availabilityDate: string; cinemaStartDate?: string; cinemaEndDate?: string; seasonNumber?: number; episodeNumber?: number; episodeTitle?: string };
@@ -107,7 +108,7 @@ function visibleNav(user: CurrentUser): { page: Page; labelKey: TranslationKey; 
 }
 const pageTitleKey: Record<Page, TranslationKey> = { today: "nav_today", stats: "nav_stats", requests: "nav_requests", chats: "nav_chats", profile: "nav_profile", admin: "nav_admin" };
 const periodLabelKey: Record<Period, TranslationKey> = { week: "period_week", month: "period_month", year: "period_year" };
-const APP_VERSION = "0.15.2";
+const APP_VERSION = "0.15.3";
 
 // One formatter per language and purpose, built once: Intl.DateTimeFormat is
 // expensive enough that constructing it inside a render loop is wasteful.
@@ -558,6 +559,42 @@ function MetricCard({ icon, tone, value, label, detail, positive, loading, onCli
     : <article className={`metric-card tone-${tone}`}>{inner}</article>;
 }
 
+// A MetricCard that can unfold. The bare percentage says the server had to
+// work, but not which client caused it — and that is the only part the
+// operator can act on. The breakdown stays collapsed because it answers a
+// follow-up question, and it is omitted entirely when Tracearr attributed
+// none of the transcodes to a device.
+function TranscodeCard({ share }: { share: TranscodeShare }) {
+  const translate = useT();
+  const [expanded, setExpanded] = useState(false);
+  const devices = share.devices ?? [];
+  const percent = Math.round((share.transcodes / share.plays) * 100);
+  const detail = translate("transcode_share_detail", { transcodes: share.transcodes, plays: share.plays });
+
+  const body = <>
+    <span className="metric-icon"><Icon name="refresh" /></span>
+    <strong>{percent}%</strong>
+    <p>{translate("transcode_share")}</p>
+    <small>{detail}</small>
+  </>;
+
+  if (devices.length === 0) return <article className="metric-card tone-mint">{body}</article>;
+
+  return <article className={expanded ? "metric-card tone-mint transcode-card expanded" : "metric-card tone-mint transcode-card"}>
+    <button type="button" className="transcode-card-head" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded} aria-controls="transcode-devices">
+      {body}
+      <span className="transcode-chevron"><Icon name="arrow" /></span>
+    </button>
+    {expanded && <ul className="transcode-devices" id="transcode-devices">
+      {devices.map((entry) => <li key={entry.device}>
+        <span className="transcode-device-name">{entry.device}</span>
+        <span className="transcode-device-count">{entry.transcodes}</span>
+        <span className="transcode-device-share">{Math.round((entry.transcodes / share.transcodes) * 100)}%</span>
+      </li>)}
+    </ul>}
+  </article>;
+}
+
 // Replaces two separate "Filme abgeschlossen"/"Serien abgeschlossen"
 // MetricCards — the period was redundant with the period tabs directly
 // above this grid, and two full-height cards for one number each felt
@@ -805,12 +842,7 @@ function Stats({ user, onSelectMedia }: { user: { id: string; name: string; feat
         onOpenSeries={statistics && statistics.completedSeries > 0 && completedSeriesState === "ready" ? () => setCompletedGridView("series") : undefined}
       />
       <RecordsCard longestSession={longestSession} longestSessionState={longestSessionState} mostActiveDay={mostActiveDay} mostActiveDayState={mostActiveDayState} />
-      {tracearr && transcode && transcode.plays > 0 && <MetricCard
-        icon="refresh" tone="mint"
-        value={`${Math.round((transcode.transcodes / transcode.plays) * 100)}%`}
-        label={translate("transcode_share")}
-        detail={translate("transcode_share_detail", { transcodes: transcode.transcodes, plays: transcode.plays })}
-      />}
+      {tracearr && transcode && transcode.plays > 0 && <TranscodeCard share={transcode} />}
     </section>
 
     <section className="chart-grid">

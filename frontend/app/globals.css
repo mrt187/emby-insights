@@ -325,6 +325,31 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .metric-card .up { color: #6edba5; }
 .metric-card .skeleton-value { display: block; width: 46%; height: 22px; margin: 2px 0 10px; }
 .metric-card .skeleton-detail { display: block; width: 70%; height: 10px; }
+/* The transcode card keeps the metric-card padding on the article so the
+   collapsed state is pixel-identical to its non-expandable siblings in the
+   same grid; the head button only adds the chevron and the hit area. */
+.transcode-card-head {
+  display: block; width: 100%; padding: 0; border: 0; background: transparent;
+  font: inherit; color: inherit; text-align: left; cursor: pointer;
+}
+.transcode-chevron { position: absolute; top: 12px; right: 12px; z-index: 1; display: grid; place-items: center; color: var(--muted); }
+.transcode-chevron .icon { width: 14px; height: 14px; transform: rotate(90deg); transition: transform 180ms var(--ease-out); }
+.transcode-card.expanded .transcode-chevron .icon { transform: rotate(-90deg); }
+.transcode-devices {
+  position: relative; z-index: 1; list-style: none;
+  margin: 10px 0 0; padding: 10px 0 0; border-top: 1px dashed var(--line);
+  display: grid; gap: 6px;
+}
+.transcode-devices li {
+  display: grid; grid-template-columns: 1fr auto auto; align-items: baseline; gap: 10px;
+  font-size: 12px; color: var(--text-secondary);
+}
+/* Long client names ("Emby for Apple TV (Living Room)") must not push the
+   numbers out of the card — the counts keep their column, the name ellipses. */
+.transcode-device-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.transcode-device-count { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--text-primary); }
+.transcode-device-share { min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 11px; }
+
 .completed-card { display: flex; align-items: stretch; padding: 0; }
 .completed-card-segment {
   flex: 1; display: flex; flex-direction: column; align-items: flex-start; justify-content: center;

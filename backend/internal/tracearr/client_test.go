@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -158,6 +159,53 @@ func TestTranscodeShare(t *testing.T) {
 	}
 }
 
+// The device list explains the percentage, so it counts transcoded plays
+// only, orders them worst-first, and keeps a play whose device Tracearr
+// could not attribute in the total rather than in the breakdown.
+func TestTranscodeShareBreaksDownByDevice(t *testing.T) {
+	client, server := newTestClient(func(writer http.ResponseWriter, _ *http.Request) {
+		_, _ = writer.Write([]byte(`{"data":[
+			{"media_id":"m1","is_transcode":true,"device":"iPhone"},
+			{"media_id":"m2","is_transcode":true,"device":"Apple TV"},
+			{"media_id":"m3","is_transcode":false,"device":"Apple TV"},
+			{"media_id":"m4","is_transcode":true,"device":"Apple TV"},
+			{"media_id":"m5","is_transcode":true,"device":null}
+		],"meta":{"nextCursor":null,"pageSize":100}}`))
+	})
+	defer server.Close()
+
+	share, err := client.TranscodeShare(context.Background(), "identity-1", time.Time{})
+	if err != nil {
+		t.Fatalf("TranscodeShare() error = %v", err)
+	}
+	if share.Plays != 5 || share.Transcodes != 4 {
+		t.Fatalf("share = %d of %d plays, want 4 of 5", share.Transcodes, share.Plays)
+	}
+	want := []DeviceTranscodes{{Device: "Apple TV", Transcodes: 2}, {Device: "iPhone", Transcodes: 1}}
+	if !reflect.DeepEqual(share.Devices, want) {
+		t.Errorf("devices = %#v, want %#v", share.Devices, want)
+	}
+}
+
+// A device that only ever direct-played must not show up in a list of what
+// caused transcodes.
+func TestTranscodeShareOmitsDevicesWithoutTranscodes(t *testing.T) {
+	client, server := newTestClient(func(writer http.ResponseWriter, _ *http.Request) {
+		_, _ = writer.Write([]byte(`{"data":[
+			{"media_id":"m1","is_transcode":false,"device":"Apple TV"}
+		],"meta":{"nextCursor":null,"pageSize":100}}`))
+	})
+	defer server.Close()
+
+	share, err := client.TranscodeShare(context.Background(), "identity-1", time.Time{})
+	if err != nil {
+		t.Fatalf("TranscodeShare() error = %v", err)
+	}
+	if len(share.Devices) != 0 {
+		t.Errorf("devices = %#v, want none", share.Devices)
+	}
+}
+
 func TestWatchersPrefersIdentityName(t *testing.T) {
 	client, server := newTestClient(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != "/api/v2/public/media/movie:tmdb:584/watchers" {
@@ -222,7 +270,7 @@ func TestUpstreamFailuresDegradeToZeroValues(t *testing.T) {
 	if plays, err := client.Unfinished(ctx, "identity-1", time.Time{}); err != nil || plays != nil {
 		t.Fatalf("Unfinished: plays = %#v, err = %v", plays, err)
 	}
-	if share, err := client.TranscodeShare(ctx, "identity-1", time.Time{}); err != nil || share != (TranscodeShare{}) {
+	if share, err := client.TranscodeShare(ctx, "identity-1", time.Time{}); err != nil || !reflect.DeepEqual(share, TranscodeShare{}) {
 		t.Fatalf("TranscodeShare: share = %#v, err = %v", share, err)
 	}
 	if watchers, err := client.Watchers(ctx, "movie:tmdb:584"); err != nil || watchers != nil {
@@ -246,7 +294,7 @@ func TestNilClientAndEmptyArgumentsAreInert(t *testing.T) {
 	if plays, err := client.Unfinished(ctx, "identity-1", time.Time{}); err != nil || plays != nil {
 		t.Fatalf("nil Unfinished: plays = %#v, err = %v", plays, err)
 	}
-	if share, err := client.TranscodeShare(ctx, "identity-1", time.Time{}); err != nil || share != (TranscodeShare{}) {
+	if share, err := client.TranscodeShare(ctx, "identity-1", time.Time{}); err != nil || !reflect.DeepEqual(share, TranscodeShare{}) {
 		t.Fatalf("nil TranscodeShare: share = %#v, err = %v", share, err)
 	}
 	if watchers, err := client.Watchers(ctx, "movie:tmdb:584"); err != nil || watchers != nil {
