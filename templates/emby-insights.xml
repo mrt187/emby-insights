@@ -79,4 +79,10 @@ See full changelog: https://github.com/mrt187/emby-insights/blob/main/CHANGELOG.
 
   <Config Name="TRUSTED_PROXIES" Target="TRUSTED_PROXIES" Default="" Description="Comma-separated IPs/CIDRs of an upstream reverse proxy allowed to set X-Forwarded-For. Leave empty if the container is reached directly." Type="Variable" Display="advanced" Required="false" Mask="false"/>
 
+  <Config Name="VAPID_PUBLIC_KEY" Target="VAPID_PUBLIC_KEY" Default="" Description="Optional: enables Web Push notifications. Generate a keypair with 'npx web-push generate-vapid-keys' and set both keys together. Leave empty to disable push notifications - the app works fine without it." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+
+  <Config Name="VAPID_PRIVATE_KEY" Target="VAPID_PRIVATE_KEY" Default="" Description="Optional: private half of the Web Push VAPID keypair (see VAPID_PUBLIC_KEY). Must never leave the server." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+
+  <Config Name="VAPID_SUBJECT" Target="VAPID_SUBJECT" Default="" Description="Optional: contact address for Web Push (e.g. mailto:you@example.com), required by the VAPID spec if push is enabled." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+
 </Container>

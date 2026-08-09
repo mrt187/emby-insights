@@ -52,6 +52,13 @@ export function PushNotificationSettings() {
         if (active) setStatus("unsupported");
         return;
       }
+      // The server only exposes /api/push/public-key when a VAPID keypair is
+      // configured; without one, push is a disabled feature, not an error.
+      const keyResponse = await fetch("/api/push/public-key", { credentials: "include" });
+      if (!keyResponse.ok) {
+        if (active) setStatus("unsupported");
+        return;
+      }
       try {
         const registration = await navigator.serviceWorker.ready;
         const subscription = await registration.pushManager.getSubscription();

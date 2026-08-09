@@ -46,6 +46,25 @@ func TestLoadUsesConfiguredValues(t *testing.T) {
 	}
 }
 
+func TestLoadWithoutVAPIDKeysStillStarts(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://user:password@localhost:5432/emby_insights")
+	t.Setenv("REDIS_URL", "redis://localhost:6379/0")
+	t.Setenv("EMBY_BASE_URL", "http://emby:8096/emby")
+	t.Setenv("EMBY_ADMIN_API_KEY", "test-admin-key")
+	t.Setenv("APP_ENCRYPTION_KEY", "test-encryption-key")
+	t.Setenv("VAPID_PUBLIC_KEY", "")
+	t.Setenv("VAPID_PRIVATE_KEY", "")
+	t.Setenv("VAPID_SUBJECT", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v, want push notifications to be optional", err)
+	}
+	if cfg.PushPublicKey != "" || cfg.PushPrivateKey != "" {
+		t.Fatal("expected empty push keys when VAPID env vars are unset")
+	}
+}
+
 func TestLoadDefaultsCookieSecureToTrue(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:password@localhost:5432/emby_insights")
 	t.Setenv("REDIS_URL", "redis://localhost:6379/0")

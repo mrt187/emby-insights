@@ -158,6 +158,13 @@ func New(cfg config.Config) (*App, error) {
 	seerrFacade := liveSeerr{live: live}
 	comingSoonFacade := liveComingSoon{live: live}
 
+	// Web Push stays disabled (nil sender) without a VAPID keypair — see
+	// notifyPush and pushPublicKey, both of which already nil-check it.
+	var pushSender *push.Sender
+	if cfg.PushPublicKey != "" && cfg.PushPrivateKey != "" {
+		pushSender = push.NewSender(cfg.PushPublicKey, cfg.PushPrivateKey, cfg.PushSubject)
+	}
+
 	app := &App{
 		database:            database,
 		redis:               cache,
@@ -190,7 +197,7 @@ func New(cfg config.Config) (*App, error) {
 		messages:            store.NewPostgresMessageStore(database),
 		pushSubscriptions:   store.NewPostgresPushSubscriptionStore(database),
 		pushSeen:            store.NewPostgresPushSeenStore(database),
-		pushSender:          push.NewSender(cfg.PushPublicKey, cfg.PushPrivateKey, cfg.PushSubject),
+		pushSender:          pushSender,
 		directory:           embyClient,
 		adminAvatars:        embyClient,
 		embyClient:          embyClient,
@@ -1271,10 +1278,18 @@ func decodeAdminMessageBody(writer http.ResponseWriter, request *http.Request) (
 // — the key is not a secret, and the login screen itself may want to offer
 // the opt-in prompt before a session exists.
 func (app *App) pushPublicKey(writer http.ResponseWriter, request *http.Request) {
+	if app.pushSender == nil {
+		writer.WriteHeader(http.StatusNotFound)
+		return
+	}
 	respondJSON(writer, http.StatusOK, map[string]string{"publicKey": app.pushSender.PublicKey()})
 }
 
 func (app *App) pushSubscribe(writer http.ResponseWriter, request *http.Request) {
+	if app.pushSender == nil {
+		writer.WriteHeader(http.StatusNotFound)
+		return
+	}
 	identity, ok := app.identityFromRequest(writer, request)
 	if !ok {
 		return

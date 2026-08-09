@@ -62,20 +62,12 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
-	pushPublicKey, err := required("VAPID_PUBLIC_KEY")
-	if err != nil {
-		return Config{}, err
-	}
-
-	pushPrivateKey, err := required("VAPID_PRIVATE_KEY")
-	if err != nil {
-		return Config{}, err
-	}
-
-	pushSubject, err := required("VAPID_SUBJECT")
-	if err != nil {
-		return Config{}, err
-	}
+	// Web Push is optional: without a VAPID keypair, notifyPush() and the
+	// /api/push/* handlers stay disabled (see server.go) but the app still
+	// starts fine — personal statistics/requests don't depend on push.
+	pushPublicKey := valueOr("VAPID_PUBLIC_KEY", "")
+	pushPrivateKey := valueOr("VAPID_PRIVATE_KEY", "")
+	pushSubject := valueOr("VAPID_SUBJECT", "")
 
 	pushPollInterval, err := durationOr("PUSH_POLL_INTERVAL", 20*time.Minute)
 	if err != nil {
