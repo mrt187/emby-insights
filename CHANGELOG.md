@@ -8,6 +8,15 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.16.2] - 2026-08-10
+
+### Changed
+
+- Titles from your library now carry a quiet source line — a green dot,
+  "Emby", and the date it was added — instead of a bright green "available"
+  badge on every film you had not watched yet.
+- Buttons are less rounded.
+
 ## [0.16.1] - 2026-08-10
 
 ### Fixed
