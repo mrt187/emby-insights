@@ -2,10 +2,13 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
+	"github.com/mrt187/EmbyInsights/internal/emby"
 	"github.com/mrt187/EmbyInsights/internal/tracearr"
 )
 
@@ -181,4 +184,105 @@ func (app *App) tracearrHouseholdForTMDB(ctx context.Context, seerrMediaType str
 		embyMediaType = "Series"
 	}
 	return app.tracearrHousehold(ctx, embyMediaType, imdbID, strconv.Itoa(tmdbID), "")
+}
+
+// popularWindowDays is the ranking's fixed window. The rows sit on Heute
+// with no period tabs of their own, and "last 30 days" is what the wording
+// on the row promises — periodStart's "month" would drift with calendar
+// month lengths.
+const popularWindowDays = 30
+
+// popularLimit caps each ranking. The rows scroll horizontally, so a longer
+// list costs nothing to render but a lot to fetch posters for.
+const popularLimit = 15
+
+// popularStats ranks what the household watched over the last 30 days,
+// split into movies and shows. Both rows come from one upstream walk, so
+// they are served together rather than as two endpoints.
+func (app *App) popularStats(writer http.ResponseWriter, request *http.Request) {
+	identity, ok := app.identityFromRequest(writer, request)
+	if !ok {
+		return
+	}
+	empty := map[string][]tracearr.PopularTitle{"movies": {}, "shows": {}}
+
+	client, identityID := app.tracearrIdentity(request.Context(), identity.UserID)
+	if client == nil {
+		respondJSON(writer, http.StatusOK, empty)
+		return
+	}
+
+	type popularLists struct {
+		Movies []tracearr.PopularTitle `json:"movies"`
+		Shows  []tracearr.PopularTitle `json:"shows"`
+	}
+	lists, err := cachedJSON(request.Context(), app, "tracearr:popular:"+identityID, statsCacheTTL, func(ctx context.Context) (popularLists, error) {
+		movies, shows, err := client.MostWatched(ctx, identityID, time.Now().AddDate(0, 0, -popularWindowDays), popularLimit)
+		return popularLists{Movies: movies, Shows: shows}, err
+	})
+	if err != nil {
+		respondJSON(writer, http.StatusOK, empty)
+		return
+	}
+	respondJSON(writer, http.StatusOK, popularLists{
+		Movies: orEmpty(withProxiedPosters(lists.Movies)),
+		Shows:  orEmpty(withProxiedPosters(lists.Shows)),
+	})
+}
+
+// withProxiedPosters rewrites Tracearr's own poster paths to our proxy
+// route, so the browser never talks to the Tracearr instance directly —
+// it may not even be reachable from where the browser sits. Mirrors what
+// artwork.ProxyURL does for the TMDB/TVDB CDNs.
+func withProxiedPosters(titles []tracearr.PopularTitle) []tracearr.PopularTitle {
+	for index, title := range titles {
+		if title.PosterURL == "" {
+			continue
+		}
+		titles[index].PosterURL = "/api/tracearr/poster?u=" + url.QueryEscape(title.PosterURL)
+	}
+	return titles
+}
+
+// tracearrPoster serves posters for the most-watched rows. Tracearr hosts
+// its own image proxy, and the instance normally sits on a private address
+// — which app.imageFetchClient refuses by design, so that SSRF guard is not
+// widened here. Instead the fetch goes through the Tracearr client, which
+// only ever talks to the configured base URL.
+func (app *App) tracearrPoster(writer http.ResponseWriter, request *http.Request) {
+	if _, ok := app.identityFromRequest(writer, request); !ok {
+		return
+	}
+	client := app.live.tracearrClient()
+	if client == nil {
+		http.NotFound(writer, request)
+		return
+	}
+	resolved, ok := client.ImageURL(request.URL.Query().Get("u"))
+	if !ok {
+		respondJSON(writer, http.StatusBadRequest, map[string]string{"error": "u must be a poster URL on the configured Tracearr instance"})
+		return
+	}
+
+	image, err := cachedJSON(request.Context(), app, "tracearr-poster:"+resolved, imageCacheTTL, func(ctx context.Context) (emby.UserImage, error) {
+		body, ok := client.FetchImage(ctx, resolved)
+		if !ok {
+			return emby.UserImage{}, fmt.Errorf("%w: Tracearr did not serve the poster", emby.ErrItemImageUnavailable)
+		}
+		defer body.Close()
+		data, contentType, ok := readImageBody(body)
+		if !ok {
+			return emby.UserImage{}, fmt.Errorf("%w: Tracearr poster is not a usable image", emby.ErrItemImageUnavailable)
+		}
+		return emby.UserImage{ContentType: contentType, Data: data}, nil
+	})
+	if err != nil {
+		// A missing poster is a gap in a decorative row, never a page error.
+		http.NotFound(writer, request)
+		return
+	}
+	writer.Header().Set("Content-Type", image.ContentType)
+	writer.Header().Set("Cache-Control", "public, max-age=604800, immutable")
+	writer.WriteHeader(http.StatusOK)
+	_, _ = writer.Write(image.Data)
 }

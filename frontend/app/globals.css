@@ -432,6 +432,28 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 }
 .poster-progress-fill { height: 100%; border-radius: 2px; background: var(--mint-bright); }
 
+/* Rank and watched marker sit above the artwork: .poster img is z-index 0,
+   and .poster::after already lays a scrim over it. The rank leans on that
+   scrim plus its own shadow so it stays legible over a bright poster. */
+/* Scoped under .poster on purpose: the generic `.poster span` rule above
+   pins spans to position:relative, and it would out-specify a bare
+   .poster-rank — the badges then land in the grid flow instead of the
+   corners. */
+.poster .poster-rank {
+  position: absolute; z-index: 1; top: 4px; left: 8px;
+  font-size: 26px; font-weight: 800; line-height: 1; letter-spacing: -1px;
+  font-variant-numeric: tabular-nums; color: #fff;
+  text-shadow: 0 2px 6px rgb(0 0 0 / 75%), 0 0 2px rgb(0 0 0 / 90%);
+  pointer-events: none;
+}
+.poster .poster-check {
+  position: absolute; z-index: 1; top: 7px; right: 7px;
+  display: grid; place-items: center; width: 19px; height: 19px;
+  border-radius: 50%; background: #f5c518; color: #101820;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 45%);
+}
+.poster .poster-check .icon { width: 13px; height: 13px; stroke-width: 3; }
+
 /* ------------------------------------------------------- statistics page */
 
 .page-view { max-width: none; }
@@ -597,15 +619,6 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 /* Expands the tappable area to 44px without growing the visible glyph or layout. */
 .star-button::after { content: ""; position: absolute; inset: -6px; }
 .star-button.filled { color: #f6cf6b; }
-.icon-toggle-button {
-  position: relative;
-  display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid var(--line); border-radius: 999px;
-  background: transparent; color: var(--muted); cursor: pointer; transition: color 160ms var(--ease-out), border-color 160ms var(--ease-out);
-}
-.icon-toggle-button::after { content: ""; position: absolute; inset: -4px; }
-.icon-toggle-button.active { color: var(--mint-bright); border-color: rgb(140 224 173 / 45%); }
-.icon-toggle-button.active .icon { fill: currentColor; }
-.icon-toggle-button:disabled { opacity: .5; cursor: not-allowed; }
 .watchlist-toggle { display: flex; align-items: center; gap: 10px; color: var(--text-secondary); font-size: 14px; font-weight: 600; }
 
 .request-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; justify-content: flex-start; margin-top: -8px; }
@@ -623,6 +636,25 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .request-confirmation { color: var(--mint-bright); font-weight: 700; font-size: 14px; }
 .request-unconfigured { margin: 0; font-size: 13px; line-height: 1.4; color: var(--text-secondary); }
 .request-error { color: #e88b8b; font-size: 13px; }
+
+/* Actions sit directly under the ratings in the hero, the way the reference
+   layout puts them under the title — not down in the tracking bar. */
+.media-detail-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 14px; }
+.favorite-button { display: inline-flex; align-items: center; gap: 8px; }
+.favorite-button .icon { width: 16px; height: 16px; }
+.favorite-button.active { color: var(--mint-bright); border-color: rgb(140 224 173 / 45%); }
+/* Filled heart only once it is on, so the state reads at a glance rather
+   than only from the label. */
+.favorite-button.active .icon { fill: currentColor; }
+
+.media-detail-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.media-detail-tile {
+  padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px;
+  background: rgb(255 255 255 / 3%); box-shadow: inset 0 1px 0 rgb(255 255 255 / 5%);
+}
+.media-detail-tile strong { display: block; font-size: 27px; line-height: 1; letter-spacing: -1px; font-variant-numeric: tabular-nums; }
+.media-detail-tile p { margin: 8px 0 0; font-size: 11px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: var(--text-secondary); }
+.media-detail-tile small { display: block; margin-top: 3px; font-size: 11px; color: var(--muted); }
 
 .request-modal-backdrop {
   position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 24px;

@@ -322,6 +322,8 @@ func (app *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/stats/genres", app.genreStats)
 	mux.HandleFunc("GET /api/stats/unfinished", app.unfinishedStats)
 	mux.HandleFunc("GET /api/stats/transcode-share", app.transcodeShareStats)
+	mux.HandleFunc("GET /api/stats/popular", app.popularStats)
+	mux.HandleFunc("GET /api/tracearr/poster", app.tracearrPoster)
 	mux.HandleFunc("GET /api/upcoming", app.upcomingItems)
 	mux.HandleFunc("GET /api/in-cinemas", app.inCinemaItems)
 	mux.HandleFunc("GET /api/requests", app.myRequests)

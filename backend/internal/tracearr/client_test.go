@@ -352,3 +352,170 @@ func TestHistoryPaginationIsBounded(t *testing.T) {
 		t.Fatalf("requests = %d, want the %d-page cap", requests, maxPages)
 	}
 }
+
+// MostWatched is counted here rather than fetched, so the counting is what
+// needs proving: episodes fold into their show, movies stay separate, and
+// the order is stable.
+func TestMostWatchedRanksHouseholdPlays(t *testing.T) {
+	var sawUserFilter bool
+	client, server := newTestClient(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Query().Get("user_id") != "" {
+			sawUserFilter = true
+		}
+		_, _ = writer.Write([]byte(`{"data":[
+			{"media_type":"movie","media_id":"m1","media_title":"Dune","year":2021,"poster_url":"/p/dune.jpg","tmdb_id":438631,"watched":true,"user":{"id":"me"}},
+			{"media_type":"movie","media_id":"m1","media_title":"Dune","year":2021,"poster_url":"/p/dune.jpg","user":{"id":"someone-else"}},
+			{"media_type":"movie","media_id":"m2","media_title":"Arrival","year":2016,"poster_url":"/p/arrival.jpg","watched":true,"user":{"id":"someone-else"}},
+			{"media_type":"episode","show_media_id":"s1","show_title":"Silo","media_title":"Freedom Day","poster_url":"/p/silo.jpg","user":{"id":"me"}},
+			{"media_type":"episode","show_media_id":"s1","show_title":"Silo","media_title":"Machines","poster_url":"/p/silo.jpg","user":{"id":"me"}},
+			{"media_type":"episode","show_media_id":"s2","show_title":"Severance","media_title":"Good News","poster_url":"/p/sev.jpg","user":{"id":"me"}},
+			{"media_type":"track","media_id":"t1","media_title":"Song","user":{"id":"me"}}
+		],"meta":{"nextCursor":null,"pageSize":100}}`))
+	})
+	defer server.Close()
+
+	movies, shows, err := client.MostWatched(context.Background(), "me", time.Time{}, 10)
+	if err != nil {
+		t.Fatalf("MostWatched() error = %v", err)
+	}
+	if sawUserFilter {
+		t.Error("the household ranking must not filter by user_id")
+	}
+
+	if len(movies) != 2 || movies[0].Title != "Dune" || movies[0].Plays != 2 {
+		t.Fatalf("movies = %#v, want Dune with 2 plays first", movies)
+	}
+	if movies[0].Year != 2021 || movies[0].PosterURL != "/p/dune.jpg" || movies[0].TmdbID != 438631 {
+		t.Errorf("movies[0] lost its metadata: %#v", movies[0])
+	}
+	// Two episodes of one show are one popular show, not two entries.
+	if len(shows) != 2 || shows[0].Title != "Silo" || shows[0].Plays != 2 || shows[0].ID != "s1" {
+		t.Fatalf("shows = %#v, want Silo grouped to 2 plays", shows)
+	}
+	// The music track must not land in either ranking.
+	for _, entry := range append(append([]PopularTitle{}, movies...), shows...) {
+		if entry.Title == "Song" {
+			t.Error("a music track leaked into the ranking")
+		}
+	}
+}
+
+// The tick is personal: a title everyone else finished is not one you have
+// seen, and a title you started but abandoned is not watched either.
+func TestMostWatchedMarksOnlyTheViewersOwnWatches(t *testing.T) {
+	client, server := newTestClient(func(writer http.ResponseWriter, _ *http.Request) {
+		_, _ = writer.Write([]byte(`{"data":[
+			{"media_type":"movie","media_id":"m1","media_title":"Seen By Me","watched":true,"user":{"id":"me"}},
+			{"media_type":"movie","media_id":"m2","media_title":"Seen By Others","watched":true,"user":{"id":"housemate"}},
+			{"media_type":"movie","media_id":"m3","media_title":"Abandoned By Me","watched":false,"user":{"id":"me"}}
+		],"meta":{"nextCursor":null,"pageSize":100}}`))
+	})
+	defer server.Close()
+
+	movies, _, err := client.MostWatched(context.Background(), "me", time.Time{}, 10)
+	if err != nil {
+		t.Fatalf("MostWatched() error = %v", err)
+	}
+	want := map[string]bool{"Seen By Me": true, "Seen By Others": false, "Abandoned By Me": false}
+	for _, entry := range movies {
+		if entry.Watched != want[entry.Title] {
+			t.Errorf("%q watched = %v, want %v", entry.Title, entry.Watched, want[entry.Title])
+		}
+	}
+}
+
+// Equal play counts must not reshuffle between polls — these rows show rank
+// numbers, so a wobbling order is visible to the user.
+func TestMostWatchedOrdersTiesByTitleAndHonoursTheLimit(t *testing.T) {
+	client, server := newTestClient(func(writer http.ResponseWriter, _ *http.Request) {
+		_, _ = writer.Write([]byte(`{"data":[
+			{"media_type":"movie","media_id":"m1","media_title":"Charlie","user":{"id":"me"}},
+			{"media_type":"movie","media_id":"m2","media_title":"Alpha","user":{"id":"me"}},
+			{"media_type":"movie","media_id":"m3","media_title":"Bravo","user":{"id":"me"}}
+		],"meta":{"nextCursor":null,"pageSize":100}}`))
+	})
+	defer server.Close()
+
+	for attempt := 0; attempt < 5; attempt++ {
+		movies, _, err := client.MostWatched(context.Background(), "me", time.Time{}, 2)
+		if err != nil {
+			t.Fatalf("MostWatched() error = %v", err)
+		}
+		if len(movies) != 2 || movies[0].Title != "Alpha" || movies[1].Title != "Bravo" {
+			t.Fatalf("attempt %d: movies = %#v, want Alpha then Bravo, capped at 2", attempt, movies)
+		}
+	}
+}
+
+// A busy household spans many pages; stopping after the first would drop
+// titles out of the ranking without any sign that it happened.
+func TestMostWatchedFollowsTheCursor(t *testing.T) {
+	var pages int
+	client, server := newTestClient(func(writer http.ResponseWriter, request *http.Request) {
+		pages++
+		if request.URL.Query().Get("cursor") == "" {
+			_, _ = writer.Write([]byte(`{"data":[
+				{"media_type":"movie","media_id":"m1","media_title":"Dune","user":{"id":"me"}}
+			],"meta":{"nextCursor":"page-2","pageSize":100}}`))
+			return
+		}
+		_, _ = writer.Write([]byte(`{"data":[
+			{"media_type":"movie","media_id":"m1","media_title":"Dune","user":{"id":"me"}}
+		],"meta":{"nextCursor":null,"pageSize":100}}`))
+	})
+	defer server.Close()
+
+	movies, _, err := client.MostWatched(context.Background(), "me", time.Time{}, 10)
+	if err != nil {
+		t.Fatalf("MostWatched() error = %v", err)
+	}
+	if pages != 2 {
+		t.Fatalf("fetched %d pages, want both", pages)
+	}
+	if len(movies) != 1 || movies[0].Plays != 2 {
+		t.Fatalf("movies = %#v, want Dune counted across both pages", movies)
+	}
+}
+
+func TestMostWatchedIsInertWithoutAClient(t *testing.T) {
+	var client *Client
+	movies, shows, err := client.MostWatched(context.Background(), "me", time.Time{}, 10)
+	if err != nil || movies != nil || shows != nil {
+		t.Fatalf("movies = %#v, shows = %#v, err = %v", movies, shows, err)
+	}
+}
+
+// ImageURL is the guard that keeps the poster route from becoming a way to
+// reach anything else on the network the server sits in — the general image
+// fetcher's private-address block does not apply to this path.
+func TestImageURLPinsToTheConfiguredInstance(t *testing.T) {
+	client := NewClient("http://tracearr.local:3333", "key")
+
+	resolved, ok := client.ImageURL("/api/v1/images/proxy?server=abc&url=%2Flibrary%2Fx.jpg")
+	if !ok || resolved != "http://tracearr.local:3333/api/v1/images/proxy?server=abc&url=%2Flibrary%2Fx.jpg" {
+		t.Fatalf("relative poster path resolved to %q (ok=%v)", resolved, ok)
+	}
+	if resolved, ok := client.ImageURL("http://tracearr.local:3333/api/v1/images/proxy?x=1"); !ok {
+		t.Errorf("the instance's own absolute URL was rejected: %q", resolved)
+	}
+
+	for _, raw := range []string{
+		"",
+		"   ",
+		"http://evil.example/x.jpg",
+		"https://tracearr.local:3333/x.jpg", // scheme must match too
+		"http://tracearr.local:9999/x.jpg",  // different port is a different service
+		"http://tracearr.local.evil/x.jpg",  // suffix trick
+		"http://user@evil.example/x.jpg",
+		"file:///etc/passwd",
+	} {
+		if resolved, ok := client.ImageURL(raw); ok {
+			t.Errorf("BYPASS: %q resolved to %q, want rejection", raw, resolved)
+		}
+	}
+
+	var nilClient *Client
+	if _, ok := nilClient.ImageURL("/x.jpg"); ok {
+		t.Error("a nil client must resolve nothing")
+	}
+}

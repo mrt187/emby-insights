@@ -23,6 +23,8 @@ function storedPage(): Page {
 type Features = { requests: boolean; movieDates: boolean; seriesDates: boolean; upcoming: boolean; statistics: boolean; tracearr: boolean };
 type CurrentUser = { id: string; name: string; isAdmin: boolean; features: Features; language?: Lang };
 type Period = "week" | "month" | "year";
+type PopularTitle = { id: string; title: string; year?: number; plays: number; posterUrl?: string; watched: boolean; tmdbId?: number };
+type PopularLists = { movies: PopularTitle[]; shows: PopularTitle[] };
 type PersonalStats = { watchSeconds: number; previousWatchSeconds: number; completedMovies: number; completedSeries: number; favouriteGenre: string; periodStartsAt: string; periodEndsAt: string };
 type WatchTimeRank = { rank: number };
 type DeviceWatchTime = { deviceName: string; watchSeconds: number };
@@ -82,7 +84,7 @@ type MediaDetail = {
 };
 type MediaTrackingEntry = { mediaSource: string; mediaId: string; mediaType: string; title: string; posterUrl: string; rating?: number; onWatchlist: boolean; hiddenInProgress?: boolean };
 function isRequestableSeason(season: MediaSeason | RequestableSeason): season is RequestableSeason { return !("id" in season); }
-type IconName = "home" | "chart" | "sparkle" | "heart" | "user" | "bell" | "arrow" | "close" | "clock" | "movie" | "series" | "genre" | "medal" | "refresh" | "chat" | "settings";
+type IconName = "home" | "chart" | "sparkle" | "heart" | "user" | "bell" | "arrow" | "close" | "clock" | "movie" | "series" | "genre" | "medal" | "refresh" | "chat" | "settings" | "check";
 type Tone = "blue" | "peach" | "mint" | "lilac";
 type LoadState = "loading" | "ready" | "error";
 
@@ -282,6 +284,7 @@ export default function Home() {
   const [seriesInProgress, seriesInProgressState, refetchSeriesInProgress] = useApiResource<SeriesProgress[]>(user ? "/api/series-in-progress" : null, []);
   const [continueWatching, continueWatchingState] = useApiResource<ContinueWatchingItem[]>(user ? "/api/continue-watching" : null, []);
   const [availableRequests] = useApiResource<RequestItem[]>(user?.features.requests ? "/api/requests/available" : null, []);
+  const [popular] = useApiResource<PopularLists>(user?.features.tracearr ? "/api/stats/popular" : null, { movies: [], shows: [] });
   const [userProfile] = useApiResource<UserProfile | null>(user ? "/api/me/profile" : null, null);
 
   const refetchRequests = () => { refetchRequestItems(); refetchRequestTotal(); };
@@ -340,7 +343,7 @@ export default function Home() {
           </div>}
         </div>
       </header>
-      {page === "today" && <Today upcoming={upcomingItems} upcomingState={upcomingState} cinema={cinemaItems} cinemaState={cinemaState} requests={requestItems} requestState={requestState} newForYou={newForYouItems} newForYouState={newForYouState} topRated={topRatedItems} topRatedState={topRatedState} seriesInProgress={seriesInProgress} seriesInProgressState={seriesInProgressState} continueWatching={continueWatching} continueWatchingState={continueWatchingState} availableRequests={availableRequests} features={user.features} message={messagePreview} onSelectMedia={setSelectedMedia} onOpenChats={() => selectPage("chats")} />}
+      {page === "today" && <Today upcoming={upcomingItems} upcomingState={upcomingState} cinema={cinemaItems} cinemaState={cinemaState} requests={requestItems} requestState={requestState} newForYou={newForYouItems} newForYouState={newForYouState} topRated={topRatedItems} topRatedState={topRatedState} seriesInProgress={seriesInProgress} seriesInProgressState={seriesInProgressState} continueWatching={continueWatching} continueWatchingState={continueWatchingState} availableRequests={availableRequests} popular={popular} features={user.features} message={messagePreview} onSelectMedia={setSelectedMedia} onOpenChats={() => selectPage("chats")} />}
       {page === "stats" && user.features.statistics && <Stats user={user} onSelectMedia={setSelectedMedia} />}
       {page === "requests" && user.features.requests && <Requests onSelectMedia={setSelectedMedia} />}
       {page === "chats" && <Chats user={user} />}
@@ -362,6 +365,7 @@ function Icon({ name }: { name: IconName }) {
     bell: <><path d="M18 10a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M10 22h4" /></>,
     arrow: <path d="M5 12h14m-6-6 6 6-6 6" />,
     close: <path d="M18 6 6 18M6 6l12 12" />,
+    check: <path d="m5 12.5 4.5 4.5L19 7.5" />,
     clock: <><circle cx="12" cy="12" r="8.5" /><path d="M12 7v5l3.5 2" /></>,
     movie: <><rect x="3" y="5" width="18" height="15" rx="2" /><path d="M7 5v15m10-15v15M3 10h18" /></>,
     series: <><path d="M5 3h14v18H5z" /><path d="M8 7h8M8 11h8M8 15h5" /></>,
@@ -425,12 +429,13 @@ function UserAvatar({ name, userId }: { name: string; userId: string }) {
   return <PersonAvatar name={name} src={`/api/me/avatar?u=${encodeURIComponent(userId)}`} />;
 }
 
-function Today({ upcoming, upcomingState, cinema, cinemaState, requests, requestState, newForYou, newForYouState, topRated, topRatedState, seriesInProgress, seriesInProgressState, continueWatching, continueWatchingState, availableRequests, features, message, onSelectMedia, onOpenChats }: {
+function Today({ upcoming, upcomingState, cinema, cinemaState, requests, requestState, newForYou, newForYouState, topRated, topRatedState, seriesInProgress, seriesInProgressState, continueWatching, continueWatchingState, availableRequests, popular, features, message, onSelectMedia, onOpenChats }: {
 	upcoming: UpcomingItem[]; upcomingState: LoadState; requests: RequestItem[]; requestState: LoadState;
 	cinema: UpcomingItem[]; cinemaState: LoadState;
   newForYou: NewForYouItem[]; newForYouState: LoadState; topRated: TopRatedItem[]; topRatedState: LoadState; availableRequests: RequestItem[];
   seriesInProgress: SeriesProgress[]; seriesInProgressState: LoadState;
   continueWatching: ContinueWatchingItem[]; continueWatchingState: LoadState;
+  popular: PopularLists;
   features: Features;
   message: { preview: string } | null;
   onSelectMedia: (selection: MediaSelection) => void; onOpenChats: () => void;
@@ -443,6 +448,12 @@ function Today({ upcoming, upcomingState, cinema, cinemaState, requests, request
   // Ohne Radarr fehlen Filmtermine, ohne Sonarr Serientermine — beide fließen
   // serverseitig in dieselbe Liste, deshalb wird hier nach Medientyp gefiltert
   // statt eine eigene Abfrage pro Dienst zu brauchen.
+  // A Tracearr title is not an Emby item, so the only detail screen it can
+  // open is the Seerr one, keyed by TMDB id. Without that id there is
+  // nothing to open, and the tile stays inert rather than dead-ending.
+  const popularSelect = features.requests
+    ? (item: PopularTitle) => { if (item.tmdbId) onSelectMedia({ source: "seerr", id: String(item.tmdbId), mediaType: item.id.startsWith("show") ? "tv" : "movie" }); }
+    : undefined;
   const visibleUpcoming = upcoming.filter((item) => (item.mediaType === "movie" ? features.movieDates : features.seriesDates));
 
   const events = relevantEvents({
@@ -468,6 +479,12 @@ function Today({ upcoming, upcomingState, cinema, cinemaState, requests, request
     <PosterRow title={translate("row_series_progress")} eyebrow={translate("row_series_progress_eyebrow")} items={seriesInProgress} state={seriesInProgressState} emptyLabel={translate("row_series_progress_empty")} detail={(item) => seriesProgressDetail(item, lang)} progress={(item) => Math.round((item.watchedEpisodes / item.totalEpisodes) * 100)} onSelect={(item) => onSelectMedia({ source: "emby", id: item.id })} />
     {features.requests && <PosterRow title={translate("row_my_requests")} eyebrow={translate("row_my_requests_eyebrow")} items={requests} state={requestState} emptyLabel={translate("row_my_requests_empty")} detail={(item) => item.status} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.tmdbId, mediaType: item.mediaType })} />}
     <PosterRow title={translate("row_top_rated")} eyebrow={translate("row_top_rated_eyebrow")} items={topRated} state={topRatedState} emptyLabel={translate("row_top_rated_empty")} detail={(item) => `★ ${item.averageRating.toFixed(1)}`} onSelect={(item) => onSelectMedia(item.mediaSource === "seerr" ? { source: "seerr", id: item.mediaId, mediaType: item.mediaType } : { source: "emby", id: item.mediaId })} />
+    {/* Both rows are derived recommendations, so they render only when they
+        actually have something to say: without Tracearr they never load,
+        and with Tracearr but no plays in the window a permanent "nothing
+        here" would be noise rather than information. */}
+    {features.tracearr && popular.movies.length > 0 && <PosterRow title={translate("row_most_watched_movies")} eyebrow={translate("row_most_watched_eyebrow")} items={popular.movies} ranked watched={(item) => item.watched} detail={(item) => translate("most_watched_plays", { plays: item.plays })} onSelect={popularSelect} />}
+    {features.tracearr && popular.shows.length > 0 && <PosterRow title={translate("row_most_watched_shows")} eyebrow={translate("row_most_watched_eyebrow")} items={popular.shows} ranked watched={(item) => item.watched} detail={(item) => translate("most_watched_plays", { plays: item.plays })} onSelect={popularSelect} />}
     {features.movieDates && <PosterRow title={translate("row_cinema")} eyebrow={translate("row_cinema_eyebrow")} items={cinema} state={cinemaState} emptyLabel={translate("row_cinema_empty")} detail={(item) => cinemaWording(item, lang)} onSelect={(item) => onSelectMedia(calendarSelection(item, features.requests))} />}
 
     {allEventsOpen && <RelevantAllScreen events={events} onClose={() => setAllEventsOpen(false)} />}
@@ -687,8 +704,22 @@ function RankCard({ rank, name, userId }: { rank: number | null; name: string; u
   </article>;
 }
 
-function PosterRow<T extends { id: string; title: string; posterUrl?: string }>({ title, eyebrow, gridTitle, items, detail, itemTitle, state, emptyLabel, progress, onSelect }: {
-  title?: string; eyebrow?: string; gridTitle?: string; items: readonly T[]; detail: (item: T) => string; itemTitle?: (item: T) => string; state?: LoadState; emptyLabel?: string; progress?: (item: T) => number; onSelect?: (item: T) => void;
+// PosterArt is the artwork block shared by the rows and the grid overlay.
+// Both used to spell it out themselves, so every overlay added to a poster
+// had to be added twice — the rank number and the watched tick are the
+// third and fourth things to live in here.
+function PosterArt({ src, label, progress, rank, watched }: { src?: string; label: string; progress?: number; rank?: number; watched?: boolean }) {
+  const translate = useT();
+  return <div className="poster wide" role="img" aria-label={label}>
+    <PosterImage src={src} fallback={label} />
+    {rank !== undefined && <span className="poster-rank" aria-hidden="true">{rank}</span>}
+    {watched && <span className="poster-check" title={translate("watched")}><Icon name="check" /><span className="sr-only">{translate("watched")}</span></span>}
+    {progress !== undefined && <div className="poster-progress"><div className="poster-progress-fill" style={{ width: `${progress}%` }} /></div>}
+  </div>;
+}
+
+function PosterRow<T extends { id: string; title: string; posterUrl?: string }>({ title, eyebrow, gridTitle, items, detail, itemTitle, state, emptyLabel, progress, ranked, watched, onSelect }: {
+  title?: string; eyebrow?: string; gridTitle?: string; items: readonly T[]; detail: (item: T) => string; itemTitle?: (item: T) => string; state?: LoadState; emptyLabel?: string; progress?: (item: T) => number; ranked?: boolean; watched?: (item: T) => boolean; onSelect?: (item: T) => void;
 }) {
   const translate = useT();
   const [gridOpen, setGridOpen] = useState(false);
@@ -701,19 +732,16 @@ function PosterRow<T extends { id: string; title: string; posterUrl?: string }>(
     {state === "loading" && <PosterSkeletonRow />}
     {state === "error" && <p className="poster-status">{translate("not_available")}</p>}
     {state !== "loading" && state !== "error" && items.length === 0 && <p className="poster-status">{emptyLabel ?? translate("nothing_here")}</p>}
-    {items.length > 0 && <div className="poster-scroller">{items.map((item) => {
+    {items.length > 0 && <div className="poster-scroller">{items.map((item, index) => {
       const inner = <>
-        <div className="poster wide" role="img" aria-label={itemTitle?.(item) ?? item.title}>
-          <PosterImage src={item.posterUrl} fallback={itemTitle?.(item) ?? item.title} />
-          {progress && <div className="poster-progress"><div className="poster-progress-fill" style={{ width: `${progress(item)}%` }} /></div>}
-        </div>
+        <PosterArt src={item.posterUrl} label={itemTitle?.(item) ?? item.title} progress={progress?.(item)} rank={ranked ? index + 1 : undefined} watched={watched?.(item)} />
         <strong>{itemTitle?.(item) ?? item.title}</strong><small className={detail(item).includes("★") ? "rating-stars" : undefined}>{detail(item)}</small>
       </>;
       return onSelect
         ? <button type="button" className="poster-entry poster-entry-button" key={item.id} onClick={() => onSelect(item)}>{inner}</button>
         : <article className="poster-entry" key={item.id}>{inner}</article>;
     })}</div>}
-    {gridOpen && <MediaGridScreen title={resolvedGridTitle} items={items} detail={detail} progress={progress} onSelect={onSelect} onClose={() => setGridOpen(false)} />}
+    {gridOpen && <MediaGridScreen title={resolvedGridTitle} items={items} detail={detail} progress={progress} ranked={ranked} watched={watched} onSelect={onSelect} onClose={() => setGridOpen(false)} />}
   </section>;
 }
 
@@ -885,8 +913,9 @@ function Stats({ user, onSelectMedia }: { user: { id: string; name: string; feat
   </div>;
 }
 
-function MediaGridScreen<T extends { id: string; title: string; posterUrl?: string }>({ title, items, detail, itemTitle, progress, state, emptyLabel, headerExtra, onSelect, onClose }: {
+function MediaGridScreen<T extends { id: string; title: string; posterUrl?: string }>({ title, items, detail, itemTitle, progress, ranked, watched, state, emptyLabel, headerExtra, onSelect, onClose }: {
   title: string; items: readonly T[]; detail?: (item: T) => string; itemTitle?: (item: T) => string; progress?: (item: T) => number;
+  ranked?: boolean; watched?: (item: T) => boolean;
   state?: LoadState; emptyLabel?: string; headerExtra?: ReactNode;
   onSelect?: (item: T) => void; onClose: () => void;
 }) {
@@ -910,11 +939,8 @@ function MediaGridScreen<T extends { id: string; title: string; posterUrl?: stri
       </>}
       {state === "error" && <p className="poster-status">{translate("not_available")}</p>}
       {state !== "loading" && state !== "error" && items.length === 0 && <p className="poster-status">{emptyLabel ?? translate("nothing_here")}</p>}
-      {items.length > 0 && <div className="media-grid">{items.map((item) => <button type="button" className="media-grid-entry" key={item.id} onClick={() => onSelect?.(item)}>
-        <div className="poster wide" role="img" aria-label={itemTitle?.(item) ?? item.title}>
-          <PosterImage src={item.posterUrl} fallback={item.title} />
-          {progress && <div className="poster-progress"><div className="poster-progress-fill" style={{ width: `${progress(item)}%` }} /></div>}
-        </div>
+      {items.length > 0 && <div className="media-grid">{items.map((item, index) => <button type="button" className="media-grid-entry" key={item.id} onClick={() => onSelect?.(item)}>
+        <PosterArt src={item.posterUrl} label={itemTitle?.(item) ?? item.title} progress={progress?.(item)} rank={ranked ? index + 1 : undefined} watched={watched?.(item)} />
         <strong>{itemTitle?.(item) ?? item.title}</strong>
         {detail && <small>{detail(item)}</small>}
       </button>)}</div>}
@@ -1004,7 +1030,7 @@ function Requests({ onSelectMedia }: { onSelectMedia: (selection: MediaSelection
     />}
 
     <PosterRow title={translate("row_trending")} eyebrow="SEERR · TMDB" items={trending} state={trendingState} emptyLabel={translate("row_trending_empty")} detail={(item) => translate(item.mediaType === "tv" ? "media_type_series" : "media_type_movie")} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />
-    <PosterRow title={translate("row_popular_movies")} eyebrow="SEERR · TMDB" items={popularMovies} state={popularMoviesState} emptyLabel={translate("no_data")} detail={() => translate("label_popular")} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />
+    <PosterRow title={translate("row_most_watched_movies")} eyebrow="SEERR · TMDB" items={popularMovies} state={popularMoviesState} emptyLabel={translate("no_data")} detail={() => translate("label_popular")} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />
     <PosterRow title={translate("row_upcoming_movies")} eyebrow="SEERR · TMDB" items={upcomingMovies} state={upcomingMoviesState} emptyLabel={translate("no_data")} detail={() => translate("label_upcoming")} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />
     <PosterRow title={translate("row_popular_series")} eyebrow="SEERR · TMDB" items={popularSeries} state={popularSeriesState} emptyLabel={translate("no_data")} detail={() => translate("label_popular")} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />
     <PosterRow title={translate("row_upcoming_series")} eyebrow="SEERR · TMDB" items={upcomingSeries} state={upcomingSeriesState} emptyLabel={translate("no_data")} detail={() => translate("label_upcoming")} onSelect={(item) => onSelectMedia({ source: "seerr", id: item.id, mediaType: item.mediaType })} />
@@ -1050,6 +1076,9 @@ function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreat
   const [tracking, setTracking] = useState<{ rating: number; onWatchlist: boolean; hiddenInProgress: boolean }>({ rating: 0, onWatchlist: false, hiddenInProgress: false });
   const [favorite, setFavorite] = useState(false);
   const [favoriteBusy, setFavoriteBusy] = useState(false);
+  // Collapsed by default, like Tracearr's detail page: the plot and a grid of
+  // faces push the ratings and the actions below the fold otherwise.
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [markPlayedBusy, setMarkPlayedBusy] = useState(false);
   const mediaType = selection.source === "emby" ? undefined : selection.mediaType;
 
@@ -1288,18 +1317,42 @@ function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreat
                 <span className="sr-only">Rotten Tomatoes</span> {detail.rottenTomatoesRating}
               </span>}
             </div>}
+            <div className="media-detail-actions">
+              <button type="button" className="request-button" onClick={() => setDetailsOpen((open) => !open)} aria-expanded={detailsOpen} aria-controls="media-detail-more">
+                {translate(detailsOpen ? "hide_details" : "show_details")}
+              </button>
+              {selection.source === "emby" && <button
+                type="button"
+                className={favorite ? "request-button secondary favorite-button active" : "request-button secondary favorite-button"}
+                onClick={toggleFavorite}
+                disabled={favoriteBusy}
+                aria-pressed={favorite}
+                title={translate(favorite ? "favorite_remove" : "favorite_add")}
+              ><Icon name="heart" /> {translate("favorite_on_emby")}</button>}
+            </div>
           </div>
         </div>
-        {(detail.status || detail.releaseDate || (detail.studios && detail.studios.length > 0)) && <section className="media-detail-facts">
+        {detail.household && <div className="media-detail-tiles">
+          <article className="media-detail-tile">
+            <strong>{detail.household.plays}</strong>
+            <p>{translate("tile_plays")}</p>
+            <small>{translate("tile_plays_hint")}</small>
+          </article>
+          <article className="media-detail-tile">
+            <strong>{detail.household.watchers.length}</strong>
+            <p>{translate("tile_viewers")}</p>
+            <small>{translate("tile_viewers_hint")}</small>
+          </article>
+        </div>}
+        {detailsOpen && (detail.status || detail.releaseDate || (detail.studios && detail.studios.length > 0)) && <section className="media-detail-facts">
           <dl>
             {detail.status && <div><dt>{translate("fact_status")}</dt><dd>{detail.status}</dd></div>}
             {detail.releaseDate && <div><dt>{translate("fact_release_date")}</dt><dd>{formatFullDate(detail.releaseDate, lang)}</dd></div>}
             {detail.studios && detail.studios.length > 0 && <div><dt>{translate("fact_studios")}</dt><dd>{detail.studios.join(", ")}</dd></div>}
           </dl>
         </section>}
-        {detail.household && detail.household.watchers.length > 0 && <section className="media-detail-facts" aria-label={translate("household_heading")}>
+        {detailsOpen && detail.household && detail.household.watchers.length > 0 && <section className="media-detail-facts" aria-label={translate("household_heading")}>
           <dl>
-            <div><dt>{translate("fact_household_plays")}</dt><dd>{detail.household.plays}</dd></div>
             <div><dt>{translate("fact_household_watchers")}</dt><dd>{detail.household.watchers.map((watcher) => `${watcher.name} (${Math.round(watcher.completionPercent)}%)`).join(", ")}</dd></div>
           </dl>
         </section>}
@@ -1315,15 +1368,6 @@ function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreat
                 onClick={() => saveTracking({ ...tracking, rating: value === tracking.rating ? 0 : value })}
               >★</button>)}
             </div>
-            <button
-              type="button"
-              className={favorite ? "icon-toggle-button active" : "icon-toggle-button"}
-              onClick={toggleFavorite}
-              disabled={favoriteBusy}
-              aria-pressed={favorite}
-              aria-label={translate(favorite ? "favorite_remove" : "favorite_add")}
-              title={translate(favorite ? "favorite_remove" : "favorite_add")}
-            ><Icon name="heart" /></button>
           </>}
           <label className="watchlist-toggle">
             <span>{translate("watchlist")}</span>
@@ -1349,7 +1393,7 @@ function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreat
               ? <p className="request-confirmation">{translate("requested_confirmation")}</p>
               : <button type="button" className="request-button" onClick={() => setRequestModalOpen(true)}>{translate("request")}</button>)}
         </div>}
-        {detail.overview && <section className="media-detail-overview"><h2>{translate("overview")}</h2><OverviewText text={detail.overview} /></section>}
+        {detailsOpen && detail.overview && <section id="media-detail-more" className="media-detail-overview"><h2>{translate("overview")}</h2><OverviewText text={detail.overview} /></section>}
         </div>
         {embySeasons.length > 0 && <section className="media-detail-seasons">
           <h2>{translate("seasons")}</h2>
@@ -1365,7 +1409,7 @@ function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreat
             </article>;
           })}</div>
         </section>}
-        {crewAndCast.length > 0 && <section className="media-detail-cast">
+        {detailsOpen && crewAndCast.length > 0 && <section className="media-detail-cast">
           <h2>{translate("cast")}</h2>
           <div className="cast-grid">
             {crewAndCast.slice(0, 12).map((person, index) => <div className="cast-entry" key={`${person.name}-${index}`}>

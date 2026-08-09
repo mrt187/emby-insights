@@ -14,6 +14,7 @@ package tracearr
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/url"
 	"sort"
@@ -27,6 +28,12 @@ import (
 // series of upstream calls; the features here only ever need the most
 // recent plays.
 const maxPages = 10
+
+// maxHouseholdPages is the higher cap for the most-watched list. That one
+// reads everyone's plays rather than one person's, so 30 days of a busy
+// household easily exceeds maxPages*pageSize records — and a truncated feed
+// would silently drop titles out of the ranking rather than fail loudly.
+const maxHouseholdPages = 30
 
 const pageSize = 100
 
@@ -72,6 +79,20 @@ type DeviceTranscodes struct {
 	Transcodes int    `json:"transcodes"`
 }
 
+// PopularTitle is one entry of the household's most-watched ranking.
+type PopularTitle struct {
+	ID        string `json:"id"`
+	Title     string `json:"title"`
+	Year      int    `json:"year,omitempty"`
+	Plays     int    `json:"plays"`
+	PosterURL string `json:"posterUrl,omitempty"`
+	// Watched is the requesting user's own state, not the household's: the
+	// ranking says what everyone here watches, the tick says whether you
+	// have seen it yourself.
+	Watched bool `json:"watched"`
+	TmdbID  int  `json:"tmdbId,omitempty"`
+}
+
 // Watcher is one other household member who watched the same title.
 type Watcher struct {
 	Name                    string  `json:"name"`
@@ -98,6 +119,7 @@ type Reader interface {
 	TranscodeShare(ctx context.Context, identityID string, since time.Time) (TranscodeShare, error)
 	Watchers(ctx context.Context, ref string) ([]Watcher, error)
 	MediaStats(ctx context.Context, ref string) (MediaStats, error)
+	MostWatched(ctx context.Context, viewerID string, since time.Time, limit int) (movies, shows []PopularTitle, err error)
 }
 
 type Client struct {
@@ -291,6 +313,82 @@ func (client *Client) TranscodeShare(ctx context.Context, identityID string, sin
 	return share, nil
 }
 
+// MostWatched ranks what the whole household played since `since`, split
+// into movies and shows, most plays first. Tracearr has no endpoint for
+// this — its own dashboard computes it internally — so the ranking is
+// counted here from the raw history feed.
+//
+// Episodes are folded into their show: a series is popular because people
+// watched twelve of its episodes, and listing those twelve separately would
+// crowd out everything else.
+func (client *Client) MostWatched(ctx context.Context, viewerID string, since time.Time, limit int) ([]PopularTitle, []PopularTitle, error) {
+	records, ok := client.householdHistory(ctx, since)
+	if !ok {
+		return nil, nil, nil
+	}
+
+	movies := map[string]*PopularTitle{}
+	shows := map[string]*PopularTitle{}
+	for _, record := range records {
+		var (
+			group map[string]*PopularTitle
+			key   string
+			title string
+		)
+		switch record.MediaType {
+		case "movie":
+			group, key, title = movies, record.MediaID, record.MediaTitle
+		case "episode":
+			// show_media_id is the canonical parent id; without it the
+			// episode cannot be attributed to a series at all.
+			group, key, title = shows, record.ShowMediaID, record.ShowTitle
+		default:
+			// Music and anything else Tracearr tracks has no place in a
+			// movies/shows ranking.
+			continue
+		}
+		if key == "" || title == "" {
+			continue
+		}
+
+		entry := group[key]
+		if entry == nil {
+			entry = &PopularTitle{ID: key, Title: title, Year: record.Year, PosterURL: record.PosterURL, TmdbID: record.TmdbID}
+			group[key] = entry
+		}
+		entry.Plays++
+		// The first record of a title may be one whose poster never
+		// resolved; a later one can still supply it.
+		if entry.PosterURL == "" {
+			entry.PosterURL = record.PosterURL
+		}
+		if record.Watched && record.User.ID != "" && record.User.ID == viewerID {
+			entry.Watched = true
+		}
+	}
+	return rankTitles(movies, limit), rankTitles(shows, limit), nil
+}
+
+func rankTitles(grouped map[string]*PopularTitle, limit int) []PopularTitle {
+	ranked := make([]PopularTitle, 0, len(grouped))
+	for _, entry := range grouped {
+		ranked = append(ranked, *entry)
+	}
+	// Map iteration is random, so without the title tie-breaker two titles
+	// on the same play count would swap places on every poll — and these
+	// rows carry visible rank numbers.
+	sort.Slice(ranked, func(i, j int) bool {
+		if ranked[i].Plays != ranked[j].Plays {
+			return ranked[i].Plays > ranked[j].Plays
+		}
+		return ranked[i].Title < ranked[j].Title
+	})
+	if limit > 0 && len(ranked) > limit {
+		ranked = ranked[:limit]
+	}
+	return ranked
+}
+
 func (client *Client) Watchers(ctx context.Context, ref string) ([]Watcher, error) {
 	if client == nil || strings.TrimSpace(ref) == "" {
 		return nil, nil
@@ -370,10 +468,16 @@ type historyRecord struct {
 	StoppedAt       string  `json:"stopped_at"`
 	IsTranscode     bool    `json:"is_transcode"`
 	Device          string  `json:"device"`
-	ImdbID          string  `json:"imdb_id"`
-	TmdbID          int     `json:"tmdb_id"`
-	TvdbID          int     `json:"tvdb_id"`
-	RatingKey       string  `json:"rating_key"`
+	Watched         bool    `json:"watched"`
+	PosterURL       string  `json:"poster_url"`
+	ShowMediaID     string  `json:"show_media_id"`
+	User            struct {
+		ID string `json:"id"`
+	} `json:"user"`
+	ImdbID    string `json:"imdb_id"`
+	TmdbID    int    `json:"tmdb_id"`
+	TvdbID    int    `json:"tvdb_id"`
+	RatingKey string `json:"rating_key"`
 }
 
 // history walks the global /history feed filtered to one identity. The
@@ -384,24 +488,41 @@ func (client *Client) history(ctx context.Context, identityID string, since time
 	if client == nil || strings.TrimSpace(identityID) == "" {
 		return nil, false
 	}
+	query := url.Values{"user_id": {identityID}}
+	for key, value := range extra {
+		query.Set(key, value)
+	}
+	return client.historyPages(ctx, query, since, maxPages)
+}
 
+// householdHistory is history without the user_id filter: every account's
+// plays, which is what a "most watched here" list has to count. It is the
+// only caller that deliberately reads other people's viewing, so it stays a
+// separate, named entry point rather than an optional argument on history.
+func (client *Client) householdHistory(ctx context.Context, since time.Time) ([]historyRecord, bool) {
+	if client == nil {
+		return nil, false
+	}
+	return client.historyPages(ctx, url.Values{}, since, maxHouseholdPages)
+}
+
+// historyPages walks the cursor-paginated /history feed. query carries the
+// caller's filters; pageSize, since and the cursor are added here.
+func (client *Client) historyPages(ctx context.Context, query url.Values, since time.Time, pageLimit int) ([]historyRecord, bool) {
 	var (
 		records []historyRecord
 		cursor  string
 	)
-	for page := 0; page < maxPages; page++ {
-		query := url.Values{
-			"user_id":  {identityID},
-			"pageSize": {strconv.Itoa(pageSize)},
+	for page := 0; page < pageLimit; page++ {
+		pageQuery := url.Values{"pageSize": {strconv.Itoa(pageSize)}}
+		for key, values := range query {
+			pageQuery[key] = values
 		}
 		if !since.IsZero() {
-			query.Set("since", since.UTC().Format(time.RFC3339))
-		}
-		for key, value := range extra {
-			query.Set(key, value)
+			pageQuery.Set("since", since.UTC().Format(time.RFC3339))
 		}
 		if cursor != "" {
-			query.Set("cursor", cursor)
+			pageQuery.Set("cursor", cursor)
 		}
 
 		var response struct {
@@ -410,7 +531,7 @@ func (client *Client) history(ctx context.Context, identityID string, since time
 				NextCursor *string `json:"nextCursor"`
 			} `json:"meta"`
 		}
-		if !client.get(ctx, "/history", query, &response) {
+		if !client.get(ctx, "/history", pageQuery, &response) {
 			return nil, false
 		}
 
@@ -421,6 +542,67 @@ func (client *Client) history(ctx context.Context, identityID string, since time
 		cursor = *response.Meta.NextCursor
 	}
 	return records, true
+}
+
+// ImageURL resolves a poster reference from a history record against the
+// configured instance, and refuses anything that does not belong to it.
+//
+// Tracearr hands back relative paths like
+// "/api/v1/images/proxy?server=…&url=…". Those are attacker-influenced only
+// as far as Tracearr itself is concerned, but the value still reaches us
+// over the wire and is passed back in by the browser, so the host is pinned
+// to the configured base rather than trusted.
+func (client *Client) ImageURL(raw string) (string, bool) {
+	if client == nil {
+		return "", false
+	}
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", false
+	}
+
+	base, err := url.Parse(client.baseURL)
+	if err != nil {
+		return "", false
+	}
+	target, err := url.Parse(raw)
+	if err != nil {
+		return "", false
+	}
+	// A relative reference inherits the base entirely; an absolute one must
+	// match it, scheme, host and port alike. ResolveReference handles the
+	// first case and leaves an absolute URL untouched, so both end up
+	// checked by the same comparison.
+	resolved := base.ResolveReference(target)
+	if resolved.Scheme != base.Scheme || resolved.Host != base.Host {
+		return "", false
+	}
+	return resolved.String(), true
+}
+
+// FetchImage loads one image from the Tracearr instance. Tracearr's image
+// proxy is deliberately unauthenticated (its own note: so plain <img> tags
+// work), so no key is sent — but the request still goes through this
+// package because the instance usually lives on a private address that the
+// server's general-purpose image fetcher blocks on purpose.
+func (client *Client) FetchImage(ctx context.Context, rawURL string) (io.ReadCloser, bool) {
+	endpoint, ok := client.ImageURL(rawURL)
+	if !ok {
+		return nil, false
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, false
+	}
+	response, err := client.httpClient.Do(request)
+	if err != nil {
+		return nil, false
+	}
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		response.Body.Close()
+		return nil, false
+	}
+	return response.Body, true
 }
 
 // get performs one authenticated GET and decodes it into target. It reports
