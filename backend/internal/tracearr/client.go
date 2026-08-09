@@ -91,6 +91,10 @@ type PopularTitle struct {
 	// have seen it yourself.
 	Watched bool `json:"watched"`
 	TmdbID  int  `json:"tmdbId,omitempty"`
+	// EmbyItemID lets the row open the real Emby detail screen — the one
+	// with the star rating and the favourite button — instead of the
+	// Seerr-only view a TMDB id would get.
+	EmbyItemID string `json:"embyItemId,omitempty"`
 }
 
 // Watcher is one other household member who watched the same title.
@@ -331,17 +335,19 @@ func (client *Client) MostWatched(ctx context.Context, viewerID string, since ti
 	shows := map[string]*PopularTitle{}
 	for _, record := range records {
 		var (
-			group map[string]*PopularTitle
-			key   string
-			title string
+			group    map[string]*PopularTitle
+			key      string
+			title    string
+			embyItem string
 		)
 		switch record.MediaType {
 		case "movie":
-			group, key, title = movies, record.MediaID, record.MediaTitle
+			group, key, title, embyItem = movies, record.MediaID, record.MediaTitle, record.RatingKey
 		case "episode":
 			// show_media_id is the canonical parent id; without it the
-			// episode cannot be attributed to a series at all.
-			group, key, title = shows, record.ShowMediaID, record.ShowTitle
+			// episode cannot be attributed to a series at all. The series'
+			// own item id is the episode's grandparent, not its rating key.
+			group, key, title, embyItem = shows, record.ShowMediaID, record.ShowTitle, record.GrandparentRatingKey
 		default:
 			// Music and anything else Tracearr tracks has no place in a
 			// movies/shows ranking.
@@ -353,7 +359,7 @@ func (client *Client) MostWatched(ctx context.Context, viewerID string, since ti
 
 		entry := group[key]
 		if entry == nil {
-			entry = &PopularTitle{ID: key, Title: title, Year: record.Year, PosterURL: record.PosterURL, TmdbID: record.TmdbID}
+			entry = &PopularTitle{ID: key, Title: title, Year: record.Year, PosterURL: record.PosterURL, TmdbID: record.TmdbID, EmbyItemID: embyItem}
 			group[key] = entry
 		}
 		entry.Plays++
@@ -361,6 +367,9 @@ func (client *Client) MostWatched(ctx context.Context, viewerID string, since ti
 		// resolved; a later one can still supply it.
 		if entry.PosterURL == "" {
 			entry.PosterURL = record.PosterURL
+		}
+		if entry.EmbyItemID == "" {
+			entry.EmbyItemID = embyItem
 		}
 		if record.Watched && record.User.ID != "" && record.User.ID == viewerID {
 			entry.Watched = true
@@ -471,7 +480,11 @@ type historyRecord struct {
 	Watched         bool    `json:"watched"`
 	PosterURL       string  `json:"poster_url"`
 	ShowMediaID     string  `json:"show_media_id"`
-	User            struct {
+	// RatingKey is the media server's own item id, and for Emby that is
+	// exactly the id our detail screen takes. GrandparentRatingKey is the
+	// same thing for an episode's series.
+	GrandparentRatingKey string `json:"grandparent_rating_key"`
+	User                 struct {
 		ID string `json:"id"`
 	} `json:"user"`
 	ImdbID    string `json:"imdb_id"`

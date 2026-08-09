@@ -363,10 +363,10 @@ func TestMostWatchedRanksHouseholdPlays(t *testing.T) {
 			sawUserFilter = true
 		}
 		_, _ = writer.Write([]byte(`{"data":[
-			{"media_type":"movie","media_id":"m1","media_title":"Dune","year":2021,"poster_url":"/p/dune.jpg","tmdb_id":438631,"watched":true,"user":{"id":"me"}},
+			{"media_type":"movie","media_id":"m1","media_title":"Dune","year":2021,"poster_url":"/p/dune.jpg","tmdb_id":438631,"rating_key":"emby-42","watched":true,"user":{"id":"me"}},
 			{"media_type":"movie","media_id":"m1","media_title":"Dune","year":2021,"poster_url":"/p/dune.jpg","user":{"id":"someone-else"}},
 			{"media_type":"movie","media_id":"m2","media_title":"Arrival","year":2016,"poster_url":"/p/arrival.jpg","watched":true,"user":{"id":"someone-else"}},
-			{"media_type":"episode","show_media_id":"s1","show_title":"Silo","media_title":"Freedom Day","poster_url":"/p/silo.jpg","user":{"id":"me"}},
+			{"media_type":"episode","show_media_id":"s1","show_title":"Silo","media_title":"Freedom Day","poster_url":"/p/silo.jpg","rating_key":"emby-ep1","grandparent_rating_key":"emby-silo","user":{"id":"me"}},
 			{"media_type":"episode","show_media_id":"s1","show_title":"Silo","media_title":"Machines","poster_url":"/p/silo.jpg","user":{"id":"me"}},
 			{"media_type":"episode","show_media_id":"s2","show_title":"Severance","media_title":"Good News","poster_url":"/p/sev.jpg","user":{"id":"me"}},
 			{"media_type":"track","media_id":"t1","media_title":"Song","user":{"id":"me"}}
@@ -384,6 +384,13 @@ func TestMostWatchedRanksHouseholdPlays(t *testing.T) {
 
 	if len(movies) != 2 || movies[0].Title != "Dune" || movies[0].Plays != 2 {
 		t.Fatalf("movies = %#v, want Dune with 2 plays first", movies)
+	}
+	if movies[0].EmbyItemID != "emby-42" {
+		t.Errorf("movies[0] lost the Emby item id: %#v", movies[0])
+	}
+	// A series' own Emby id is the episode's grandparent, not its rating key.
+	if shows[0].EmbyItemID != "emby-silo" {
+		t.Errorf("shows[0] took the episode id instead of the series id: %#v", shows[0])
 	}
 	if movies[0].Year != 2021 || movies[0].PosterURL != "/p/dune.jpg" || movies[0].TmdbID != 438631 {
 		t.Errorf("movies[0] lost its metadata: %#v", movies[0])

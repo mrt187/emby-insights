@@ -23,7 +23,7 @@ function storedPage(): Page {
 type Features = { requests: boolean; movieDates: boolean; seriesDates: boolean; upcoming: boolean; statistics: boolean; tracearr: boolean };
 type CurrentUser = { id: string; name: string; isAdmin: boolean; features: Features; language?: Lang };
 type Period = "week" | "month" | "year";
-type PopularTitle = { id: string; title: string; year?: number; plays: number; posterUrl?: string; watched: boolean; tmdbId?: number };
+type PopularTitle = { id: string; title: string; year?: number; plays: number; posterUrl?: string; watched: boolean; tmdbId?: number; embyItemId?: string };
 type PopularLists = { movies: PopularTitle[]; shows: PopularTitle[] };
 type PersonalStats = { watchSeconds: number; previousWatchSeconds: number; completedMovies: number; completedSeries: number; favouriteGenre: string; periodStartsAt: string; periodEndsAt: string };
 type WatchTimeRank = { rank: number };
@@ -110,7 +110,7 @@ function visibleNav(user: CurrentUser): { page: Page; labelKey: TranslationKey; 
 }
 const pageTitleKey: Record<Page, TranslationKey> = { today: "nav_today", stats: "nav_stats", requests: "nav_requests", chats: "nav_chats", profile: "nav_profile", admin: "nav_admin" };
 const periodLabelKey: Record<Period, TranslationKey> = { week: "period_week", month: "period_month", year: "period_year" };
-const APP_VERSION = "0.16.0";
+const APP_VERSION = "0.16.1";
 
 // One formatter per language and purpose, built once: Intl.DateTimeFormat is
 // expensive enough that constructing it inside a render loop is wasteful.
@@ -448,12 +448,14 @@ function Today({ upcoming, upcomingState, cinema, cinemaState, requests, request
   // Ohne Radarr fehlen Filmtermine, ohne Sonarr Serientermine — beide fließen
   // serverseitig in dieselbe Liste, deshalb wird hier nach Medientyp gefiltert
   // statt eine eigene Abfrage pro Dienst zu brauchen.
-  // A Tracearr title is not an Emby item, so the only detail screen it can
-  // open is the Seerr one, keyed by TMDB id. Without that id there is
-  // nothing to open, and the tile stays inert rather than dead-ending.
-  const popularSelect = features.requests
-    ? (item: PopularTitle) => { if (item.tmdbId) onSelectMedia({ source: "seerr", id: String(item.tmdbId), mediaType: item.id.startsWith("show") ? "tv" : "movie" }); }
-    : undefined;
+  // Tracearr records the media server's own item id, so these tiles open the
+  // real Emby detail — the one with the star rating and the favourite
+  // button. The Seerr view is only the fallback for a title Tracearr saw
+  // without an Emby id, and it drops both of those.
+  const popularSelect = (item: PopularTitle, mediaType: "movie" | "tv") => {
+    if (item.embyItemId) { onSelectMedia({ source: "emby", id: item.embyItemId }); return; }
+    if (features.requests && item.tmdbId) onSelectMedia({ source: "seerr", id: String(item.tmdbId), mediaType });
+  };
   const visibleUpcoming = upcoming.filter((item) => (item.mediaType === "movie" ? features.movieDates : features.seriesDates));
 
   const events = relevantEvents({
@@ -483,8 +485,8 @@ function Today({ upcoming, upcomingState, cinema, cinemaState, requests, request
         actually have something to say: without Tracearr they never load,
         and with Tracearr but no plays in the window a permanent "nothing
         here" would be noise rather than information. */}
-    {features.tracearr && popular.movies.length > 0 && <PosterRow title={translate("row_most_watched_movies")} eyebrow={translate("row_most_watched_eyebrow")} items={popular.movies} ranked watched={(item) => item.watched} detail={(item) => translate("most_watched_plays", { plays: item.plays })} onSelect={popularSelect} />}
-    {features.tracearr && popular.shows.length > 0 && <PosterRow title={translate("row_most_watched_shows")} eyebrow={translate("row_most_watched_eyebrow")} items={popular.shows} ranked watched={(item) => item.watched} detail={(item) => translate("most_watched_plays", { plays: item.plays })} onSelect={popularSelect} />}
+    {features.tracearr && popular.movies.length > 0 && <PosterRow title={translate("row_most_watched_movies")} eyebrow={translate("row_most_watched_eyebrow")} items={popular.movies} ranked watched={(item) => item.watched} detail={(item) => translate("most_watched_plays", { plays: item.plays })} onSelect={(item) => popularSelect(item, "movie")} />}
+    {features.tracearr && popular.shows.length > 0 && <PosterRow title={translate("row_most_watched_shows")} eyebrow={translate("row_most_watched_eyebrow")} items={popular.shows} ranked watched={(item) => item.watched} detail={(item) => translate("most_watched_plays", { plays: item.plays })} onSelect={(item) => popularSelect(item, "tv")} />}
     {features.movieDates && <PosterRow title={translate("row_cinema")} eyebrow={translate("row_cinema_eyebrow")} items={cinema} state={cinemaState} emptyLabel={translate("row_cinema_empty")} detail={(item) => cinemaWording(item, lang)} onSelect={(item) => onSelectMedia(calendarSelection(item, features.requests))} />}
 
     {allEventsOpen && <RelevantAllScreen events={events} onClose={() => setAllEventsOpen(false)} />}
@@ -1383,7 +1385,7 @@ function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreat
           </button>
         </div>}
         {selection.source !== "emby" && (canRequest || seerrAvailabilityLabel || showRequestConfirmation || !seerrConfigured) && <div className="request-row">
-          {seerrAvailabilityLabel && !showRequestConfirmation && <span className="media-availability-badge">{seerrAvailabilityLabel}</span>}
+          {seerrAvailabilityLabel && !showRequestConfirmation && <span className="media-availability-badge"><i aria-hidden="true" />{seerrAvailabilityLabel}</span>}
           {/* Ohne Seerr bleibt der Knopf sichtbar, sagt aber warum er nichts
               tut — sonst wirkt es, als fehle die Funktion. */}
           {!seerrConfigured
