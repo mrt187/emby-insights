@@ -8,6 +8,19 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.16.4] - 2026-08-10
+
+### Fixed
+
+- On phones, the "added on" date under a title no longer overlaps the
+  ratings line below it.
+- The admin settings save button no longer floats transparently over the
+  connection cards behind it.
+- On the detail screen, the poster now reaches down closer to the action
+  buttons, and the whole page sits a bit lower under the close button.
+- On the profile page (phones), account details no longer drop below the
+  watchlist and ratings rows.
+
 ## [0.16.3] - 2026-08-10
 
 ### Changed
