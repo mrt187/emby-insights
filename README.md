@@ -102,6 +102,17 @@ VAPID_SUBJECT=mailto:you@example.com
 What each variable means, and why the keys must stay stable:
 [docker/all-in-one/README.md](docker/all-in-one/README.md).
 
+> **Unraid Community Applications:** the `VAPID_*` fields are in the
+> [template](templates/emby-insights.xml) under "Show more settings", but
+> Unraid caches a container's template locally on first add and does not
+> refetch it on later updates or even a delete+reinstall. If they are
+> missing, add them by hand (`+ Add another Path, Port, Variable, Label or
+> Device` in the container's edit screen) — name `VAPID_PUBLIC_KEY`, or
+> delete the stale cached file at
+> `/boot/config/plugins/dockerMan/templates-user/my-emby-insights.xml` (via
+> the Unraid terminal) before adding the container again to force a fresh
+> fetch.
+
 ### Health checks
 
 Inside the container the API listens on port `8080`:
