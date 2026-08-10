@@ -102,23 +102,12 @@ VAPID_SUBJECT=mailto:you@example.com
 What each variable means, and why the keys must stay stable:
 [docker/all-in-one/README.md](docker/all-in-one/README.md).
 
-> **Unraid Community Applications:** the `VAPID_*` fields are in the
-> [template](templates/emby-insights.xml) under "Show more settings", but
-> Unraid caches a container's template locally on first add and does not
-> refetch it on later updates or even a delete+reinstall. If they are
-> missing, add them by hand (`+ Add another Path, Port, Variable, Label or
-> Device` in the container's edit screen) — name `VAPID_PUBLIC_KEY`, or
-> delete the stale cached file at
-> `/boot/config/plugins/dockerMan/templates-user/my-emby-insights.xml` (via
-> the Unraid terminal) before adding the container again to force a fresh
-> fetch.
+**Unraid:** if the `VAPID_*` fields don't show up in the template, add them
+manually via "Add another Path, Port, Variable, Label or Device":
 
-### Health checks
-
-Inside the container the API listens on port `8080`:
-
-- `GET /healthz` — the process is running
-- `GET /readyz` — PostgreSQL and Redis are reachable
+- `VAPID_PUBLIC_KEY`
+- `VAPID_PRIVATE_KEY`
+- `VAPID_SUBJECT`
 
 Emby passwords are never stored. After login only the temporary Emby access
 token lives in Redis. The Emby device ID is generated on first start and kept
