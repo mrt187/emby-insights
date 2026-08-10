@@ -6,7 +6,7 @@ A personal, mobile-first media dashboard for Emby users. Emby Insights
 complements the player instead of replacing it: personal statistics, your own
 media requests, upcoming releases, and notifications all in one place.
 
-Current release: [v0.16.4](CHANGELOG.md#0164---2026-08-10)
+Current release: [v0.16.5](CHANGELOG.md#0165---2026-08-10)
 
 ## Features
 

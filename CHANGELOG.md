@@ -8,6 +8,16 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.16.5] - 2026-08-10
+
+### Fixed
+
+- On phones, "added on" now actually wraps onto its own line below "Emby"
+  instead of trailing beside it — the previous fix relied on flex-wrap,
+  which was never turned on.
+- On the detail screen, the poster reaches further down, closer to level
+  with the action buttons.
+
 ## [0.16.4] - 2026-08-10
 
 ### Fixed

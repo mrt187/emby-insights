@@ -531,7 +531,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   background-position: center 30%; background-size: cover;
   mask-image: linear-gradient(to bottom, black, transparent);
 }
-.media-detail-hero { display: grid; grid-template-columns: 264px 1fr; gap: 28px; align-items: end; }
+.media-detail-hero { display: grid; grid-template-columns: 300px 1fr; gap: 28px; align-items: end; }
 .media-detail-hero > * { min-width: 0; }
 .media-detail-poster {
   position: relative; overflow: hidden; aspect-ratio: 2 / 3; border-radius: 16px;
@@ -660,7 +660,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
    the title on desktop, where it still reads as part of the hero. */
 .media-detail-actions {
   display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
-  margin-top: -14px; padding-left: 292px;
+  margin-top: -14px; padding-left: 328px;
 }
 .favorite-button { display: inline-flex; align-items: center; gap: 8px; }
 .favorite-button .icon { width: 16px; height: 16px; }
@@ -745,9 +745,11 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   .media-detail-above-fold { gap: 16px; }
   .media-detail-hero h1 { font-size: 22px; }
   .media-detail-meta { gap: 6px; margin: 6px 0 0; font-size: 12px; }
-  .media-detail-source { margin-top: 2px; font-size: 12px; }
-  /* Forces the date onto its own line instead of wrapping mid-word into the
-     ratings row below — the dot + "Emby" stay together on the first line. */
+  /* flex-wrap is required for flex-basis: 100% below to actually start a new
+     line — without it the basis is just ignored on a single nowrap row. */
+  .media-detail-source { flex-wrap: wrap; margin-top: 2px; font-size: 12px; }
+  /* Forces the date onto its own line instead of trailing next to "Emby" —
+     the dot + "Emby" stay together on the first line, date below. */
   .media-detail-source span { flex-basis: 100%; margin-top: 1px; }
   .media-detail-ratings { gap: 4px 10px; margin-top: 6px; }
   .media-detail-rating { font-size: 14px; }
