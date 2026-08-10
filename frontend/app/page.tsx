@@ -111,7 +111,7 @@ function visibleNav(user: CurrentUser): { page: Page; labelKey: TranslationKey; 
 }
 const pageTitleKey: Record<Page, TranslationKey> = { today: "nav_today", stats: "nav_stats", requests: "nav_requests", chats: "nav_chats", profile: "nav_profile", admin: "nav_admin" };
 const periodLabelKey: Record<Period, TranslationKey> = { week: "period_week", month: "period_month", year: "period_year" };
-const APP_VERSION = "0.16.5";
+const APP_VERSION = "0.16.6";
 
 // One formatter per language and purpose, built once: Intl.DateTimeFormat is
 // expensive enough that constructing it inside a render loop is wasteful.
@@ -1294,6 +1294,28 @@ function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreat
     }
   };
 
+  // Rendered twice below (once inline in the info column, once as a standalone
+  // block) and toggled per breakpoint via CSS — see .media-detail-actions-inline
+  // / .media-detail-actions-standalone. The inline copy lets the poster's
+  // align-items: end bottom-align it to the actual rendered bottom of the
+  // title block (including the buttons), instead of guessing a fixed height
+  // that reproduces the same gap for every title/font. Mobile keeps the
+  // standalone copy so it can still reorder independently below the star
+  // rating, which the inline copy — nested inside the hero grid — cannot do.
+  const actionButtons = <>
+    <button type="button" className="request-button" onClick={() => setDetailsOpen((open) => !open)} aria-expanded={detailsOpen} aria-controls="media-detail-more">
+      {translate(detailsOpen ? "hide_details" : "show_details")}
+    </button>
+    {selection.source === "emby" && <button
+      type="button"
+      className={favorite ? "request-button secondary favorite-button active" : "request-button secondary favorite-button"}
+      onClick={toggleFavorite}
+      disabled={favoriteBusy}
+      aria-pressed={favorite}
+      title={translate(favorite ? "favorite_remove" : "favorite_add")}
+    ><Icon name="heart" /> {translate("favorite_on_emby")}</button>}
+  </>;
+
   return <div className="media-detail-overlay" role="dialog" aria-modal="true" aria-label={detail?.title ?? translate("details")}>
     {detail && <div className="media-detail-backdrop" style={detail.backdropUrl ? { backgroundImage: `url(${detail.backdropUrl})` } : undefined} />}
     <div className="media-detail-scroll">
@@ -1336,21 +1358,10 @@ function MediaDetailScreen({ selection, seerrConfigured, onClose, onRequestCreat
                 <span className="sr-only">Rotten Tomatoes</span> {detail.rottenTomatoesRating}
               </span>}
             </div>}
+            <div className="media-detail-actions media-detail-actions-inline">{actionButtons}</div>
           </div>
         </div>
-        <div className="media-detail-actions">
-          <button type="button" className="request-button" onClick={() => setDetailsOpen((open) => !open)} aria-expanded={detailsOpen} aria-controls="media-detail-more">
-            {translate(detailsOpen ? "hide_details" : "show_details")}
-          </button>
-          {selection.source === "emby" && <button
-            type="button"
-            className={favorite ? "request-button secondary favorite-button active" : "request-button secondary favorite-button"}
-            onClick={toggleFavorite}
-            disabled={favoriteBusy}
-            aria-pressed={favorite}
-            title={translate(favorite ? "favorite_remove" : "favorite_add")}
-          ><Icon name="heart" /> {translate("favorite_on_emby")}</button>}
-        </div>
+        <div className="media-detail-actions media-detail-actions-standalone">{actionButtons}</div>
         {detail.household && <div className="media-detail-tiles">
           <article className="media-detail-tile">
             <strong>{detail.household.plays}</strong>

@@ -8,6 +8,19 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.16.6] - 2026-08-10
+
+### Fixed
+
+- The settings save button is no longer sticky, so it can't hover on top of
+  the connection cards while scrolling — it now sits as a plain block at
+  the end of the page.
+- On the detail screen, the poster's bottom edge now lines up exactly with
+  the bottom of the action buttons, on every title, instead of leaving a
+  gap that depended on guesswork.
+- On phones, the line spacing between "Emby" and the added-on date is
+  tighter — a leftover flex gap was doubling up with the wrap spacing.
+
 ## [0.16.5] - 2026-08-10
 
 ### Fixed

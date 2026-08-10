@@ -531,7 +531,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   background-position: center 30%; background-size: cover;
   mask-image: linear-gradient(to bottom, black, transparent);
 }
-.media-detail-hero { display: grid; grid-template-columns: 300px 1fr; gap: 28px; align-items: end; }
+.media-detail-hero { display: grid; grid-template-columns: 224px 1fr; gap: 28px; align-items: end; }
 .media-detail-hero > * { min-width: 0; }
 .media-detail-poster {
   position: relative; overflow: hidden; aspect-ratio: 2 / 3; border-radius: 16px;
@@ -653,15 +653,16 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .request-unconfigured { margin: 0; font-size: 13px; line-height: 1.4; color: var(--text-secondary); }
 .request-error { color: #e88b8b; font-size: 13px; }
 
-/* Actions sit directly under the ratings in the hero, the way the reference
-   layout puts them under the title — not down in the tracking bar. */
-/* A sibling of the hero rather than a child of the info column, so mobile
-   can reorder it below the star rating. The indent keeps it lined up with
-   the title on desktop, where it still reads as part of the hero. */
-.media-detail-actions {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
-  margin-top: -14px; padding-left: 328px;
-}
+/* Actions sit directly under the ratings, the way the reference layout puts
+   them under the title — not down in the tracking bar. Rendered twice (see
+   the component): inline inside the info column on desktop, so the poster's
+   align-items: end bottom-aligns to the buttons' actual rendered position —
+   and as a standalone sibling on mobile, where it needs to reorder
+   independently below the star rating (something a nested item can't do
+   relative to its own siblings). Only one of the two is ever visible. */
+.media-detail-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.media-detail-actions-inline { margin-top: 10px; }
+.media-detail-actions-standalone { display: none; }
 .favorite-button { display: inline-flex; align-items: center; gap: 8px; }
 .favorite-button .icon { width: 16px; height: 16px; }
 .favorite-button.active { color: var(--mint-bright); border-color: rgb(140 224 173 / 45%); }
@@ -746,18 +747,24 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
   .media-detail-hero h1 { font-size: 22px; }
   .media-detail-meta { gap: 6px; margin: 6px 0 0; font-size: 12px; }
   /* flex-wrap is required for flex-basis: 100% below to actually start a new
-     line — without it the basis is just ignored on a single nowrap row. */
-  .media-detail-source { flex-wrap: wrap; margin-top: 2px; font-size: 12px; }
+     line — without it the basis is just ignored on a single nowrap row. The
+     base rule's gap: 8px doubles as row-gap once wrapped, so it's zeroed
+     here and the (smaller) line spacing is set explicitly via margin. */
+  .media-detail-source { flex-wrap: wrap; gap: 1px 8px; margin-top: 2px; font-size: 12px; }
   /* Forces the date onto its own line instead of trailing next to "Emby" —
      the dot + "Emby" stay together on the first line, date below. */
-  .media-detail-source span { flex-basis: 100%; margin-top: 1px; }
+  .media-detail-source span { flex-basis: 100%; }
   .media-detail-ratings { gap: 4px 10px; margin-top: 6px; }
   .media-detail-rating { font-size: 14px; }
 
-  /* Full width under the star rating instead of squeezed into the narrow
+  /* Swap which copy is visible: the inline one can't reorder relative to
+     the tiles/star-rating below it (it's nested inside the hero, not a
+     sibling of them), so mobile falls back to the standalone copy, placed
+     full width under the star rating instead of squeezed into the narrow
      column beside the poster. Explicit order because the blocks between are
      conditional, so document order alone cannot place it. */
-  .media-detail-actions { padding-left: 0; margin-top: 0; order: 4; }
+  .media-detail-actions-inline { display: none; }
+  .media-detail-actions-standalone { display: flex; order: 4; }
   .media-detail-actions .request-button { flex: 1 1 auto; justify-content: center; }
   /* Scoped to .media-detail-above-fold's own children — .media-detail-facts
      is reused on the profile page (.profile-facts), which is not part of
@@ -851,11 +858,11 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .admin-library-tile .icon { flex-shrink: 0; width: 18px; height: 18px; color: var(--muted); }
 .admin-library-tile-count { margin: 0; font-size: 13px; font-weight: 700; color: var(--mint-bright); }
 
-/* A solid floating card, not a transparent overlay — sticky positioning
-   means it hovers directly over whatever section is scrolled beneath it, and
-   without its own background that made it look fused into the card below. */
+/* A plain block at the end of the page, not sticky — sticky pins the bar
+   over whatever section happens to be scrolled underneath it, which read as
+   the button "overlapping" the connection cards while scrolling. */
 .admin-save-bar {
-  position: sticky; bottom: 12px; z-index: 5; margin-top: 8px;
+  margin-top: 8px;
   display: flex; align-items: center; gap: 14px; justify-content: flex-end;
   padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px;
   background: var(--ink-raised); box-shadow: 0 12px 30px rgb(0 0 0 / 35%);
