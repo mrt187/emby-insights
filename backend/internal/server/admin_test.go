@@ -83,7 +83,8 @@ func (store *fakeConfigStore) ClaimAdminOwner(_ context.Context, candidateUserID
 func (store *fakeConfigStore) CurrentAdminOwner(context.Context) (string, error) {
 	return store.ownerID, nil
 }
-func (store *fakeConfigStore) SeedFromEnvIfEmpty(context.Context) error { return nil }
+func (store *fakeConfigStore) SeedFromEnvIfEmpty(context.Context) error     { return nil }
+func (store *fakeConfigStore) SeedPushFromEnvIfEmpty(context.Context) error { return nil }
 
 func loggedInApp(t *testing.T, configStore ConfigStore, identity emby.Identity) (*App, *http.Cookie) {
 	t.Helper()

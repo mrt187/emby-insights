@@ -6,7 +6,7 @@ A personal, mobile-first media dashboard for Emby users. Emby Insights
 complements the player instead of replacing it: personal statistics, your own
 media requests, upcoming releases, and notifications all in one place.
 
-Current release: [v0.16.6](CHANGELOG.md#0166---2026-08-10)
+Current release: [v0.17.0](CHANGELOG.md#0170---2026-08-10)
 
 ## Features
 
@@ -36,12 +36,13 @@ broken, so a minimal install is a working install.
 | Requests page, discover lists, and requesting titles | Seerr (Jellyseerr or Overseerr) |
 | IMDb and Rotten Tomatoes ratings on the detail screen | An OMDb API key |
 | Genre breakdown by plays, unfinished titles, transcode share, household watchers | Tracearr |
-| Push notifications | A VAPID keypair in the environment (see below) |
+| Push notifications | Turned on in the admin UI — no setup needed, see below |
 
-Emby's address and admin key, plus the VAPID keys, are set in the environment.
-Everything else — which services are enabled, their addresses and keys, and the
-library selection — is configured in the admin UI after the first login. The
-first Emby account to log in successfully becomes the administrator.
+Only Emby's address and admin key are set in the environment. Everything
+else — which services are enabled, their addresses and keys, push
+notifications, and the library selection — is configured in the admin UI
+after the first login. The first Emby account to log in successfully becomes
+the administrator.
 
 ## Installation
 
@@ -91,23 +92,14 @@ EMBY_ADMIN_API_KEY=replace-with-an-Emby-admin-api-key
 COOKIE_SECURE=true
 #TRUSTED_PROXIES=
 
-# Generate once with: npx web-push generate-vapid-keys
-VAPID_PUBLIC_KEY=
-VAPID_PRIVATE_KEY=
-VAPID_SUBJECT=mailto:you@example.com
-
 #PUSH_POLL_INTERVAL=20m
 ```
 
-What each variable means, and why the keys must stay stable:
-[docker/all-in-one/README.md](docker/all-in-one/README.md).
+What each variable means: [docker/all-in-one/README.md](docker/all-in-one/README.md).
 
-**Unraid:** if the `VAPID_*` fields don't show up in the template, add them
-manually via "Add another Path, Port, Variable, Label or Device":
-
-- `VAPID_PUBLIC_KEY`
-- `VAPID_PRIVATE_KEY`
-- `VAPID_SUBJECT`
+Push notifications: turn them on under Verwaltung → Push-Benachrichtigungen —
+the keypair is generated automatically the first time, nothing to configure
+by hand.
 
 Emby passwords are never stored. After login only the temporary Emby access
 token lives in Redis. The Emby device ID is generated on first start and kept

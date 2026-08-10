@@ -111,7 +111,7 @@ function visibleNav(user: CurrentUser): { page: Page; labelKey: TranslationKey; 
 }
 const pageTitleKey: Record<Page, TranslationKey> = { today: "nav_today", stats: "nav_stats", requests: "nav_requests", chats: "nav_chats", profile: "nav_profile", admin: "nav_admin" };
 const periodLabelKey: Record<Period, TranslationKey> = { week: "period_week", month: "period_month", year: "period_year" };
-const APP_VERSION = "0.16.6";
+const APP_VERSION = "0.17.0";
 
 // One formatter per language and purpose, built once: Intl.DateTimeFormat is
 // expensive enough that constructing it inside a render loop is wasteful.
@@ -1549,11 +1549,13 @@ function Profile({ user, userProfile, totalRequests, onSelectMedia }: { user: Cu
 
 type EmbyLibrary = { id: string; name: string };
 type ServiceView = { enabled: boolean; baseUrl?: string; apiKeySet: boolean; apiKeyPreview?: string };
+type PushView = { enabled: boolean; subject: string; configured: boolean };
 type AdminSettingsView = {
   newForYouLibraryIds: string[]; watchedLibraryIds: string[];
   seerr: ServiceView; radarr: ServiceView; sonarr: ServiceView; tmdb: ServiceView; omdb: ServiceView; tracearr: ServiceView;
   comingSoonRegion: string; comingSoonDaysAhead: number;
   language: Lang;
+  push: PushView;
 };
 type DailyActivity = { date: string; requestCount: number; activeUsers: number };
 type ServiceDraft = { enabled: boolean; baseUrl: string; apiKey: string };
@@ -1664,6 +1666,8 @@ function AdminSettingsForm({ activity, activityState, settings, refetchSettings,
   const [comingSoonRegion, setComingSoonRegion] = useState(() => settings.comingSoonRegion || "DE");
   const [comingSoonDaysAhead, setComingSoonDaysAhead] = useState(() => settings.comingSoonDaysAhead || 28);
   const [language, setLanguage] = useState<Lang>(() => isLang(settings.language) ? settings.language : "en");
+  const [pushEnabled, setPushEnabled] = useState(() => settings.push.enabled);
+  const [pushSubject, setPushSubject] = useState(() => settings.push.subject);
 
   const dismissIntro = () => {
     window.localStorage.setItem(SETUP_INTRO_SEEN_KEY, "1");
@@ -1692,6 +1696,7 @@ function AdminSettingsForm({ activity, activityState, settings, refetchSettings,
           comingSoonRegion,
           comingSoonDaysAhead,
           language,
+          push: { enabled: pushEnabled, subject: pushSubject },
         }),
       });
       if (!response.ok) throw new Error("saving settings failed");
@@ -1808,6 +1813,27 @@ function AdminSettingsForm({ activity, activityState, settings, refetchSettings,
         </label>
       </div>
       <p className="admin-hint">{translate("language_hint")}</p>
+    </section>
+
+    {/* No public/private key fields here on purpose — the server generates
+        the VAPID keypair itself the first time this is switched on and keeps
+        it stable afterwards, so there's nothing to type in or lose. */}
+    <section className="admin-section" aria-label={translate("push_section")}>
+      <div className="section-heading"><div><p className="eyebrow">{translate("push_eyebrow")}</p><h2>{translate("push_heading")}</h2></div></div>
+      <div className="admin-service-grid">
+        <label className="admin-field">
+          <span>{translate("field_push_enabled")}</span>
+          <span className="toggle-switch">
+            <input type="checkbox" checked={pushEnabled} onChange={(event) => setPushEnabled(event.target.checked)} />
+            <span className="toggle-track"><span className="toggle-thumb" /></span>
+          </span>
+        </label>
+        {pushEnabled && <label className="admin-field">
+          <span>{translate("field_push_subject")}</span>
+          <input type="email" className="search-input" placeholder="you@example.com" value={pushSubject} onChange={(event) => setPushSubject(event.target.value)} />
+        </label>}
+      </div>
+      <p className="admin-hint">{translate("push_hint")}</p>
     </section>
 
     <div className="admin-save-bar">

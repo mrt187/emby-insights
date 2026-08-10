@@ -5,39 +5,63 @@ import (
 	"sync"
 	"time"
 
+	"github.com/mrt187/EmbyInsights/internal/appconfig"
 	"github.com/mrt187/EmbyInsights/internal/comingsoon"
 	"github.com/mrt187/EmbyInsights/internal/omdb"
+	"github.com/mrt187/EmbyInsights/internal/push"
 	"github.com/mrt187/EmbyInsights/internal/seerr"
 	"github.com/mrt187/EmbyInsights/internal/tracearr"
 )
 
 // liveConfig holds everything the setup wizard's Verwaltung UI can change at
-// runtime: the Seerr and Radarr/Sonarr/TMDB clients, the discover region, and
-// the Emby library selections. App's interface fields (seerr.*Reader,
-// comingsoon.Reader) point at the thin wrappers below instead of a client
-// directly, so PUT /api/admin/settings can swap everything in place via
-// set() without a container restart or any handler change.
+// runtime: the Seerr and Radarr/Sonarr/TMDB clients, the push sender, the
+// discover region, and the Emby library selections. App's interface fields
+// (seerr.*Reader, comingsoon.Reader) point at the thin wrappers below
+// instead of a client directly, so PUT /api/admin/settings can swap
+// everything in place via set() without a container restart or any handler
+// change.
 type liveConfig struct {
 	mu                  sync.RWMutex
 	seerr               *seerr.Client
 	comingSoon          *comingsoon.Client
 	omdb                *omdb.Client
 	tracearr            *tracearr.Client
+	push                *push.Sender
 	region              string
 	newForYouLibraryIDs []string
 	watchedLibraryIDs   []string
 }
 
-func (live *liveConfig) set(seerrClient *seerr.Client, comingSoonClient *comingsoon.Client, omdbClient *omdb.Client, tracearrClient *tracearr.Client, region string, newForYouLibraryIDs, watchedLibraryIDs []string) {
+func (live *liveConfig) set(seerrClient *seerr.Client, comingSoonClient *comingsoon.Client, omdbClient *omdb.Client, tracearrClient *tracearr.Client, pushSender *push.Sender, region string, newForYouLibraryIDs, watchedLibraryIDs []string) {
 	live.mu.Lock()
 	defer live.mu.Unlock()
 	live.seerr = seerrClient
 	live.comingSoon = comingSoonClient
 	live.omdb = omdbClient
 	live.tracearr = tracearrClient
+	live.push = pushSender
 	live.region = region
 	live.newForYouLibraryIDs = newForYouLibraryIDs
 	live.watchedLibraryIDs = watchedLibraryIDs
+}
+
+// newPushSender builds a Sender from the admin-configured push settings, or
+// nil when push isn't enabled/configured yet — every caller (pushPublicKey,
+// notifyPush, the poller) already treats a nil sender as "push is off".
+func newPushSender(setting appconfig.PushSetting) *push.Sender {
+	if !setting.Enabled || setting.PublicKey == "" || setting.PrivateKey == "" {
+		return nil
+	}
+	return push.NewSender(setting.PublicKey, setting.PrivateKey, setting.Subject)
+}
+
+func (live *liveConfig) pushSender() *push.Sender {
+	if live == nil {
+		return nil
+	}
+	live.mu.RLock()
+	defer live.mu.RUnlock()
+	return live.push
 }
 
 // current, and every accessor below, is nil-safe: a bare &App{} (as most

@@ -51,7 +51,7 @@ func tracearrLive(t *testing.T) (*liveConfig, *httptest.Server) {
 	t.Helper()
 	upstream := fakeTracearr(t)
 	live := &liveConfig{}
-	live.set(nil, nil, nil, tracearr.NewClient(upstream.URL, "test-key"), "", nil, nil)
+	live.set(nil, nil, nil, tracearr.NewClient(upstream.URL, "test-key"), nil, "", nil, nil)
 	return live, upstream
 }
 
@@ -97,9 +97,9 @@ func TestTracearrEndpointsStayHealthyWhenUnavailable(t *testing.T) {
 	defer dead.Close()
 
 	disabled := &liveConfig{}
-	disabled.set(nil, nil, nil, nil, "", nil, nil)
+	disabled.set(nil, nil, nil, nil, nil, "", nil, nil)
 	broken := &liveConfig{}
-	broken.set(nil, nil, nil, tracearr.NewClient(dead.URL, "test-key"), "", nil, nil)
+	broken.set(nil, nil, nil, tracearr.NewClient(dead.URL, "test-key"), nil, "", nil, nil)
 
 	for name, live := range map[string]*liveConfig{"disabled": disabled, "unreachable": broken} {
 		app := &App{

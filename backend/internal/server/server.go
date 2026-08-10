@@ -30,6 +30,8 @@ import (
 	"github.com/mrt187/EmbyInsights/internal/store"
 	"github.com/mrt187/EmbyInsights/internal/tracearr"
 	"github.com/redis/go-redis/v9"
+
+	webpush "github.com/SherClockHolmes/webpush-go"
 )
 
 const sessionCookieName = "emby_insights_session"
@@ -55,6 +57,7 @@ type ConfigStore interface {
 	ClaimAdminOwner(ctx context.Context, candidateUserID string) (string, error)
 	CurrentAdminOwner(ctx context.Context) (string, error)
 	SeedFromEnvIfEmpty(ctx context.Context) error
+	SeedPushFromEnvIfEmpty(ctx context.Context) error
 }
 
 type App struct {
@@ -89,7 +92,6 @@ type App struct {
 	messages            store.MessageStore
 	pushSubscriptions   store.PushSubscriptionStore
 	pushSeen            store.PushSeenStore
-	pushSender          *push.Sender
 	directory           emby.UserDirectoryReader
 	adminAvatars        emby.AdminAvatarReader
 	embyClient          *emby.Client
@@ -131,6 +133,9 @@ func New(cfg config.Config) (*App, error) {
 	if err := appconfigStore.SeedFromEnvIfEmpty(ctx); err != nil {
 		log.Printf("warning: seeding app_config from legacy env vars failed: %v", err)
 	}
+	if err := appconfigStore.SeedPushFromEnvIfEmpty(ctx); err != nil {
+		log.Printf("warning: seeding push config from legacy env vars failed: %v", err)
+	}
 	settings, err := appconfigStore.Get(ctx)
 	if err != nil {
 		// A settings-read failure must never block startup — every
@@ -151,19 +156,13 @@ func New(cfg config.Config) (*App, error) {
 		comingsoon.NewClient(settings.Radarr.EnabledBaseURL(), settings.Radarr.EnabledAPIKey(), settings.Sonarr.EnabledBaseURL(), settings.Sonarr.EnabledAPIKey(), settings.TMDB.EnabledAPIKey(), settings.ComingSoonRegion, settings.ComingSoonDaysAhead),
 		omdb.NewClient(settings.OMDB.EnabledAPIKey()),
 		tracearr.NewClient(settings.Tracearr.EnabledBaseURL(), settings.Tracearr.EnabledAPIKey()),
+		newPushSender(settings.Push),
 		settings.ComingSoonRegion,
 		settings.NewForYouLibraryIDs,
 		settings.WatchedLibraryIDs,
 	)
 	seerrFacade := liveSeerr{live: live}
 	comingSoonFacade := liveComingSoon{live: live}
-
-	// Web Push stays disabled (nil sender) without a VAPID keypair — see
-	// notifyPush and pushPublicKey, both of which already nil-check it.
-	var pushSender *push.Sender
-	if cfg.PushPublicKey != "" && cfg.PushPrivateKey != "" {
-		pushSender = push.NewSender(cfg.PushPublicKey, cfg.PushPrivateKey, cfg.PushSubject)
-	}
 
 	app := &App{
 		database:            database,
@@ -197,7 +196,6 @@ func New(cfg config.Config) (*App, error) {
 		messages:            store.NewPostgresMessageStore(database),
 		pushSubscriptions:   store.NewPostgresPushSubscriptionStore(database),
 		pushSeen:            store.NewPostgresPushSeenStore(database),
-		pushSender:          pushSender,
 		directory:           embyClient,
 		adminAvatars:        embyClient,
 		embyClient:          embyClient,
@@ -220,6 +218,24 @@ func New(cfg config.Config) (*App, error) {
 // live Seerr/Radarr/Sonarr/TMDB clients and library selections in place, so
 // the admin never has to restart the container after a Verwaltung change.
 func (app *App) applySettings(ctx context.Context, settings appconfig.Settings) error {
+	// The admin only ever sends Enabled + Subject for push — the keypair is
+	// never round-tripped through the browser. Generate one the first time
+	// push is turned on; Update() itself carries an existing keypair forward
+	// on every later save (including re-enabling after a disable), so this
+	// only ever fires once per install.
+	if settings.Push.Enabled && settings.Push.PublicKey == "" && settings.Push.PrivateKey == "" {
+		if existing, err := app.appconfig.Get(ctx); err == nil && existing.Push.PublicKey != "" {
+			settings.Push.PublicKey = existing.Push.PublicKey
+			settings.Push.PrivateKey = existing.Push.PrivateKey
+		} else {
+			privateKey, publicKey, err := webpush.GenerateVAPIDKeys()
+			if err != nil {
+				return fmt.Errorf("generate push keypair: %w", err)
+			}
+			settings.Push.PublicKey = publicKey
+			settings.Push.PrivateKey = privateKey
+		}
+	}
 	if err := app.appconfig.Update(ctx, settings); err != nil {
 		return err
 	}
@@ -240,6 +256,7 @@ func (app *App) applySettings(ctx context.Context, settings appconfig.Settings) 
 		comingsoon.NewClient(persisted.Radarr.EnabledBaseURL(), persisted.Radarr.EnabledAPIKey(), persisted.Sonarr.EnabledBaseURL(), persisted.Sonarr.EnabledAPIKey(), persisted.TMDB.EnabledAPIKey(), persisted.ComingSoonRegion, persisted.ComingSoonDaysAhead),
 		omdb.NewClient(persisted.OMDB.EnabledAPIKey()),
 		tracearr.NewClient(persisted.Tracearr.EnabledBaseURL(), persisted.Tracearr.EnabledAPIKey()),
+		newPushSender(persisted.Push),
 		persisted.ComingSoonRegion,
 		persisted.NewForYouLibraryIDs,
 		persisted.WatchedLibraryIDs,
@@ -1280,15 +1297,16 @@ func decodeAdminMessageBody(writer http.ResponseWriter, request *http.Request) (
 // — the key is not a secret, and the login screen itself may want to offer
 // the opt-in prompt before a session exists.
 func (app *App) pushPublicKey(writer http.ResponseWriter, request *http.Request) {
-	if app.pushSender == nil {
+	sender := app.live.pushSender()
+	if sender == nil {
 		writer.WriteHeader(http.StatusNotFound)
 		return
 	}
-	respondJSON(writer, http.StatusOK, map[string]string{"publicKey": app.pushSender.PublicKey()})
+	respondJSON(writer, http.StatusOK, map[string]string{"publicKey": sender.PublicKey()})
 }
 
 func (app *App) pushSubscribe(writer http.ResponseWriter, request *http.Request) {
-	if app.pushSender == nil {
+	if app.live.pushSender() == nil {
 		writer.WriteHeader(http.StatusNotFound)
 		return
 	}
@@ -1352,7 +1370,8 @@ func (app *App) pushUnsubscribe(writer http.ResponseWriter, request *http.Reques
 // request, and an expired subscription is quietly cleaned up rather than
 // logged as an error on every send.
 func (app *App) notifyPush(embyUserID, title, body string) {
-	if app.pushSubscriptions == nil || app.pushSender == nil {
+	sender := app.live.pushSender()
+	if app.pushSubscriptions == nil || sender == nil {
 		return
 	}
 	go func() {
@@ -1369,7 +1388,7 @@ func (app *App) notifyPush(embyUserID, title, body string) {
 			return
 		}
 		for _, subscription := range subscriptions {
-			err := app.pushSender.Send(ctx, push.Subscription{
+			err := sender.Send(ctx, push.Subscription{
 				Endpoint: subscription.Endpoint,
 				P256dh:   subscription.P256dh,
 				Auth:     subscription.Auth,
@@ -1798,6 +1817,15 @@ func (app *App) adminGetSettings(writer http.ResponseWriter, request *http.Reque
 		"comingSoonRegion":    settings.ComingSoonRegion,
 		"comingSoonDaysAhead": settings.ComingSoonDaysAhead,
 		"language":            uiLanguage(settings.Language),
+		"push": map[string]any{
+			"enabled": settings.Push.Enabled,
+			"subject": settings.Push.Subject,
+			// PrivateKey never leaves the server. PublicKey is not a secret
+			// but the admin UI has no use for it (it's served separately via
+			// GET /api/push/public-key for the browser's own subscribe call),
+			// so it's left out here too rather than round-tripped for nothing.
+			"configured": settings.Push.PublicKey != "",
+		},
 	})
 }
 
@@ -1848,6 +1876,10 @@ func (app *App) adminPutSettings(writer http.ResponseWriter, request *http.Reque
 		ComingSoonRegion    string `json:"comingSoonRegion"`
 		ComingSoonDaysAhead int    `json:"comingSoonDaysAhead"`
 		Language            string `json:"language"`
+		Push                struct {
+			Enabled bool   `json:"enabled"`
+			Subject string `json:"subject"`
+		} `json:"push"`
 	}
 	request.Body = http.MaxBytesReader(writer, request.Body, 1<<16)
 	if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
@@ -1898,6 +1930,10 @@ func (app *App) adminPutSettings(writer http.ResponseWriter, request *http.Reque
 		ComingSoonRegion:    region,
 		ComingSoonDaysAhead: daysAhead,
 		Language:            uiLanguage(input.Language),
+		Push: appconfig.PushSetting{
+			Enabled: input.Push.Enabled,
+			Subject: pushSubjectOr(input.Push.Subject, "mailto:admin@example.com"),
+		},
 	}
 
 	if err := app.applySettings(request.Context(), settings); err != nil {
@@ -2234,6 +2270,17 @@ func uiLanguage(value string) string {
 	default:
 		return "en"
 	}
+}
+
+// pushSubjectOr falls back to a placeholder contact address rather than
+// rejecting the save outright — an admin turning push on shouldn't be
+// blocked by a missing mailto:, and the VAPID spec only requires the field
+// to be present, not that it be reachable.
+func pushSubjectOr(value, fallback string) string {
+	if trimmed := strings.TrimSpace(value); trimmed != "" {
+		return trimmed
+	}
+	return fallback
 }
 
 // uiLanguageHandler serves the global UI language to unauthenticated clients.

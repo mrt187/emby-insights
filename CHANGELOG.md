@@ -8,6 +8,21 @@ The project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** releases add backwards-compatible functionality.
 - **PATCH** releases contain backwards-compatible fixes.
 
+## [0.17.0] - 2026-08-10
+
+### Added
+
+- Push notifications are now turned on in Verwaltung instead of the `.env`
+  file — no more `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT`
+  variables to generate and paste in. The server creates its own keypair
+  the first time it's enabled and keeps it stable afterwards. Existing
+  installs that already had a VAPID keypair in `.env` keep using that exact
+  keypair automatically, so nobody's browser subscription breaks.
+
+This also sidesteps the Unraid Community Applications quirk where the
+`VAPID_*` template fields never reached an already-installed container (see
+0.16.4's README note, now removed — it no longer applies).
+
 ## [0.16.6] - 2026-08-10
 
 ### Fixed

@@ -44,6 +44,19 @@ type Settings struct {
 	// Unlike ComingSoonRegion it never influences which metadata is fetched
 	// from Radarr/Sonarr/TMDB — it only switches the interface chrome.
 	Language string
+	Push     PushSetting
+}
+
+// PushSetting is the admin-configured Web Push state. Unlike the other
+// integrations, PublicKey/PrivateKey are never typed in by the operator —
+// the server generates the keypair itself the first time push is enabled
+// (see server.applySettings) and keeps it stable afterwards, the same way a
+// once-generated `npx web-push generate-vapid-keys` pair had to stay fixed.
+type PushSetting struct {
+	Enabled    bool
+	Subject    string
+	PublicKey  string
+	PrivateKey string
 }
 
 // EnabledBaseURL returns the setting's base URL only when enabled, otherwise
@@ -86,6 +99,7 @@ func (store *Store) Get(ctx context.Context) (Settings, error) {
 		sonarrKeyCipher, tmdbKeyCipher  string
 		omdbKeyCipher                   string
 		tracearrKeyCipher               string
+		pushKeyCipher                   string
 	)
 	err := store.pool.QueryRow(ctx, `
 		SELECT emby_device_id, new_for_you_library_ids, watched_library_ids,
@@ -95,7 +109,8 @@ func (store *Store) Get(ctx context.Context) (Settings, error) {
 			tmdb_enabled, tmdb_api_key_encrypted,
 			omdb_enabled, omdb_api_key_encrypted,
 			tracearr_enabled, tracearr_base_url, tracearr_api_key_encrypted,
-			comingsoon_region, comingsoon_days_ahead, language
+			comingsoon_region, comingsoon_days_ahead, language,
+			push_enabled, push_subject, push_public_key, push_private_key_encrypted
 		FROM app_config WHERE id = 1
 	`).Scan(
 		&settings.EmbyDeviceID, &settings.NewForYouLibraryIDs, &settings.WatchedLibraryIDs,
@@ -106,6 +121,7 @@ func (store *Store) Get(ctx context.Context) (Settings, error) {
 		&settings.OMDB.Enabled, &omdbKeyCipher,
 		&settings.Tracearr.Enabled, &settings.Tracearr.BaseURL, &tracearrKeyCipher,
 		&settings.ComingSoonRegion, &settings.ComingSoonDaysAhead, &settings.Language,
+		&settings.Push.Enabled, &settings.Push.Subject, &settings.Push.PublicKey, &pushKeyCipher,
 	)
 	if err != nil {
 		return Settings{}, fmt.Errorf("read app_config: %w", err)
@@ -121,6 +137,7 @@ func (store *Store) Get(ctx context.Context) (Settings, error) {
 		{tmdbKeyCipher, &settings.TMDB.APIKey},
 		{omdbKeyCipher, &settings.OMDB.APIKey},
 		{tracearrKeyCipher, &settings.Tracearr.APIKey},
+		{pushKeyCipher, &settings.Push.PrivateKey},
 	} {
 		plaintext, err := store.box.Decrypt(pair.cipher)
 		if err != nil {
@@ -162,6 +179,16 @@ func (store *Store) Update(ctx context.Context, settings Settings) error {
 	if settings.Tracearr.APIKey == "" {
 		settings.Tracearr.APIKey = current.Tracearr.APIKey
 	}
+	// The operator never supplies the VAPID keypair directly — it's either
+	// carried over unchanged (below) or generated fresh by the caller
+	// (server.applySettings) the first time push is turned on. Either way
+	// it's already fully populated by the time Update is called; this only
+	// covers a save that doesn't touch Push at all (e.g. a Seerr-only edit),
+	// which would otherwise zero out an existing keypair.
+	if settings.Push.PublicKey == "" && settings.Push.PrivateKey == "" {
+		settings.Push.PublicKey = current.Push.PublicKey
+		settings.Push.PrivateKey = current.Push.PrivateKey
+	}
 
 	seerrKeyCipher, err := store.box.Encrypt(settings.Seerr.APIKey)
 	if err != nil {
@@ -187,6 +214,10 @@ func (store *Store) Update(ctx context.Context, settings Settings) error {
 	if err != nil {
 		return fmt.Errorf("encrypt Tracearr key: %w", err)
 	}
+	pushKeyCipher, err := store.box.Encrypt(settings.Push.PrivateKey)
+	if err != nil {
+		return fmt.Errorf("encrypt push private key: %w", err)
+	}
 
 	_, err = store.pool.Exec(ctx, `
 		UPDATE app_config SET
@@ -199,6 +230,7 @@ func (store *Store) Update(ctx context.Context, settings Settings) error {
 			tracearr_enabled = $16, tracearr_base_url = $17, tracearr_api_key_encrypted = $18,
 			comingsoon_region = $19, comingsoon_days_ahead = $20,
 			language = $21,
+			push_enabled = $22, push_subject = $23, push_public_key = $24, push_private_key_encrypted = $25,
 			updated_at = now()
 		WHERE id = 1
 	`,
@@ -211,6 +243,7 @@ func (store *Store) Update(ctx context.Context, settings Settings) error {
 		settings.Tracearr.Enabled, settings.Tracearr.BaseURL, tracearrKeyCipher,
 		settings.ComingSoonRegion, settings.ComingSoonDaysAhead,
 		valueOr(settings.Language, "en"),
+		settings.Push.Enabled, settings.Push.Subject, settings.Push.PublicKey, pushKeyCipher,
 	)
 	if err != nil {
 		return fmt.Errorf("update app_config: %w", err)
@@ -317,6 +350,50 @@ func (store *Store) SeedFromEnvIfEmpty(ctx context.Context) error {
 		if _, err := store.ClaimAdminOwner(ctx, legacyAdmin); err != nil {
 			return fmt.Errorf("seed admin_owner from env: %w", err)
 		}
+	}
+	return nil
+}
+
+// SeedPushFromEnvIfEmpty carries over a VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY
+// set via .env (the pre-Verwaltung way of configuring push) into app_config,
+// exactly once, so existing installs keep the same keypair instead of one
+// silently regenerated by the admin UI. Unlike SeedFromEnvIfEmpty, this is
+// NOT gated behind "is app_config unconfigured overall" — an install with
+// Seerr etc. already set up through Verwaltung would otherwise never run
+// this at all, and its already-configured VAPID env vars would be dropped
+// on the first save made through the UI. The gate here is push-specific:
+// only "is a keypair already stored".
+func (store *Store) SeedPushFromEnvIfEmpty(ctx context.Context) error {
+	if err := store.ensureRow(ctx); err != nil {
+		return err
+	}
+
+	var hasKey bool
+	if err := store.pool.QueryRow(ctx, `SELECT push_public_key != '' FROM app_config WHERE id = 1`).Scan(&hasKey); err != nil {
+		return fmt.Errorf("check existing push config: %w", err)
+	}
+	if hasKey {
+		return nil
+	}
+
+	publicKey := strings.TrimSpace(os.Getenv("VAPID_PUBLIC_KEY"))
+	privateKey := strings.TrimSpace(os.Getenv("VAPID_PRIVATE_KEY"))
+	if publicKey == "" || privateKey == "" {
+		return nil
+	}
+
+	current, err := store.Get(ctx)
+	if err != nil {
+		return err
+	}
+	current.Push = PushSetting{
+		Enabled:    true,
+		Subject:    valueOr(strings.TrimSpace(os.Getenv("VAPID_SUBJECT")), "mailto:admin@example.com"),
+		PublicKey:  publicKey,
+		PrivateKey: privateKey,
+	}
+	if err := store.Update(ctx, current); err != nil {
+		return fmt.Errorf("seed push config from env: %w", err)
 	}
 	return nil
 }

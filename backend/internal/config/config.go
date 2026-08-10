@@ -21,12 +21,10 @@ type Config struct {
 	CookieSecure     bool
 	ShutdownTimeout  time.Duration
 
-	// Web Push (VAPID). PushPublicKey is not a secret — it goes straight to
-	// the browser via GET /api/push/public-key — but the private key must
-	// never leave the server.
-	PushPublicKey    string
-	PushPrivateKey   string
-	PushSubject      string
+	// PushPollInterval is the only Web Push knob still read from the
+	// environment — a tuning value, not a secret. The VAPID keypair itself
+	// lives in Postgres, configured through Verwaltung (see internal/appconfig);
+	// SeedPushFromEnvIfEmpty carries over a legacy VAPID_* .env value once.
 	PushPollInterval time.Duration
 
 	// TrustedProxies lists the IPs/CIDRs whose X-Forwarded-For header may be
@@ -62,13 +60,6 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
-	// Web Push is optional: without a VAPID keypair, notifyPush() and the
-	// /api/push/* handlers stay disabled (see server.go) but the app still
-	// starts fine — personal statistics/requests don't depend on push.
-	pushPublicKey := valueOr("VAPID_PUBLIC_KEY", "")
-	pushPrivateKey := valueOr("VAPID_PRIVATE_KEY", "")
-	pushSubject := valueOr("VAPID_SUBJECT", "")
-
 	pushPollInterval, err := durationOr("PUSH_POLL_INTERVAL", 20*time.Minute)
 	if err != nil {
 		return Config{}, err
@@ -84,9 +75,6 @@ func Load() (Config, error) {
 		CookieSecure:     valueOr("COOKIE_SECURE", "true") != "false",
 		ShutdownTimeout:  10 * time.Second,
 		TrustedProxies:   splitList(os.Getenv("TRUSTED_PROXIES")),
-		PushPublicKey:    pushPublicKey,
-		PushPrivateKey:   pushPrivateKey,
-		PushSubject:      pushSubject,
 		PushPollInterval: pushPollInterval,
 	}, nil
 }

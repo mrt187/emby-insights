@@ -28,13 +28,23 @@ docker compose up -d
 | `EMBY_ADMIN_API_KEY` | Create it in Emby under Dashboard → Advanced → Security → API Keys. |
 | `COOKIE_SECURE` | Keep `true` when reaching Emby Insights over HTTPS (e.g. behind a reverse proxy). Set to `false` only for plain HTTP without TLS — otherwise the browser silently drops the session cookie and the UI looks logged out or shows no data. |
 | `TRUSTED_PROXIES` | Optional, comma-separated IPs or CIDRs of the reverse proxy in front. Only these sources may report the real client address via `X-Forwarded-For`. Leave unset when the container is reached directly. |
-| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Required since v0.13.0 for web push. The server does not deliver notifications itself — it hands them to the browser's push service (Apple, Google, Mozilla), and this keypair is how that service knows who is sending. Generate once with `npx web-push generate-vapid-keys`, then never change it: the public key is stored inside every existing browser subscription, so a new keypair silently kills push for everyone until each user turns notifications off and on again. The public key is served to browsers anyway and is not a secret; the private key must stay on the server. |
-| `VAPID_SUBJECT` | Required since v0.13.0. Your contact address for push services, as `mailto:you@example.com`. |
 | `PUSH_POLL_INTERVAL` | Optional. How often the background poller checks for new content to notify about. Any Go duration, e.g. `15m`, `30m`, `1h`. Defaults to `20m`. |
 
-Everything else — which services are enabled, their addresses and keys, and the
-library selection — is configured in the admin UI after the first login. The
-first Emby account to log in successfully becomes the administrator.
+Everything else — which services are enabled, their addresses and keys, push
+notifications, and the library selection — is configured in the admin UI
+after the first login. The first Emby account to log in successfully becomes
+the administrator.
+
+### Push notifications
+
+Turned on under Verwaltung → Push-Benachrichtigungen, not via `.env`. The
+server generates its own VAPID keypair the first time it's enabled and keeps
+it in the database — never changing afterwards, since the public key is
+stored inside every existing browser subscription and a new keypair would
+silently kill push for everyone until they re-enable it. Installs upgrading
+from a version that set `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT`
+in `.env` keep that exact keypair automatically; the env vars can be removed
+once confirmed.
 
 ## Operation
 
